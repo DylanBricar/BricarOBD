@@ -35,6 +35,10 @@ logs/
 data/sessions/*.json
 !data/sessions/.gitkeep
 
+# Build artifacts (PyInstaller)
+*.spec.bak
+*.dmg
+
 # Temporary files
 generate_logo.py
 todo.txt

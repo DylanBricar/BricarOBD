@@ -1,41 +1,42 @@
 # BricarOBD
 
-**Outil de diagnostic OBD-II professionnel** — Connectez-vous à n'importe quel véhicule via un adaptateur ELM327 et accédez à toutes les données de diagnostic en temps réel.
+**Professional OBD-II diagnostic tool** — Connect to any vehicle via an ELM327 adapter and access all real-time diagnostic data.
 
-![BricarOBD Screenshot](docs/screenshot.png)
+![BricarOBD](docs/screenshot.png)
 
-## Fonctionnalités
+## Features
 
-- **Détection automatique du véhicule** — Lit le VIN, identifie la marque (39 constructeurs supportés) et charge le profil ECU correspondant
-- **Tableau de bord temps réel** — Jauges RPM, vitesse, température, charge moteur + 6 cartes de données avec seuils d'alerte
-- **Monitoring PIDs** — 70 paramètres OBD-II avec suivi min/max et barre de progression
-- **Codes défaut (DTC)** — Lecture, sauvegarde, export JSON et effacement avec double confirmation + backup automatique
-- **Scan ECU étendu** — 7 adresses standard + adresses constructeur spécifiques (jusqu'à 20 ECUs pour PSA)
-- **Détection d'anomalies** — Alertes automatiques surchauffe, batterie faible, régime critique
-- **Bilingue FR/EN** — Interface complète en français et anglais
-- **Mode démo** — Testez l'application sans adaptateur avec des données simulées
+- **Automatic vehicle detection** — Reads VIN, identifies make (39 manufacturers) and loads the matching ECU profile
+- **Real-time dashboard** — RPM, speed, temperature, engine load gauges + 6 data cards with alert thresholds
+- **PID monitoring** — 70 OBD-II parameters with min/max tracking and progress bars
+- **Fault codes (DTC)** — Read, save, export to JSON and clear with double confirmation + automatic backup
+- **Extended ECU scan** — 7 standard addresses + manufacturer-specific (up to 20 ECUs for PSA)
+- **Anomaly detection** — Automatic alerts for overheating, low battery, critical RPM
+- **Bilingual FR/EN** — Full French and English interface
+- **Demo mode** — Test the app without an adapter using simulated data
+- **Cross-platform** — macOS, Windows and Linux
 
-## Constructeurs supportés
+## Supported manufacturers
 
-| Groupe | Marques |
-|--------|---------|
+| Group | Brands |
+|-------|--------|
 | **PSA/Stellantis** | Peugeot, Citroën, DS, Opel |
 | **VAG** | Volkswagen, Audi, Seat, Škoda, Porsche |
-| **Allemand** | BMW, Mini, Mercedes-Benz |
-| **Américain** | Ford, Lincoln |
-| **Japonais** | Toyota, Lexus, Honda, Acura, Mazda, Subaru, Nissan, Infiniti |
-| **Coréen** | Hyundai, Kia, Genesis |
-| **Italien** | Fiat, Alfa Romeo, Lancia, Abarth, Maserati |
-| **Suédois** | Volvo |
-| **Français** | Renault, Dacia |
+| **German** | BMW, Mini, Mercedes-Benz |
+| **American** | Ford, Lincoln |
+| **Japanese** | Toyota, Lexus, Honda, Acura, Mazda, Subaru, Nissan, Infiniti |
+| **Korean** | Hyundai, Kia, Genesis |
+| **Italian** | Fiat, Alfa Romeo, Lancia, Abarth, Maserati |
+| **Swedish** | Volvo |
+| **French** | Renault, Dacia |
 
 ## Installation
 
-### Prérequis
+### Requirements
 
 - Python 3.9+
-- tkinter (inclus avec Python sur macOS/Windows)
-- Adaptateur ELM327 USB ou Bluetooth
+- tkinter (included with Python on macOS/Windows)
+- ELM327 USB or Bluetooth adapter
 
 ### Setup
 
@@ -45,13 +46,13 @@ cd BricarOBD
 pip install -r requirements.txt
 ```
 
-### Lancement
+### Run
 
 ```bash
-# Mode normal (avec adaptateur ELM327 branché)
+# Normal mode (with ELM327 adapter plugged in)
 python main.py
 
-# Mode démo (sans adaptateur, données simulées)
+# Demo mode (no adapter, simulated data)
 python main.py --demo
 ```
 
@@ -59,59 +60,78 @@ python main.py --demo
 
 ```
 BricarOBD/
-├── main.py                    # Point d'entrée
-├── config.py                  # Configuration application
-├── i18n.py                    # Traductions FR/EN (149 clés)
-├── obd_core/                  # Couche protocole OBD
-│   ├── connection.py          # Gestion ELM327 (série, AT commands, P3 timing)
-│   ├── obd_reader.py          # Lecture OBD-II (Modes 01-0A, 70 PIDs)
-│   ├── uds_client.py          # Client UDS (Services 0x10-0x3E)
-│   ├── dtc_manager.py         # Gestion DTC (lecture/effacement/export)
-│   ├── safety.py              # Garde-fous sécurité (default-deny, 11 services bloqués)
-│   ├── pid_definitions.py     # 70 PIDs avec formules SAE J1979
-│   ├── ecu_database.py        # 39 constructeurs, 230 DIDs étendus
-│   ├── vin_decoder.py         # Décodeur VIN (50+ WMIs)
-│   ├── demo_mode.py           # Simulation véhicule (Peugeot 207)
-│   └── anomaly_detector.py    # Détection surchauffe/batterie/régime
-├── gui/                       # Interface CustomTkinter
-│   ├── app.py                 # Fenêtre principale + navigation
-│   ├── theme.py               # Thème sombre + polices cross-platform
-│   ├── connection_frame.py    # Connexion + auto-détection VIN
-│   ├── dashboard_frame.py     # Tableau de bord temps réel
-│   ├── live_data_frame.py     # Monitoring PIDs
-│   ├── dtc_frame.py           # Codes défaut
-│   ├── ecu_info_frame.py      # Informations ECU
-│   ├── history_frame.py       # Historique sessions
-│   └── dialogs.py             # Dialogues de confirmation
+├── main.py                    # Entry point
+├── config.py                  # Application configuration
+├── i18n.py                    # FR/EN translations (149 keys)
+├── obd_core/                  # OBD protocol layer
+│   ├── connection.py          # ELM327 management (serial, AT commands, P3 timing)
+│   ├── obd_reader.py          # OBD-II reading (Modes 01-0A, 70 PIDs)
+│   ├── uds_client.py          # UDS client (Services 0x10-0x3E)
+│   ├── dtc_manager.py         # DTC management (read/clear/export)
+│   ├── safety.py              # Safety guards (default-deny, 11 blocked services)
+│   ├── pid_definitions.py     # 70 PIDs with SAE J1979 formulas
+│   ├── ecu_database.py        # 39 manufacturers, 230 extended DIDs
+│   ├── vin_decoder.py         # VIN decoder (50+ WMIs)
+│   ├── demo_mode.py           # Vehicle simulation (Peugeot 207)
+│   └── anomaly_detector.py    # Overheating/battery/RPM detection
+├── gui/                       # CustomTkinter interface
+│   ├── app.py                 # Main window + navigation
+│   ├── theme.py               # Dark theme + cross-platform fonts
+│   ├── connection_frame.py    # Connection + VIN auto-detection
+│   ├── dashboard_frame.py     # Real-time dashboard
+│   ├── live_data_frame.py     # PID monitoring
+│   ├── dtc_frame.py           # Fault codes
+│   ├── ecu_info_frame.py      # ECU information
+│   ├── history_frame.py       # Session history
+│   └── dialogs.py             # Confirmation dialogs
 ├── data/
-│   └── dtc_descriptions.py    # 514 codes DTC avec descriptions
+│   └── dtc_descriptions.py    # 514 DTC codes with descriptions
 ├── utils/
-│   ├── logger.py              # Journalisation audit
-│   └── web_search.py          # Recherche DTC en ligne
+│   ├── logger.py              # Audit logging
+│   └── web_search.py          # Online DTC lookup
 └── assets/
-    ├── logo.png               # Logo BricarOBD
-    └── icon.png               # Icône application
+    ├── logo.png               # BricarOBD logo
+    └── icon.png               # Application icon
 ```
 
-## Sécurité
+## Safety
 
-BricarOBD est conçu pour être **read-only par défaut** :
+BricarOBD is designed to be **read-only by default**:
 
-- **11 services UDS bloqués** (écriture, flash, reset ECU, sécurité)
-- **Default-deny** pour tout service inconnu
-- **Mode 04 (effacement DTC)** nécessite double confirmation + backup automatique
-- **Validation hex** sur toutes les commandes envoyées
-- **Cooldown 5s** entre les effacements DTC
-- **Aucune opération d'écriture** n'est possible sauf l'effacement DTC
+- **11 UDS services blocked** (write, flash, ECU reset, security access)
+- **Default-deny** for any unknown service
+- **Mode 04 (DTC clear)** requires double confirmation + automatic backup
+- **Hex validation** on all commands sent to the vehicle
+- **5s cooldown** between DTC clears
+- **No write operation** is possible except DTC clearing
 
-## Compatibilité
+## Build releases
 
-| Plateforme | Polices | Statut |
-|-----------|---------|--------|
-| **macOS** | SF Pro Display, Menlo | ✅ Testé |
+### macOS (.app + .dmg)
+
+```bash
+pip install pyinstaller
+chmod +x scripts/build_mac.sh
+./scripts/build_mac.sh
+# Output: dist/BricarOBD-v1.0.0-macOS.dmg
+```
+
+### Windows (.exe)
+
+```bat
+pip install pyinstaller
+scripts\build_windows.bat
+# Output: dist\BricarOBD\BricarOBD.exe
+```
+
+## Platform support
+
+| Platform | Fonts | Status |
+|----------|-------|--------|
+| **macOS** | SF Pro Display, Menlo | ✅ Tested |
 | **Windows** | Segoe UI, Consolas | ✅ Compatible |
 | **Linux** | Helvetica, Courier | ✅ Compatible |
 
-## Licence
+## License
 
 [MIT License](LICENSE) — Dylan Bricar © 2026
