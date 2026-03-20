@@ -51,7 +51,18 @@ def main():
         connection = DemoConnection()
         logger.info("Running in DEMO mode (simulated vehicle data)")
     else:
-        connection = ELM327Connection()
+        # Use hybrid connection (python-obd + custom) when available
+        try:
+            from obd_core.hybrid_reader import HybridConnection, OBD_AVAILABLE
+            if OBD_AVAILABLE:
+                connection = HybridConnection()
+                logger.info("Using hybrid connection (python-obd + custom UDS)")
+            else:
+                connection = ELM327Connection()
+                logger.info("Using custom connection (python-obd not installed)")
+        except ImportError:
+            connection = ELM327Connection()
+            logger.info("Using custom connection")
     safety = SafetyGuard()
     obd_reader = OBDReader(connection)
     uds_client = UDSClient(connection, safety)
