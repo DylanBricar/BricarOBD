@@ -1,0 +1,1 @@
+"""OBD diagnostic core module."""
