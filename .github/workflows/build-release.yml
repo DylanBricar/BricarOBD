@@ -1,0 +1,118 @@
+name: Build & Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build-macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+          pip install pyinstaller
+
+      - name: Build .app
+        run: pyinstaller build.spec --noconfirm
+
+      - name: Create .dmg
+        run: |
+          mkdir -p dist/dmg
+          cp -R dist/BricarOBD.app dist/dmg/
+          ln -s /Applications dist/dmg/Applications
+          hdiutil create -volname "BricarOBD" \
+            -srcfolder dist/dmg \
+            -ov -format UDZO \
+            "dist/BricarOBD-macOS.dmg"
+
+      - name: Upload macOS artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: BricarOBD-macOS
+          path: dist/BricarOBD-macOS.dmg
+
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+          pip install pyinstaller
+
+      - name: Build .exe
+        run: pyinstaller build.spec --noconfirm
+
+      - name: Create zip
+        run: Compress-Archive -Path dist/BricarOBD -DestinationPath dist/BricarOBD-Windows.zip
+
+      - name: Upload Windows artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: BricarOBD-Windows
+          path: dist/BricarOBD-Windows.zip
+
+  release:
+    needs: [build-macos, build-windows]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download macOS build
+        uses: actions/download-artifact@v4
+        with:
+          name: BricarOBD-macOS
+          path: artifacts/
+
+      - name: Download Windows build
+        uses: actions/download-artifact@v4
+        with:
+          name: BricarOBD-Windows
+          path: artifacts/
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            artifacts/BricarOBD-macOS.dmg
+            artifacts/BricarOBD-Windows.zip
+          body: |
+            ## BricarOBD ${{ github.ref_name }}
+
+            Professional OBD-II diagnostic tool for all vehicles.
+
+            ### Downloads
+            - **macOS**: `BricarOBD-macOS.dmg` — Open and drag to Applications
+            - **Windows**: `BricarOBD-Windows.zip` — Extract and run `BricarOBD.exe`
+
+            ### Features
+            - Auto vehicle detection via VIN (39 manufacturers)
+            - Real-time dashboard with gauges
+            - 70 OBD-II PIDs monitoring
+            - DTC read/clear/export with safety guards
+            - Extended ECU scan (230 DIDs)
+            - Bilingual FR/EN interface
+            - Demo mode (`--demo`)
+
+            ### Requirements
+            - ELM327 USB or Bluetooth adapter (or use demo mode)
+          draft: false
+          prerelease: false
