@@ -59,8 +59,9 @@ class DemoConnection:
     def send_command(self, cmd, timeout=5):
         """Simulate ELM327 command response."""
         cmd_upper = cmd.strip().upper()
-        # AT SH xxx - set CAN header (accept any address)
-        if cmd_upper.startswith("AT") or cmd_upper.startswith("ATSH"):
+        if cmd_upper == "ATRV":
+            return "12.6V"
+        if cmd_upper.startswith("AT"):
             return "OK"
         # Empty command (used for re-read in NRC 0x78 handling)
         if not cmd_upper:
@@ -78,6 +79,12 @@ class DemoConnection:
 
         if mode == "01" and pid:
             return self._simulate_mode01(int(pid, 16))
+        elif mode == "02" and pid:
+            # Freeze frame — return same as Mode 01 but with "42" prefix
+            mode01_resp = self._simulate_mode01(int(pid, 16))
+            if mode01_resp != "NO DATA":
+                return mode01_resp.replace("41", "42", 1)
+            return "NO DATA"
         elif mode == "03":
             return self._simulate_dtcs()
         elif mode == "04":

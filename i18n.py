@@ -218,6 +218,20 @@ TRANSLATIONS = {
     "monitors_protocol": {"fr": "Protocole OBD", "en": "OBD Protocol"},
     "monitors_elm": {"fr": "Version ELM", "en": "ELM Version"},
     "monitors_supported_pids": {"fr": "PIDs supportés", "en": "Supported PIDs"},
+
+    # Freeze Frame
+    "freeze_help": {"fr": "Données capturées au moment du déclenchement du code défaut.", "en": "Data captured when the fault code was triggered."},
+    "freeze_no_data": {"fr": "Pas de données freeze frame disponibles.", "en": "No freeze frame data available."},
+    "freeze_frame": {"fr": "Freeze Frame", "en": "Freeze Frame"},
+
+    # System info
+    "dash_system": {"fr": "Système", "en": "System"},
+    "dash_elm_voltage": {"fr": "Tension OBD", "en": "OBD Voltage"},
+    "dash_fuel_status": {"fr": "Carburant", "en": "Fuel System"},
+    "dash_monitors": {"fr": "Moniteurs", "en": "Monitors"},
+
+    # Dialog
+    "dialog_close": {"fr": "Fermer", "en": "Close"},
 }
 
 

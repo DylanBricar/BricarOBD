@@ -243,6 +243,12 @@ class DTCFrame(ctk.CTkFrame):
             command=lambda: self.save_single(dtc_record)
         ).pack(side="left", padx=2)
 
+        ctk.CTkButton(
+            action_frame, text="Freeze", width=60, height=24,
+            font=FONTS["small"], fg_color=COLORS["accent"],
+            command=lambda c=dtc_record.code: self.show_freeze_frame(c)
+        ).pack(side="left", padx=2)
+
         self.dtc_rows[dtc_record.code] = row_frame
 
     def search_web(self, dtc_code):
@@ -293,6 +299,67 @@ class DTCFrame(ctk.CTkFrame):
         if filepath:
             dtcs = self.app.dtc_manager.load_dtcs(Path(filepath))
             self.populate_table(dtcs)
+
+    def show_freeze_frame(self, dtc_code):
+        """Read and display freeze frame data for a DTC."""
+        import threading
+        def task():
+            freeze_data = {}
+            pids_to_read = [0x04, 0x05, 0x0C, 0x0D, 0x0F, 0x11, 0x42, 0x0B, 0x0E]
+            pid_names = {
+                0x04: t("dash_load"), 0x05: t("dash_coolant"), 0x0C: t("dash_rpm"),
+                0x0D: t("dash_speed"), 0x0F: t("dash_intake"), 0x11: t("dash_throttle"),
+                0x42: t("dash_voltage"), 0x0B: "MAP (kPa)", 0x0E: t("dash_timing"),
+            }
+            if self.app.obd_reader:
+                for pid in pids_to_read:
+                    val, unit = self.app.obd_reader.read_freeze_frame(pid)
+                    if val is not None:
+                        name = pid_names.get(pid, f"PID 0x{pid:02X}")
+                        freeze_data[name] = f"{val:.1f} {unit}"
+
+            self.after(0, self._display_freeze_frame, dtc_code, freeze_data)
+
+        threading.Thread(target=task, daemon=True).start()
+
+    def _display_freeze_frame(self, dtc_code, freeze_data):
+        """Display freeze frame data in a popup."""
+        popup = ctk.CTkToplevel(self)
+        popup.title(f"Freeze Frame — {dtc_code}")
+        popup.configure(fg_color=COLORS["bg_primary"])
+
+        w, h = 450, 350
+        x = (popup.winfo_screenwidth() - w) // 2
+        y = (popup.winfo_screenheight() - h) // 2
+        popup.geometry(f"{w}x{h}+{x}+{y}")
+        popup.resizable(False, False)
+        popup.transient(self)
+
+        ctk.CTkLabel(popup, text=f"Freeze Frame — {dtc_code}", font=FONTS["h3"],
+                     text_color=COLORS["text_primary"]).pack(pady=(16, 4))
+        ctk.CTkLabel(popup, text=t("freeze_help"), font=FONTS["small"],
+                     text_color=COLORS["text_muted"]).pack(pady=(0, 12))
+
+        scroll = ctk.CTkScrollableFrame(popup, fg_color="transparent")
+        scroll.pack(fill="both", expand=True, padx=16, pady=(0, 8))
+
+        if not freeze_data:
+            ctk.CTkLabel(scroll, text=t("freeze_no_data"), font=FONTS["body"],
+                         text_color=COLORS["text_muted"]).pack(pady=20)
+        else:
+            for idx, (name, value) in enumerate(freeze_data.items()):
+                bg = COLORS["bg_card"] if idx % 2 == 0 else COLORS["bg_secondary"]
+                row = ctk.CTkFrame(scroll, fg_color=bg, corner_radius=4)
+                row.pack(fill="x", pady=1)
+                ctk.CTkLabel(row, text=name, font=FONTS["body"],
+                            text_color=COLORS["text_secondary"], width=180, anchor="w"
+                            ).pack(side="left", padx=12, pady=6)
+                ctk.CTkLabel(row, text=value, font=FONTS["mono"],
+                            text_color=COLORS["success"], anchor="w"
+                            ).pack(side="left", padx=8, pady=6)
+
+        ctk.CTkButton(popup, text=t("dialog_close"), width=100,
+                      command=popup.destroy).pack(pady=(4, 12))
 
     def _on_lang_change(self, lang=None):
         """Update text on language change."""

@@ -142,19 +142,23 @@ class LiveDataFrame(ctk.CTkFrame):
             return
         if not self.monitoring or not self.selected_pids:
             return
+        if self._update_running:
+            return
 
         def task():
-            if self._update_running:
-                return
             self._update_running = True
             try:
+                updates = []
                 for pid_code in self.selected_pids:
                     try:
                         value, unit = self.app.obd_reader.read_pid(pid_code)
                         if value is not None:
-                            self.after(0, self._update_pid_row, pid_code, value)
+                            updates.append((pid_code, value, unit))
                     except Exception:
                         pass
+
+                if updates:
+                    self.after(0, self._apply_updates, updates)
             finally:
                 self._update_running = False
 
@@ -230,17 +234,19 @@ class LiveDataFrame(ctk.CTkFrame):
         self.pid_rows[pid_code] = {
             "frame": row_frame,
             "value_label": value_label,
+            "unit_label": unit_label,
             "min_label": min_label,
             "max_label": max_label,
             "progress_bar": progress_bar
         }
 
-    def _update_pid_row(self, pid_code, value):
+    def _update_pid_row(self, pid_code, value, unit):
         """Update an existing PID row with new data.
 
         Args:
             pid_code: PID code
             value: New value
+            unit: Unit string
         """
         if pid_code not in self.pid_rows:
             return
@@ -251,6 +257,7 @@ class LiveDataFrame(ctk.CTkFrame):
 
         row = self.pid_rows[pid_code]
         row["value_label"].configure(text=f"{value:.1f}")
+        row["unit_label"].configure(text=unit)
 
         if pid_code in self.min_max_data:
             data = self.min_max_data[pid_code]
@@ -270,6 +277,15 @@ class LiveDataFrame(ctk.CTkFrame):
                 row["progress_bar"].set(progress)
 
         self.update_count += 1
+
+    def _apply_updates(self, updates):
+        """Apply all pending updates and refresh status once.
+
+        Args:
+            updates: List of (pid_code, value, unit) tuples
+        """
+        for pid_code, value, unit in updates:
+            self._update_pid_row(pid_code, value, unit)
         self._update_status()
 
     def _update_status(self):

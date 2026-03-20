@@ -153,6 +153,26 @@ class DashboardFrame(ctk.CTkFrame):
             font=FONTS["small"], text_color=COLORS["text_muted"])
         self.obd_standard_label.pack(anchor="w", padx=12, pady=(1, 8))
 
+        # System info card
+        sys_card = ctk.CTkFrame(c, fg_color=COLORS["bg_card"], corner_radius=10,
+                                border_width=1, border_color=COLORS["card_border"])
+        sys_card.pack(fill="x", pady=(0, 8))
+
+        ctk.CTkLabel(sys_card, text=t("dash_system"), font=FONTS["small_bold"],
+                     text_color=COLORS["text_secondary"]).pack(anchor="w", padx=12, pady=(8, 4))
+
+        self.elm_voltage_label = ctk.CTkLabel(sys_card, text=f"{t('dash_elm_voltage')}: --",
+            font=FONTS["small"], text_color=COLORS["text_muted"])
+        self.elm_voltage_label.pack(anchor="w", padx=12, pady=1)
+
+        self.fuel_status_label = ctk.CTkLabel(sys_card, text=f"{t('dash_fuel_status')}: --",
+            font=FONTS["small"], text_color=COLORS["text_muted"])
+        self.fuel_status_label.pack(anchor="w", padx=12, pady=1)
+
+        self.monitors_status_label = ctk.CTkLabel(sys_card, text=f"{t('dash_monitors')}: --",
+            font=FONTS["small"], text_color=COLORS["text_muted"])
+        self.monitors_status_label.pack(anchor="w", padx=12, pady=(1, 8))
+
     def _on_monitor_btn_clicked(self):
         """Handle monitor button click."""
         if self.monitoring:
@@ -289,6 +309,33 @@ class DashboardFrame(ctk.CTkFrame):
                 1: "Gasoline", 2: "Methanol", 3: "Ethanol", 4: "Diesel",
                 5: "LPG", 6: "CNG", 8: "Electric",
             }
+
+            # ELM voltage (AT command, not OBD)
+            try:
+                elm_v = self.app.connection.send_command("ATRV", timeout=2)
+                if elm_v:
+                    self.after(0, lambda v=elm_v: self.elm_voltage_label.configure(
+                        text=f"{t('dash_elm_voltage')}: {v.strip()}"))
+            except: pass
+
+            # Fuel status
+            FUEL_STATUS_NAMES = {
+                1: "Open loop (cold)", 2: "Closed loop (O2)", 4: "Open loop (load)",
+                8: "Open loop (fault)", 16: "Closed loop (fault)"
+            }
+            fuel_status_val, _ = self.app.obd_reader.read_pid(0x03)
+            if fuel_status_val is not None:
+                fs_name = FUEL_STATUS_NAMES.get(int(fuel_status_val), str(int(fuel_status_val)))
+                self.after(0, lambda v=fs_name: self.fuel_status_label.configure(
+                    text=f"{t('dash_fuel_status')}: {v}"))
+
+            # Monitor readiness
+            status_val, _ = self.app.obd_reader.read_pid(0x01)
+            if status_val is not None:
+                mil_on = bool(int(status_val) & 0x80) if isinstance(status_val, (int, float)) else False
+                dtc_count = int(status_val) & 0x7F if isinstance(status_val, (int, float)) else 0
+                self.after(0, lambda m=mil_on, d=dtc_count: self.monitors_status_label.configure(
+                    text=f"{t('dash_monitors')}: {'MIL ON' if m else 'MIL OFF'} | {d} DTC(s)"))
 
             def update_ui():
                 if vin_val:
