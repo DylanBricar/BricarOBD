@@ -144,6 +144,15 @@ class DashboardFrame(ctk.CTkFrame):
         )
         self.mil_label.pack(anchor="w", padx=12, pady=(1, 8))
 
+        # Additional vehicle info
+        self.fuel_type_label = ctk.CTkLabel(vehicle_info_frame, text=f"{t('dash_fuel_type')}: --",
+            font=FONTS["small"], text_color=COLORS["text_muted"])
+        self.fuel_type_label.pack(anchor="w", padx=12, pady=1)
+
+        self.obd_standard_label = ctk.CTkLabel(vehicle_info_frame, text=f"{t('dash_obd_standard')}: --",
+            font=FONTS["small"], text_color=COLORS["text_muted"])
+        self.obd_standard_label.pack(anchor="w", padx=12, pady=(1, 8))
+
     def _on_monitor_btn_clicked(self):
         """Handle monitor button click."""
         if self.monitoring:
@@ -264,10 +273,37 @@ class DashboardFrame(ctk.CTkFrame):
             vin_val = vehicle_info.get("vin", "")
             protocol = self.app.connection.protocol_name or "Unknown"
 
+            # Read additional info
+            fuel_type_val, _ = self.app.obd_reader.read_pid(0x51)
+            obd_std_val, _ = self.app.obd_reader.read_pid(0x1C)
+
+            # OBD standard names
+            OBD_STANDARDS = {
+                1: "OBD-II (CARB)", 2: "OBD (EPA)", 3: "OBD + OBD-II",
+                6: "EOBD", 7: "EOBD + OBD-II", 9: "EOBD, OBD, OBD-II",
+                13: "JOBD, EOBD, OBD-II", 17: "EMD", 18: "EMD+",
+            }
+
+            # Fuel type names
+            FUEL_TYPES = {
+                1: "Gasoline", 2: "Methanol", 3: "Ethanol", 4: "Diesel",
+                5: "LPG", 6: "CNG", 8: "Electric",
+            }
+
             def update_ui():
                 if vin_val:
                     self.vin_label.configure(text=f"VIN: {vin_val}")
                 self.protocol_label.configure(text=f"{t('dash_obd_protocol')}: {protocol}")
+
+                # Update fuel type
+                if fuel_type_val is not None:
+                    fuel_name = FUEL_TYPES.get(int(fuel_type_val), "Unknown")
+                    self.fuel_type_label.configure(text=f"{t('dash_fuel_type')}: {fuel_name}")
+
+                # Update OBD standard
+                if obd_std_val is not None:
+                    obd_name = OBD_STANDARDS.get(int(obd_std_val), "Unknown")
+                    self.obd_standard_label.configure(text=f"{t('dash_obd_standard')}: {obd_name}")
 
             self.after(0, update_ui)
         except Exception:

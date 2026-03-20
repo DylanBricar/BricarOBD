@@ -199,6 +199,8 @@ class DemoConnection:
     def _simulate_mode01(self, pid):
         """Generate realistic Mode 01 responses."""
         responses = {
+            0x01: "41 01 00 07 E5 00",  # Monitor status: no MIL, 3 DTCs
+            0x03: "41 03 02 00",        # Fuel status: closed loop
             0x04: self._format_response(0x04, [int(self._load * 255 / 100)]),
             0x05: self._format_response(0x05, [int(self._coolant + 40)]),
             0x06: self._format_response(0x06, [int(128 + random.uniform(-5, 5))]),
@@ -210,11 +212,14 @@ class DemoConnection:
             0x0F: self._format_response(0x0F, [int(self._intake_temp + 40)]),
             0x10: self._format_response(0x10, [int(self._maf * 100 / 256), int(self._maf * 100) % 256]),
             0x11: self._format_response(0x11, [int(self._throttle * 255 / 100)]),
+            0x1C: "41 1C 06",           # OBD standard: EOBD
             0x1F: self._format_response(0x1F, [int((time.time() - self._start_time) / 256), int(time.time() - self._start_time) % 256]),
             0x2F: self._format_response(0x2F, [int(self._fuel * 255 / 100)]),
             0x33: self._format_response(0x33, [101]),
+            0x41: "41 41 00 00 00 00",  # Drive cycle status
             0x42: self._format_response(0x42, [int(self._voltage * 1000 / 256), int(self._voltage * 1000) % 256]),
             0x46: self._format_response(0x46, [int(self._ambient + 40)]),
+            0x51: "41 51 01",           # Fuel type: gasoline
             0x5C: self._format_response(0x5C, [int(self._oil_temp + 40)]),
             0x5E: self._format_response(0x5E, [0, int(self._load * 0.3)]),
         }

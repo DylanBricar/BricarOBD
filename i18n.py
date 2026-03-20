@@ -13,6 +13,7 @@ TRANSLATIONS = {
     "nav_live_data": {"fr": "Données temps réel", "en": "Live Data"},
     "nav_dtc": {"fr": "Codes défaut", "en": "Fault Codes"},
     "nav_ecu": {"fr": "Info ECU", "en": "ECU Info"},
+    "nav_monitors": {"fr": "Moniteurs", "en": "Monitors"},
     "nav_history": {"fr": "Historique", "en": "History"},
 
     # Status bar
@@ -144,6 +145,8 @@ TRANSLATIONS = {
 
     # Extra dashboard keys
     "dash_parameters": {"fr": "Paramètres", "en": "Parameters"},
+    "dash_fuel_type": {"fr": "Type carburant", "en": "Fuel Type"},
+    "dash_obd_standard": {"fr": "Norme OBD", "en": "OBD Standard"},
 
     # Extra DTC keys
     "dtc_cancel": {"fr": "Annuler", "en": "Cancel"},
@@ -197,6 +200,24 @@ TRANSLATIONS = {
     # Vehicle detection
     "conn_vehicle_detected": {"fr": "Véhicule détecté : {make}", "en": "Vehicle detected: {make}"},
     "conn_vehicle_title": {"fr": "Diagnostic véhicule — {vehicle}", "en": "Vehicle Diagnostic — {vehicle}"},
+
+    # Monitors
+    "monitors_title": {"fr": "Moniteurs & Info véhicule", "en": "Monitors & Vehicle Info"},
+    "monitors_help": {"fr": "Tests antipollution automatiques (Mode 06) et informations complètes du véhicule (Mode 09).", "en": "Automatic emission tests (Mode 06) and complete vehicle information (Mode 09)."},
+    "monitors_read": {"fr": "Lire les moniteurs", "en": "Read Monitors"},
+    "monitors_vehicle_info": {"fr": "Info véhicule complète", "en": "Full Vehicle Info"},
+    "monitors_reading": {"fr": "Lecture en cours...", "en": "Reading..."},
+    "monitors_empty": {"fr": "Cliquez sur un bouton pour lire les données.", "en": "Click a button to read data."},
+    "monitors_no_results": {"fr": "Aucun résultat", "en": "No results"},
+    "monitors_results_found": {"fr": "résultat(s)", "en": "result(s) found"},
+    "monitors_test_results": {"fr": "Résultats des tests moniteurs", "en": "Monitor Test Results"},
+    "monitors_vehicle_data": {"fr": "Données véhicule", "en": "Vehicle Data"},
+    "monitors_make": {"fr": "Constructeur", "en": "Manufacturer"},
+    "monitors_country": {"fr": "Pays", "en": "Country"},
+    "monitors_year": {"fr": "Année", "en": "Year"},
+    "monitors_protocol": {"fr": "Protocole OBD", "en": "OBD Protocol"},
+    "monitors_elm": {"fr": "Version ELM", "en": "ELM Version"},
+    "monitors_supported_pids": {"fr": "PIDs supportés", "en": "Supported PIDs"},
 }
 
 

@@ -76,6 +76,7 @@ class OBDApp(ctk.CTk):
             ("nav_live_data", "Live Data"),
             ("nav_dtc", "DTC Codes"),
             ("nav_ecu", "ECU Info"),
+            ("nav_monitors", "Monitors"),
             ("nav_history", "History"),
         ]
 

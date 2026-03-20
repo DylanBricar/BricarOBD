@@ -87,6 +87,10 @@ def main():
     ecu_info_frame = ECUInfoFrame(app.content_area, app)
     app.register_frame("ECU Info", ecu_info_frame)
 
+    from gui.monitors_frame import MonitorsFrame
+    monitors_frame = MonitorsFrame(app.content_area, app)
+    app.register_frame("Monitors", monitors_frame)
+
     history_frame = HistoryFrame(app.content_area, app)
     app.register_frame("History", history_frame)
 
