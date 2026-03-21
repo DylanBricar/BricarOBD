@@ -52,7 +52,7 @@ data/ddt4all_verified_ops.py
 data/unified_database.json
 data/verified_uds_codes_github.py
 
-# Large database (use Git LFS: git lfs track "data/bricarobd_database.zip")
+# Full zip is built from parts at first launch
 data/bricarobd_database.zip
 
 # External databases

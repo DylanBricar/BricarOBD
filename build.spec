@@ -13,7 +13,7 @@ a = Analysis(
         ('assets', 'assets'),
         ('data/dtc_descriptions.py', 'data'),
         ('data/__init__.py', 'data'),
-        ('data/bricarobd_database.zip', 'data'),
+        ('data/bricarobd_db_part_*', 'data'),
         ('i18n.py', '.'),
         ('config.py', '.'),
     ],

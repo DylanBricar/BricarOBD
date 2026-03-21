@@ -24,11 +24,32 @@ logger = logging.getLogger(__name__)
 
 
 def _find_db_path() -> Path:
-    """Find the database zip in dev mode or PyInstaller bundle."""
-    # PyInstaller sets _MEIPASS when running from a bundle
+    """Find the database zip in dev mode or PyInstaller bundle.
+
+    If the zip doesn't exist but split parts do (bricarobd_db_part_*),
+    reassemble them automatically on first launch.
+    """
     if hasattr(sys, '_MEIPASS'):
-        return Path(sys._MEIPASS) / "data" / "bricarobd_database.zip"
-    return Path(__file__).parent.parent / "data" / "bricarobd_database.zip"
+        base = Path(sys._MEIPASS) / "data"
+    else:
+        base = Path(__file__).parent.parent / "data"
+
+    zip_path = base / "bricarobd_database.zip"
+
+    # Auto-reassemble from parts if zip doesn't exist
+    if not zip_path.exists():
+        parts = sorted(base.glob("bricarobd_db_part_*"))
+        if parts:
+            logger.info(f"Assembling database from {len(parts)} parts...")
+            try:
+                with open(zip_path, "wb") as out:
+                    for part in parts:
+                        out.write(part.read_bytes())
+                logger.info(f"Database assembled: {zip_path}")
+            except Exception as e:
+                logger.error(f"Failed to assemble database: {e}")
+
+    return zip_path
 
 
 _DB_PATH = _find_db_path()
