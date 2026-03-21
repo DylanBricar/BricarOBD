@@ -2,7 +2,7 @@
 
 import customtkinter as ctk
 import threading
-from gui.theme import COLORS, FONTS
+from gui.theme import COLORS, FONTS, _bind_scroll_recursive
 from obd_core.pid_definitions import STANDARD_PIDS
 from config import LIVE_DATA_REFRESH_MS
 from i18n import t, on_lang_change
@@ -40,25 +40,39 @@ class LiveDataFrame(ctk.CTkFrame):
 
     def _setup_pid_selection(self):
         """Setup the PID selection panel."""
+        header_frame = ctk.CTkFrame(self.pid_selection_frame, fg_color="transparent")
+        header_frame.pack(anchor="w", padx=12, pady=(12, 4), fill="x")
+
         label = ctk.CTkLabel(
-            self.pid_selection_frame, text=t("live_select_label"),
+            header_frame, text=t("live_select_label"),
             font=FONTS["body_bold"], text_color=COLORS["text_primary"]
         )
-        label.pack(anchor="w", padx=12, pady=(12, 4))
+        label.pack(side="left")
 
-        pid_grid_frame = ctk.CTkFrame(self.pid_selection_frame, fg_color="transparent")
-        pid_grid_frame.pack(anchor="w", padx=12, pady=8, fill="x")
+        ctk.CTkButton(
+            header_frame, text=t("live_select_all"), width=100, height=24,
+            font=FONTS["small"], command=self.select_all_pids
+        ).pack(side="right", padx=4)
+
+        ctk.CTkButton(
+            header_frame, text=t("live_deselect_all"), width=100, height=24,
+            font=FONTS["small"], command=self.deselect_all_pids
+        ).pack(side="right", padx=4)
+
+        pid_scroll_frame = ctk.CTkScrollableFrame(self.pid_selection_frame, fg_color="transparent")
+        pid_scroll_frame.pack(anchor="w", padx=12, pady=8, fill="x", expand=True)
+        self.after(500, lambda: _bind_scroll_recursive(pid_scroll_frame))
 
         self.pid_checkboxes = {}
         col = 0
         for pid_code, pid_def in STANDARD_PIDS.items():
             checkbox = ctk.CTkCheckBox(
-                pid_grid_frame,
+                pid_scroll_frame,
                 text=f"0x{pid_code:02X} {pid_def.name}",
                 font=FONTS["small"],
                 command=lambda p=pid_code: self._on_pid_checkbox_change(p)
             )
-            checkbox.grid(row=col // 3, column=col % 3, padx=8, pady=4, sticky="w")
+            checkbox.grid(row=col // 5, column=col % 5, padx=8, pady=4, sticky="w")
             self.pid_checkboxes[pid_code] = checkbox
 
             checkbox.select()
@@ -66,19 +80,6 @@ class LiveDataFrame(ctk.CTkFrame):
                 self.selected_pids.append(pid_code)
 
             col += 1
-
-        button_frame = ctk.CTkFrame(self.pid_selection_frame, fg_color="transparent")
-        button_frame.pack(anchor="w", padx=12, pady=(8, 12), fill="x")
-
-        ctk.CTkButton(
-            button_frame, text=t("live_select_all"), width=100, height=28,
-            font=FONTS["small"], command=self.select_all_pids
-        ).pack(side="left", padx=4)
-
-        ctk.CTkButton(
-            button_frame, text=t("live_deselect_all"), width=100, height=28,
-            font=FONTS["small"], command=self.deselect_all_pids
-        ).pack(side="left", padx=4)
 
     def _on_pid_checkbox_change(self, pid_code):
         """Handle PID checkbox changes."""
@@ -393,6 +394,7 @@ class LiveDataFrame(ctk.CTkFrame):
 
         self.table_frame = ctk.CTkScrollableFrame(self, fg_color="transparent")
         self.table_frame.pack(fill="both", expand=True, padx=16, pady=8)
+        self.after(500, lambda: _bind_scroll_recursive(self.table_frame))
 
         self.status_label = ctk.CTkLabel(
             self, text="Monitoring 0 PIDs | Update rate: 500ms | Samples: 0",

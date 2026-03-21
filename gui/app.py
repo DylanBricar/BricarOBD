@@ -48,7 +48,7 @@ class OBDApp(ctk.CTk):
             try:
                 logo_img = ctk.CTkImage(light_image=Image.open(logo_path), dark_image=Image.open(logo_path), size=(160, 44))
                 logo_label = ctk.CTkLabel(self.sidebar, image=logo_img, text="", anchor="center")
-                logo_label.pack(pady=(20, 5), fill="x", expand=False)
+                logo_label.pack(pady=(20, 5), fill="x", expand=False, padx=0)
             except Exception:
                 # Fallback to text logo if image loading fails
                 app_header = ctk.CTkLabel(
@@ -96,6 +96,26 @@ class OBDApp(ctk.CTk):
             btn.pack(fill="x", pady=6)
             self.nav_buttons[display_name] = btn
             self.nav_buttons_list.append((btn, i18n_key))
+
+        # Separator before Advanced
+        separator = ctk.CTkFrame(self.nav_frame, fg_color=COLORS["border"], height=1)
+        separator.pack(fill="x", padx=4, pady=(12, 6))
+
+        # Advanced button — RED, at the bottom of nav items
+        self.advanced_btn = ctk.CTkButton(
+            self.nav_frame,
+            text=t("nav_advanced"),
+            font=FONTS["body_bold"],
+            fg_color=COLORS["danger_dark"],
+            hover_color=COLORS["danger"],
+            text_color=COLORS["danger_light"],
+            height=42,
+            anchor="w",
+            command=lambda: self.show_frame("Advanced"),
+        )
+        self.advanced_btn.pack(fill="x", pady=6)
+        self.nav_buttons["Advanced"] = self.advanced_btn
+        self.nav_buttons_list.append((self.advanced_btn, "nav_advanced"))
 
         separator = ctk.CTkFrame(self.sidebar, fg_color=COLORS["border"], height=1)
         separator.pack(fill="x", padx=16, pady=(8, 12))
@@ -199,12 +219,25 @@ class OBDApp(ctk.CTk):
             self.frames[frame_name].pack(in_=self.content_area, fill="both", expand=True)
             self.current_frame_name = frame_name
 
-        # Bug 2: Disable hover on active button
+        # Notify frame if it has an on_frame_shown method
+        if frame_name in self.frames and hasattr(self.frames[frame_name], "on_frame_shown"):
+            try:
+                self.frames[frame_name].on_frame_shown()
+            except Exception:
+                pass
+
+        # Bug 2: Disable hover on active button (special handling for Advanced red button)
         for btn_name, btn in self.nav_buttons.items():
             if btn_name == frame_name:
-                btn.configure(fg_color=COLORS["cyan"], hover_color=COLORS["cyan"], text_color=COLORS["text_primary"])
+                if btn_name == "Advanced":
+                    btn.configure(fg_color=COLORS["danger"], hover_color=COLORS["danger"], text_color=COLORS["text_primary"])
+                else:
+                    btn.configure(fg_color=COLORS["cyan"], hover_color=COLORS["cyan"], text_color=COLORS["text_primary"])
             else:
-                btn.configure(fg_color="transparent", hover_color=COLORS["bg_card_hover"], text_color=COLORS["text_secondary"])
+                if btn_name == "Advanced":
+                    btn.configure(fg_color=COLORS["danger_dark"], hover_color=COLORS["danger"], text_color=COLORS["danger_light"])
+                else:
+                    btn.configure(fg_color="transparent", hover_color=COLORS["bg_card_hover"], text_color=COLORS["text_secondary"])
 
     def update_status(self, connected, protocol="", port=""):
         """Update status bar.

@@ -2,7 +2,7 @@
 
 import customtkinter as ctk
 from threading import Thread
-from gui.theme import COLORS, FONTS
+from gui.theme import COLORS, FONTS, _bind_scroll_recursive
 from i18n import t, on_lang_change
 
 
@@ -69,6 +69,7 @@ class ECUInfoFrame(ctk.CTkFrame):
             self, fg_color=COLORS["bg_secondary"], corner_radius=8
         )
         self.results_frame.pack(pady=12, padx=16, fill="both", expand=True)
+        self.after(500, lambda: _bind_scroll_recursive(self.results_frame))
 
     def scan_ecus(self):
         """Scan for responding ECUs in background thread."""

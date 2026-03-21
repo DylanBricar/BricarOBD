@@ -44,3 +44,17 @@ generate_logo.py
 todo.txt
 *.bak
 *.tmp
+
+# Generated data files
+data/ddt4all_full.json
+data/ddt4all_operations.json
+data/ddt4all_verified_ops.py
+data/unified_database.json
+data/verified_uds_codes_github.py
+
+# Large database (use Git LFS: git lfs track "data/bricarobd_database.zip")
+data/bricarobd_database.zip
+
+# External databases
+databases/
+ecu/

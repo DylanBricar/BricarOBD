@@ -3,7 +3,7 @@
 import customtkinter as ctk
 import threading
 
-from gui.theme import COLORS, FONTS, GaugeWidget, StatusCard
+from gui.theme import COLORS, FONTS, GaugeWidget, StatusCard, _bind_scroll_recursive
 from config import DASHBOARD_REFRESH_MS
 from i18n import t, on_lang_change
 
@@ -35,6 +35,8 @@ class DashboardFrame(ctk.CTkFrame):
         self.scroll_container = ctk.CTkScrollableFrame(self, fg_color="transparent")
         self.scroll_container.pack(fill="both", expand=True, padx=16, pady=16)
         self._build_content()
+        # Fix macOS trackpad scroll: propagate scroll events from all children
+        self.after(500, lambda: _bind_scroll_recursive(self.scroll_container))
 
     def _build_content(self):
         """Build all dashboard content (called on init and language change)."""
@@ -97,25 +99,27 @@ class DashboardFrame(ctk.CTkFrame):
         status_grid.pack(fill="x", pady=(0, 8))
 
         self.throttle_card = StatusCard(status_grid, t("dash_throttle"), "%")
-        self.throttle_card.grid(row=0, column=0, padx=4, pady=3, sticky="new")
+        self.throttle_card.grid(row=0, column=0, padx=4, pady=3, sticky="ew")
 
         self.intake_temp_card = StatusCard(status_grid, t("dash_intake"), "°C")
-        self.intake_temp_card.grid(row=0, column=1, padx=4, pady=3, sticky="new")
+        self.intake_temp_card.grid(row=0, column=1, padx=4, pady=3, sticky="ew")
 
         self.maf_card = StatusCard(status_grid, t("dash_maf"), "g/s")
-        self.maf_card.grid(row=0, column=2, padx=4, pady=3, sticky="new")
+        self.maf_card.grid(row=0, column=2, padx=4, pady=3, sticky="ew")
 
         self.fuel_level_card = StatusCard(status_grid, t("dash_fuel"), "%")
-        self.fuel_level_card.grid(row=1, column=0, padx=4, pady=3, sticky="new")
+        self.fuel_level_card.grid(row=1, column=0, padx=4, pady=3, sticky="ew")
 
         self.voltage_card = StatusCard(status_grid, t("dash_voltage"), "V")
-        self.voltage_card.grid(row=1, column=1, padx=4, pady=3, sticky="new")
+        self.voltage_card.grid(row=1, column=1, padx=4, pady=3, sticky="ew")
 
         self.timing_card = StatusCard(status_grid, t("dash_timing"), "°")
-        self.timing_card.grid(row=1, column=2, padx=4, pady=3, sticky="new")
+        self.timing_card.grid(row=1, column=2, padx=4, pady=3, sticky="ew")
 
         for i in range(3):
             status_grid.grid_columnconfigure(i, weight=1)
+        for i in range(2):
+            status_grid.grid_rowconfigure(i, weight=0)
 
         vehicle_info_frame = ctk.CTkFrame(c, fg_color=COLORS["bg_card"], corner_radius=10, border_width=1, border_color=COLORS["card_border"])
         vehicle_info_frame.pack(fill="x", pady=(0, 8))

@@ -232,6 +232,62 @@ TRANSLATIONS = {
 
     # Dialog
     "dialog_close": {"fr": "Fermer", "en": "Close"},
+
+    # Advanced tab
+    "nav_advanced": {"fr": "Avancé", "en": "Advanced"},
+    "adv_warning_title": {
+        "fr": "ATTENTION — Opérations avancées",
+        "en": "WARNING — Advanced Operations",
+    },
+    "adv_warning_text": {
+        "fr": "Ces opérations modifient les paramètres du véhicule. Ne les utilisez PAS si vous ne savez pas exactement ce que vous faites. "
+              "Un mauvais paramètre peut entraîner des dysfonctionnements moteur, une surconsommation ou des dommages. "
+              "Utilisez uniquement sur un véhicule à l'arrêt avec le frein à main serré.",
+        "en": "These operations modify vehicle parameters. Do NOT use them if you don't know exactly what you are doing. "
+              "Wrong parameters can cause engine malfunctions, increased consumption, or damage. "
+              "Only use on a stationary vehicle with the parking brake engaged.",
+    },
+    "adv_no_vehicle": {
+        "fr": "Aucun véhicule détecté",
+        "en": "No vehicle detected",
+    },
+    "adv_no_vehicle_detail": {
+        "fr": "Connectez-vous à un véhicule pour voir les opérations avancées disponibles. "
+              "Les opérations sont spécifiques à chaque constructeur et détectées via le numéro de châssis (VIN).",
+        "en": "Connect to a vehicle to see available advanced operations. "
+              "Operations are manufacturer-specific and detected via VIN.",
+    },
+    "adv_vehicle_detected": {
+        "fr": "Véhicule détecté : {make} — Opérations avancées disponibles :",
+        "en": "Vehicle detected: {make} — Available advanced operations:",
+    },
+    "adv_no_operations": {
+        "fr": "Aucune opération avancée vérifiée disponible pour {make}. "
+              "Seules les opérations dont les codes sont vérifiés et fiables sont proposées.",
+        "en": "No verified advanced operations available for {make}. "
+              "Only operations with verified and reliable codes are offered.",
+    },
+    "adv_preconditions": {"fr": "Pré-requis", "en": "Pre-conditions"},
+    "adv_execute": {"fr": "Exécuter", "en": "Execute"},
+    "adv_executing": {"fr": "Exécution en cours...", "en": "Executing..."},
+    "adv_not_connected": {"fr": "Non connecté au véhicule", "en": "Not connected to vehicle"},
+    "adv_requires_security": {"fr": "Accès sécurisé", "en": "Security Access"},
+    "adv_risk_low": {"fr": "Risque faible", "en": "Low risk"},
+    "adv_risk_medium": {"fr": "Risque moyen", "en": "Medium risk"},
+    "adv_risk_high": {"fr": "Risque élevé", "en": "High risk"},
+    "adv_confirm_title": {"fr": "Confirmation opération avancée", "en": "Advanced Operation Confirmation"},
+    "adv_confirm_msg": {
+        "fr": "Vous êtes sur le point d'exécuter :\n\n{operation}\n\nNiveau de risque : {risk}\n\nContinuer ?",
+        "en": "You are about to execute:\n\n{operation}\n\nRisk level: {risk}\n\nContinue?",
+    },
+    "adv_param_required": {"fr": "Requis", "en": "Required"},
+    "adv_tab_verified": {"fr": "Vérifiés (sources publiques)", "en": "Verified (public sources)"},
+    "adv_ddt_search_hint": {
+        "fr": "Cliquez sur un groupe ECU pour voir ses opérations, ou utilisez la recherche "
+              "(ex: DPF, inject, throttle, EGR, 2E2481, oil, battery, actuator).",
+        "en": "Click an ECU group to see its operations, or use search "
+              "(e.g.: DPF, inject, throttle, EGR, 2E2481, oil, battery, actuator).",
+    },
 }
 
 

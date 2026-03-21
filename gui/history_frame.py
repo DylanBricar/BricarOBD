@@ -5,7 +5,7 @@ from datetime import datetime
 from pathlib import Path
 from tkinter import messagebox
 from config import SESSIONS_DIR
-from gui.theme import COLORS, FONTS
+from gui.theme import COLORS, FONTS, _bind_scroll_recursive
 from i18n import t, on_lang_change
 
 
@@ -73,6 +73,7 @@ class HistoryFrame(ctk.CTkFrame):
             list_frame, fg_color=COLORS["bg_secondary"], corner_radius=8
         )
         self.sessions_scroll.pack(fill="both", expand=True)
+        self.after(500, lambda: _bind_scroll_recursive(self.sessions_scroll))
 
         # Details area (right side)
         details_frame = ctk.CTkFrame(content_frame, fg_color="transparent")
@@ -88,6 +89,7 @@ class HistoryFrame(ctk.CTkFrame):
             details_frame, fg_color=COLORS["bg_secondary"], corner_radius=8
         )
         self.details_scroll.pack(fill="both", expand=True)
+        self.after(500, lambda: _bind_scroll_recursive(self.details_scroll))
 
         # Export button
         self.export_button = ctk.CTkButton(

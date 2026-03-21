@@ -112,7 +112,8 @@ class ConnectionFrame(ctk.CTkFrame):
         self.connect_btn = ctk.CTkButton(
             button_row, text=t("conn_connect"), width=140,
             command=self._on_connect_btn_clicked,
-            fg_color=COLORS["success"], hover_color=COLORS["highlight"],
+            fg_color=COLORS["success"], hover_color="#0DA574",
+            text_color="#FFFFFF",
             corner_radius=8
         )
         self.connect_btn.pack(side="left", padx=(0, 12))

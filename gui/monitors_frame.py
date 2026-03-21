@@ -2,7 +2,7 @@
 
 import customtkinter as ctk
 import threading
-from gui.theme import COLORS, FONTS
+from gui.theme import COLORS, FONTS, _bind_scroll_recursive
 from i18n import t, on_lang_change
 
 
@@ -57,6 +57,7 @@ class MonitorsFrame(ctk.CTkFrame):
         # Scrollable results area
         self.results_frame = ctk.CTkScrollableFrame(self, fg_color="transparent")
         self.results_frame.pack(fill="both", expand=True, padx=16, pady=8)
+        self.after(500, lambda: _bind_scroll_recursive(self.results_frame))
 
         # Empty state
         self.empty_label = ctk.CTkLabel(

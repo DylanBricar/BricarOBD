@@ -91,6 +91,8 @@ class DemoConnection:
             return "44"  # DTC clear OK
         elif mode == "07":
             return "47"  # No pending DTCs
+        elif mode == "06" and pid:
+            return self._simulate_mode06(int(pid, 16))
         elif mode == "09" and pid:
             return self._simulate_mode09(int(pid, 16))
         elif mode == "0A":
@@ -134,6 +136,33 @@ class DemoConnection:
         if service == "14":
             return "54"
 
+        # 0x27 SecurityAccess (for advanced operations demo)
+        if service == "27":
+            sub = clean[2:4] if len(clean) >= 4 else "01"
+            if sub == "01":
+                return "67 01 00 00 00 00"  # Zero seed = already unlocked
+            elif sub == "02":
+                return "67 02"  # Key accepted
+
+        # 0x31 RoutineControl (for advanced operations demo)
+        if service == "31" and len(clean) >= 6:
+            sub = clean[2:4]
+            rid = clean[4:8]
+            if sub == "01":
+                return f"71 01 {rid}"  # Routine started OK
+            elif sub == "03":
+                return f"71 03 {rid} 00"  # Routine completed
+
+        # 0x2E WriteDataByIdentifier (for advanced operations demo)
+        if service == "2E" and len(clean) >= 6:
+            did = clean[2:6]
+            return f"6E {did}"  # Write OK
+
+        # 0x2F IOControlByIdentifier (for advanced operations demo)
+        if service == "2F" and len(clean) >= 6:
+            did = clean[2:6]
+            return f"6F {did} 00"  # Control OK
+
         return "7F " + service + " 31"  # NRC: request out of range
 
     def _simulate_did_read(self, did_hex: str) -> str:
@@ -159,6 +188,48 @@ class DemoConnection:
             "2100": "62 21 00 5A 3C 1E",  # Gauging group 1
             "2200": "62 22 00 01 02 03",  # Fuel management config
             "F080": "62 F0 80 50 53 41 20 41 45 45 32 30 30 34",  # ZA: PSA AEE2004
+            # Advanced operations DIDs (PSA)
+            "2282": "62 22 82 00 4E 20 0F 03 19 00 7D 00",  # Maintenance: 20000km, 15/03/2025, 32000km interval
+            "2106": "62 21 06 00 0A 00 32 00 1E 03",  # DPF: 10g soot, 50 regens, 30% load, status OK
+            # PSA BSI vehicle config zones
+            "231C": "62 23 1C 02",           # Engine type: 02=Diesel
+            "231A": "62 23 1A 01",           # Gearbox: 01=Manual
+            "232D": "62 23 2D 01",           # DPF type: 01=Additive
+            "2333": "62 23 33 02",           # Battery type: 02=AGM
+            "2318": "62 23 18 03",           # Climate: 03=Auto bi-zone
+            "23BB": "62 23 BB 01",           # Start&Stop: 01=Present
+            "232A": "62 23 2A 02",           # DRL type: 02=LED
+            # BMW DPF DIDs
+            "DA01": "62 DA 01 00 08 00 2A",  # Soot: 8g, 42 regens
+            "DA02": "62 DA 02 01 00 50",     # Regen status: active=no, last=80%
+            # Mercedes DPF DIDs
+            "3001": "62 30 01 00 0C 00 38",  # Soot: 12g, 56 regens
+            # Renault K9K 1.5 dCi (from k9k_pids)
+            "242C": "62 24 2C 00 6E",        # Soot mass: 1.10g
+            "2434": "62 24 34 00",           # Regen status: 0 (idle)
+            "2442": "62 24 42 0D 52",        # DPF inlet temp: 68°C
+            "2542": "62 25 42 80 0A",        # DPF diff pressure: 10 mbar
+            "2481": "62 24 81 2A",           # Successful regen count: 42
+            "24A9": "62 24 A9 00 01 2C",     # Dist since regen: 300 km
+            "2487": "62 24 87 07 08",        # Last regen duration: 3 min
+            "24EC": "62 24 EC 00 00 00 32",  # Oil dilution
+            "FD07": "62 FD 07 80 00",        # Fuel corr cyl1
+            "FD08": "62 FD 08 80 10",        # Fuel corr cyl2
+            "FD09": "62 FD 09 7F F0",        # Fuel corr cyl3
+            "FD0A": "62 FD 0A 80 08",        # Fuel corr cyl4
+            "2401": "62 24 01 04 4C",        # Boost: 1100 mbar
+            "2407": "62 24 07 02 00",        # EGR position: ~25%
+            "2801": "62 28 01 05 DC",        # Fuel rail: 1500 bar
+            # VAG DIDs
+            "F1AD": "62 F1 AD 43 5A 45 41",  # Engine code: CZEA
+            "F187": "62 F1 87 30 34 45 39 30 36 30 32 37 44",  # Part: 04E906027D
+            "0600": "62 06 00 00 04 00 01",  # Coding value
+            "295A": "62 29 5A 00 01 A4 38",  # Mileage: 107576 km
+            "F442": "62 F4 42 35 B0",        # Voltage: 13.744V
+            # Hyundai/Kia BMS
+            "0105": "62 01 05 52",           # SOC: 82%
+            "0101": "62 01 01 01 90",        # Voltage: 400V
+            "0104": "62 01 04 1E",           # Temp: 30°C
         }
 
         resp = did_responses.get(did_hex.upper())
@@ -242,6 +313,22 @@ class DemoConnection:
         """Return simulated DTCs (one active code for demo)."""
         # P0420 - Catalyst efficiency below threshold
         return "43 01 04 20 00 00"
+
+    def _simulate_mode06(self, mid):
+        """Simulate Mode 06 test results (monitoring)."""
+        test_results = {
+            0x01: "46 01 00 FF FF 00 FF",  # O2 sensor 1 bank 1
+            0x02: "46 02 00 FF FF 00 FF",  # O2 sensor 1 bank 2
+            0x03: "46 03 00 FF FF 00 FF",  # O2 sensor 2 bank 1
+            0x04: "46 04 00 FF FF 00 FF",  # O2 sensor 2 bank 2
+            0x05: "46 05 00 FF FF 00 FF",  # O2 sensor 3 bank 1
+            0x06: "46 06 00 FF FF 00 FF",  # O2 sensor 3 bank 2
+            0x07: "46 07 00 FF FF 00 FF",  # O2 sensor 4 bank 1
+            0x08: "46 08 00 FF FF 00 FF",  # O2 sensor 4 bank 2
+            0x09: "46 09 00 FF FF 00 FF",  # Catalyst efficiency bank 1
+            0x0A: "46 0A 00 FF FF 00 FF",  # Catalyst efficiency bank 2
+        }
+        return test_results.get(mid, "46 00 00 FF FF 00 FF")
 
     def _simulate_mode09(self, info_type):
         """Simulate Mode 09 vehicle info."""

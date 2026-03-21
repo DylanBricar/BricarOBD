@@ -24,6 +24,7 @@ COLORS = {
     "danger": "#EF4444",           # Red
     "danger_hover": "#DC2626",     # Red hover
     "danger_dark": "#B91C1C",      # Dark red
+    "danger_light": "#FCA5A5",     # Light red text
     "highlight": "#06B6D4",        # Cyan highlight
 
     # Text
@@ -236,3 +237,46 @@ class DataCard(ctk.CTkFrame):
 
 # Keep backward compatibility alias
 StatusCard = DataCard
+
+
+# ── Scroll Fix (macOS trackpad) ───────────────────────────────
+def _bind_scroll_recursive(scrollable_frame):
+    """Fix macOS trackpad scrolling on CTkScrollableFrame.
+
+    CustomTkinter only handles scroll events on the scrollable frame itself,
+    not on child widgets. This binds mousewheel events on ALL children so
+    scrolling works wherever the cursor is.
+    """
+    import platform
+
+    try:
+        canvas = scrollable_frame._parent_canvas
+    except AttributeError:
+        return
+
+    def _on_mousewheel(event):
+        try:
+            canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
+        except Exception:
+            pass
+
+    def _on_mousewheel_mac(event):
+        try:
+            canvas.yview_scroll(int(-1 * event.delta), "units")
+        except Exception:
+            pass
+
+    handler = _on_mousewheel_mac if platform.system() == "Darwin" else _on_mousewheel
+
+    def bind_children(widget):
+        try:
+            widget.bind("<MouseWheel>", handler, add="+")
+            if platform.system() != "Darwin":
+                widget.bind("<Button-4>", lambda e: canvas.yview_scroll(-3, "units"), add="+")
+                widget.bind("<Button-5>", lambda e: canvas.yview_scroll(3, "units"), add="+")
+        except Exception:
+            pass
+        for child in widget.winfo_children():
+            bind_children(child)
+
+    bind_children(scrollable_frame)

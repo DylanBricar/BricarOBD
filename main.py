@@ -24,6 +24,7 @@ from obd_core.obd_reader import OBDReader
 from obd_core.uds_client import UDSClient
 from obd_core.dtc_manager import DTCManager
 from obd_core.anomaly_detector import AnomalyDetector
+from obd_core.advanced_manager import AdvancedManager
 
 # GUI
 from gui.app import OBDApp
@@ -59,6 +60,7 @@ def main():
     uds_client = UDSClient(connection, safety)
     dtc_manager = DTCManager(obd_reader, uds_client, safety)
     anomaly_detector = AnomalyDetector()
+    advanced_manager = AdvancedManager(connection, safety)
 
     # Create application
     app = OBDApp()
@@ -70,6 +72,7 @@ def main():
     app.dtc_manager = dtc_manager
     app.safety = safety
     app.anomaly_detector = anomaly_detector
+    app.advanced_manager = advanced_manager
 
     # Create and register frames
     connection_frame = ConnectionFrame(app.content_area, app)
@@ -93,6 +96,10 @@ def main():
 
     history_frame = HistoryFrame(app.content_area, app)
     app.register_frame("History", history_frame)
+
+    from gui.advanced_frame import AdvancedFrame
+    advanced_frame = AdvancedFrame(app.content_area, app)
+    app.register_frame("Advanced", advanced_frame)
 
     # Show connection frame by default
     app.show_frame("Connection")

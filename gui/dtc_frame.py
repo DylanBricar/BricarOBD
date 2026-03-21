@@ -5,7 +5,7 @@ import webbrowser
 import threading
 from tkinter import filedialog
 from pathlib import Path
-from gui.theme import COLORS, FONTS
+from gui.theme import COLORS, FONTS, _bind_scroll_recursive
 from config import DTC_SEARCH_URL
 from i18n import t, on_lang_change
 
@@ -36,42 +36,42 @@ class DTCFrame(ctk.CTkFrame):
             self, text=t("dtc_title"), font=FONTS["h3"],
             text_color=COLORS["text_primary"]
         )
-        self.title_label.pack(anchor="w", padx=16, pady=(8, 2))
+        self.title_label.pack(anchor="w", padx=16, pady=(4, 0))
 
-        ctk.CTkLabel(self, text=t("dtc_help"), font=FONTS["small"], text_color=COLORS["text_muted"]).pack(anchor="w", padx=16, pady=(0, 4))
+        ctk.CTkLabel(self, text=t("dtc_help"), font=FONTS["small"], text_color=COLORS["text_muted"]).pack(anchor="w", padx=16, pady=(0, 2))
 
         button_bar = ctk.CTkFrame(self, fg_color="transparent")
-        button_bar.pack(anchor="w", padx=16, pady=(0, 4), fill="x")
+        button_bar.pack(anchor="w", padx=16, pady=(0, 0), fill="x")
 
         ctk.CTkButton(
             button_bar, text=t("dtc_read_all"), fg_color=COLORS["accent"],
-            width=120, height=26, font=FONTS["small"],
+            width=110, height=24, font=FONTS["small"],
             command=self.read_all_dtcs
-        ).pack(side="left", padx=4)
+        ).pack(side="left", padx=2)
 
         ctk.CTkButton(
             button_bar, text=t("dtc_read_pending"),
-            width=120, height=26, font=FONTS["small"],
+            width=110, height=24, font=FONTS["small"],
             command=self.read_pending
-        ).pack(side="left", padx=4)
+        ).pack(side="left", padx=2)
 
         ctk.CTkButton(
             button_bar, text=t("dtc_read_permanent"),
-            width=120, height=26, font=FONTS["small"],
+            width=110, height=24, font=FONTS["small"],
             command=self.read_permanent
-        ).pack(side="left", padx=4)
+        ).pack(side="left", padx=2)
 
         separator = ctk.CTkFrame(button_bar, fg_color=COLORS["border"], width=2)
-        separator.pack(side="left", padx=8, fill="y")
+        separator.pack(side="left", padx=6, fill="y")
 
         ctk.CTkButton(
             button_bar, text=t("dtc_clear_all"), fg_color=COLORS["danger"],
-            width=120, height=26, font=FONTS["small"],
+            width=110, height=24, font=FONTS["small"],
             command=self.clear_dtcs
-        ).pack(side="left", padx=4)
+        ).pack(side="left", padx=2)
 
         table_header_frame = ctk.CTkFrame(self, fg_color="transparent")
-        table_header_frame.pack(anchor="w", padx=16, pady=8, fill="x")
+        table_header_frame.pack(anchor="w", padx=16, pady=(4, 2), fill="x")
 
         header_texts = [t("dtc_code"), t("dtc_desc"), t("dtc_status"), t("dtc_source"), t("dtc_actions")]
         header_widths = [80, 250, 100, 80, 150]
@@ -88,6 +88,7 @@ class DTCFrame(ctk.CTkFrame):
 
         self.table_frame = ctk.CTkScrollableFrame(self, fg_color="transparent")
         self.table_frame.pack(fill="both", expand=True, padx=16, pady=(4, 4))
+        self.after(500, lambda: _bind_scroll_recursive(self.table_frame))
 
         self.empty_state = ctk.CTkLabel(
             self.table_frame, text=t("dtc_no_codes"),
@@ -96,7 +97,7 @@ class DTCFrame(ctk.CTkFrame):
         self.empty_state.pack(anchor="center", pady=40)
 
         bottom_bar = ctk.CTkFrame(self, fg_color="transparent")
-        bottom_bar.pack(anchor="w", padx=16, pady=16, fill="x")
+        bottom_bar.pack(anchor="w", padx=16, pady=(4, 4), fill="x")
 
         self.count_label = ctk.CTkLabel(
             bottom_bar, text=t("dtc_found_zero"), font=FONTS["small"],
