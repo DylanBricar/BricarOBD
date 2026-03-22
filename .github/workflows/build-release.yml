@@ -87,10 +87,11 @@ jobs:
           "
 
       - name: Build with Nuitka
+        env:
+          NUITKA_ASSUME_YES_FOR_DOWNLOADS: '1'
         run: |
           python -m nuitka `
             --onefile `
-            --assume-yes-for-downloading `
             --enable-plugin=tk-inter `
             --include-package-data=customtkinter `
             --include-data-dir=assets=assets `
