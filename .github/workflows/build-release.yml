@@ -90,6 +90,7 @@ jobs:
         run: |
           python -m nuitka `
             --onefile `
+            --assume-yes-for-downloading `
             --enable-plugin=tk-inter `
             --include-package-data=customtkinter `
             --include-data-dir=assets=assets `
