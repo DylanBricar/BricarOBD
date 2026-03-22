@@ -214,6 +214,10 @@ def setup_dev_logging():
     """Install the dev console handler on the root logger."""
     handler = get_dev_handler()
     root = logging.getLogger()
+    # Ensure root logger captures all levels (handlers filter independently)
+    if root.level > logging.DEBUG:
+        root.setLevel(logging.DEBUG)
+    handler.setLevel(logging.DEBUG)
     if handler not in root.handlers:
         root.addHandler(handler)
 
