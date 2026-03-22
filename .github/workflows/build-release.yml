@@ -22,7 +22,15 @@ jobs:
       - name: Install dependencies
         run: |
           pip install -r requirements.txt
-          pip install nuitka ordered-set zstandard
+          pip install nuitka ordered-set zstandard imageio
+
+      - name: Convert icon to ICNS
+        run: |
+          python -c "
+          from PIL import Image
+          img = Image.open('assets/icon.png')
+          img.save('assets/icon.icns', format='ICNS')
+          "
 
       - name: Build with Nuitka
         run: |
@@ -33,7 +41,7 @@ jobs:
             --include-data-dir=assets=assets \
             --include-data-dir=data=data \
             --macos-create-app-bundle \
-            --macos-app-icon=assets/icon.png \
+            --macos-app-icon=assets/icon.icns \
             --macos-app-name=BricarOBD \
             --macos-app-version=${{ github.ref_name }} \
             --output-dir=build \
@@ -68,7 +76,15 @@ jobs:
       - name: Install dependencies
         run: |
           pip install -r requirements.txt
-          pip install nuitka ordered-set zstandard
+          pip install nuitka ordered-set zstandard imageio
+
+      - name: Convert icon to ICO
+        run: |
+          python -c "
+          from PIL import Image
+          img = Image.open('assets/icon.png').convert('RGBA')
+          img.save('assets/icon.ico', format='ICO', sizes=[(256,256),(128,128),(64,64),(48,48),(32,32),(16,16)])
+          "
 
       - name: Build with Nuitka
         run: |
@@ -79,7 +95,7 @@ jobs:
             --include-data-dir=assets=assets `
             --include-data-dir=data=data `
             --windows-console-mode=disable `
-            --windows-icon-from-ico=assets/icon.png `
+            --windows-icon-from-ico=assets/icon.ico `
             --windows-product-name=BricarOBD `
             --windows-file-version=1.1.0.0 `
             --windows-product-version=1.1.0.0 `
@@ -122,24 +138,24 @@ jobs:
             ## BricarOBD ${{ github.ref_name }}
 
             Professional OBD-II diagnostic tool for all vehicles.
-            Built with Nuitka (compiled Python → native code).
+            Built with Nuitka (compiled Python to native code).
 
             ### Downloads
-            - **macOS**: `BricarOBD-macOS.dmg` — Open and drag to Applications
-            - **Windows**: `BricarOBD.exe` — Double-click to run (single file, no install)
+            - **macOS**: `BricarOBD-macOS.dmg` - Open and drag to Applications
+            - **Windows**: `BricarOBD.exe` - Double-click to run (single file, no install)
 
             ### Features
             - Auto vehicle detection via VIN (39 manufacturers)
             - Real-time dashboard with gauges + live graphs
             - 70 OBD-II PIDs monitoring with CSV recording
-            - 7,564 DTC codes with repair tips & multi-source help
+            - 7,564 DTC codes with repair tips and multi-source help
             - DTC read/clear/export with 5-layer safety guards
             - Mode 06 monitor tests (35 MIDs) for emissions check
             - 3.3M+ manufacturer-specific diagnostic operations
             - 90 vehicle ECU profiles with CAN addresses
             - Extended ECU scan (230 DIDs)
             - Bilingual FR/EN interface (persisted)
-            - Demo mode (`--demo`)
+            - Demo mode (--demo)
 
             ### Requirements
             - ELM327 USB or Bluetooth adapter (or use demo mode)
