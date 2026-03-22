@@ -32,8 +32,14 @@ def _get_log_file():
 class _DevHandler(logging.Handler):
     """Logging handler that pushes to queue + buffer + file."""
 
+    # Noisy loggers to suppress at DEBUG level
+    _SUPPRESSED = {"PIL.PngImagePlugin", "PIL.Image"}
+
     def emit(self, record):
         try:
+            # Skip noisy debug loggers
+            if record.levelno <= logging.DEBUG and record.name in self._SUPPRESSED:
+                return
             msg = self.format(record)
             _log_buffer.append(msg)
             _log_queue.put(msg)
@@ -58,6 +64,13 @@ class DevConsoleWindow(ctk.CTkToplevel):
         self._paused = False
         self._line_count = 0
         self._build_ui()
+
+        # Drain the queue (avoid duplicates with buffer)
+        while not _log_queue.empty():
+            try:
+                _log_queue.get_nowait()
+            except queue.Empty:
+                break
 
         # Load all buffered logs
         for msg in list(_log_buffer):
