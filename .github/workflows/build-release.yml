@@ -22,10 +22,11 @@ jobs:
       - name: Install dependencies
         run: |
           pip install -r requirements.txt
-          pip install nuitka ordered-set zstandard imageio
+          pip install nuitka ordered-set zstandard
 
-      - name: Convert icon to ICNS
+      - name: Assemble database + convert icon
         run: |
+          cat data/bricarobd_db_part_* > data/bricarobd_database.zip
           python -c "
           from PIL import Image
           img = Image.open('assets/icon.png')
@@ -39,7 +40,10 @@ jobs:
             --enable-plugin=tk-inter \
             --include-package-data=customtkinter \
             --include-data-dir=assets=assets \
-            --include-data-dir=data=data \
+            --include-data-files=data/bricarobd_database.zip=data/bricarobd_database.zip \
+            --include-data-files=data/dtc_descriptions.py=data/dtc_descriptions.py \
+            --include-data-files=data/dtc_repair_tips.py=data/dtc_repair_tips.py \
+            --include-data-files=data/__init__.py=data/__init__.py \
             --macos-create-app-bundle \
             --macos-app-icon=assets/icon.icns \
             --macos-app-name=BricarOBD \
@@ -76,18 +80,28 @@ jobs:
       - name: Install dependencies
         run: |
           pip install -r requirements.txt
-          pip install nuitka ordered-set zstandard imageio
+          pip install nuitka ordered-set zstandard
 
-      - name: Convert icon to ICO
+      - name: Assemble database + convert icon + install Dependency Walker
         run: |
+          # Assemble database zip from parts
+          $parts = Get-ChildItem -Path "data/bricarobd_db_part_*" | Sort-Object Name
+          $output = [System.IO.File]::Create("data/bricarobd_database.zip")
+          foreach ($part in $parts) {
+            $bytes = [System.IO.File]::ReadAllBytes($part.FullName)
+            $output.Write($bytes, 0, $bytes.Length)
+          }
+          $output.Close()
+          Write-Host "Database assembled: $((Get-Item 'data/bricarobd_database.zip').Length / 1MB) MB"
+
+          # Convert icon PNG to ICO
           python -c "
           from PIL import Image
           img = Image.open('assets/icon.png').convert('RGBA')
           img.save('assets/icon.ico', format='ICO', sizes=[(256,256),(128,128),(64,64),(48,48),(32,32),(16,16)])
           "
 
-      - name: Download Dependency Walker for Nuitka
-        run: |
+          # Pre-download Dependency Walker for Nuitka
           python -c "
           import urllib.request, zipfile, os
           cache = os.path.join(os.environ['LOCALAPPDATA'], 'Nuitka', 'Nuitka', 'Cache', 'downloads', 'depends', 'x86_64')
@@ -97,8 +111,7 @@ jobs:
           urllib.request.urlretrieve(url, zip_path)
           with zipfile.ZipFile(zip_path, 'r') as z:
               z.extractall(cache)
-          print(f'Dependency Walker installed to {cache}')
-          print(os.listdir(cache))
+          print('Dependency Walker ready')
           "
 
       - name: Build with Nuitka
@@ -108,7 +121,10 @@ jobs:
             --enable-plugin=tk-inter `
             --include-package-data=customtkinter `
             --include-data-dir=assets=assets `
-            --include-data-dir=data=data `
+            --include-data-files=data/bricarobd_database.zip=data/bricarobd_database.zip `
+            --include-data-files=data/dtc_descriptions.py=data/dtc_descriptions.py `
+            --include-data-files=data/dtc_repair_tips.py=data/dtc_repair_tips.py `
+            --include-data-files=data/__init__.py=data/__init__.py `
             --windows-console-mode=disable `
             --windows-icon-from-ico=assets/icon.ico `
             --windows-product-name=BricarOBD `

@@ -54,14 +54,24 @@ def _is_read_operation(op: dict) -> bool:
 
 
 def _find_db_path() -> Path:
-    """Find the database zip in dev mode or PyInstaller bundle.
+    """Find the database zip in dev mode, PyInstaller, or Nuitka bundle.
+
+    Search order:
+    1. Compiled bundle directory (PyInstaller _MEIPASS or Nuitka __compiled__)
+    2. Project data/ directory (development mode)
 
     If the zip doesn't exist but split parts do (bricarobd_db_part_*),
-    reassemble them automatically on first launch.
+    reassemble them automatically (dev mode or writable location).
     """
+    # Determine base path for data files
     if hasattr(sys, '_MEIPASS'):
+        # PyInstaller bundle
         base = Path(sys._MEIPASS) / "data"
+    elif "__compiled__" in dir():
+        # Nuitka compiled — data is next to the executable
+        base = Path(sys.argv[0]).resolve().parent / "data"
     else:
+        # Development mode
         base = Path(__file__).parent.parent / "data"
 
     zip_path = base / "bricarobd_database.zip"
@@ -76,6 +86,18 @@ def _find_db_path() -> Path:
                     for part in parts:
                         out.write(part.read_bytes())
                 logger.info(f"Database assembled: {zip_path}")
+            except PermissionError:
+                # Read-only filesystem (e.g., Nuitka onefile temp dir)
+                # Assemble to user's app data directory instead
+                import tempfile
+                alt_path = Path(tempfile.gettempdir()) / "BricarOBD" / "bricarobd_database.zip"
+                alt_path.parent.mkdir(parents=True, exist_ok=True)
+                if not alt_path.exists():
+                    logger.info(f"Read-only base, assembling to {alt_path}")
+                    with open(alt_path, "wb") as out:
+                        for part in parts:
+                            out.write(part.read_bytes())
+                zip_path = alt_path
             except Exception as e:
                 logger.error(f"Failed to assemble database: {e}")
 
