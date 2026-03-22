@@ -41,9 +41,13 @@ class DevConsoleHandler(logging.Handler):
 
     def set_console(self, console):
         self._console = console
-        # Flush buffer to console
-        for record in self._buffer:
-            self._console.append_log(record)
+        # Flush buffer to console (delayed to ensure window is rendered)
+        console.after(200, self._flush_buffer)
+
+    def _flush_buffer(self):
+        if self._console:
+            for record in self._buffer:
+                self._console.append_log(record)
 
     def emit(self, record):
         try:
@@ -75,6 +79,11 @@ class DevConsoleWindow(ctk.CTkToplevel):
         x = (self.winfo_screenwidth() - w) // 2
         y = (self.winfo_screenheight() - h) // 2
         self.geometry(f"{w}x{h}+{x}+{y}")
+
+        # Bring to front
+        self.lift()
+        self.focus_force()
+        self.after(100, lambda: self.attributes('-topmost', False))
 
         self._paused = False
         self._setup_ui()
