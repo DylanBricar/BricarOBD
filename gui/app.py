@@ -319,13 +319,12 @@ class OBDApp(ctk.CTk):
 
     def _toggle_dev_console(self):
         """Open or focus the developer console window."""
-        from utils.dev_console import get_dev_handler, DevConsoleWindow
+        from utils.dev_console import DevConsoleWindow
         if self._dev_console_window and self._dev_console_window.winfo_exists():
             self._dev_console_window.lift()
             self._dev_console_window.focus_force()
             return
         self._dev_console_window = DevConsoleWindow(self)
-        get_dev_handler().set_console(self._dev_console_window)
 
     def _refresh_status_bar(self):
         """Refresh status bar text with current language."""
