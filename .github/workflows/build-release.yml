@@ -86,9 +86,22 @@ jobs:
           img.save('assets/icon.ico', format='ICO', sizes=[(256,256),(128,128),(64,64),(48,48),(32,32),(16,16)])
           "
 
+      - name: Download Dependency Walker for Nuitka
+        run: |
+          python -c "
+          import urllib.request, zipfile, os
+          cache = os.path.join(os.environ['LOCALAPPDATA'], 'Nuitka', 'Nuitka', 'Cache', 'downloads', 'depends', 'x86_64')
+          os.makedirs(cache, exist_ok=True)
+          url = 'https://dependencywalker.com/depends22_x64.zip'
+          zip_path = os.path.join(cache, 'depends22_x64.zip')
+          urllib.request.urlretrieve(url, zip_path)
+          with zipfile.ZipFile(zip_path, 'r') as z:
+              z.extractall(cache)
+          print(f'Dependency Walker installed to {cache}')
+          print(os.listdir(cache))
+          "
+
       - name: Build with Nuitka
-        env:
-          NUITKA_ASSUME_YES_FOR_DOWNLOADS: '1'
         run: |
           python -m nuitka `
             --onefile `
