@@ -75,6 +75,9 @@ class DemoConnection:
         if mode in ("04",) and not _internal:
             return ""
 
+        from utils.dev_console import log_obd_command
+        cmd = f"{mode}{pid}" if pid else mode
+        log_obd_command("TX", f"[DEMO] {cmd}")
         self._update_simulation()
 
         if mode == "01" and pid:

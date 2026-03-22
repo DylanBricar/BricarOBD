@@ -122,8 +122,11 @@ class DTCFrame(ctk.CTkFrame):
 
     def read_all_dtcs(self):
         """Read all DTCs in a background thread."""
+        from utils.dev_console import log_user_action
+        log_user_action("DTC", "Read All DTCs")
         def task():
             dtcs = self.app.dtc_manager.read_all_dtcs()
+            log_user_action("DTC", f"Found {len(dtcs)} DTCs: {[d.code for d in dtcs]}")
             self.after(0, self.populate_table, dtcs)
 
         thread = threading.Thread(target=task, daemon=True)
@@ -131,8 +134,11 @@ class DTCFrame(ctk.CTkFrame):
 
     def read_pending(self):
         """Read pending DTCs in a background thread."""
+        from utils.dev_console import log_user_action
+        log_user_action("DTC", "Read Pending DTCs")
         def task():
             dtcs = self.app.dtc_manager.read_pending_dtcs()
+            log_user_action("DTC", f"Found {len(dtcs)} pending DTCs")
             self.after(0, self.populate_table, dtcs)
 
         thread = threading.Thread(target=task, daemon=True)
@@ -140,8 +146,11 @@ class DTCFrame(ctk.CTkFrame):
 
     def read_permanent(self):
         """Read permanent DTCs in a background thread."""
+        from utils.dev_console import log_user_action
+        log_user_action("DTC", "Read Permanent DTCs")
         def task():
             dtcs = self.app.dtc_manager.read_permanent_dtcs()
+            log_user_action("DTC", f"Found {len(dtcs)} permanent DTCs")
             self.after(0, self.populate_table, dtcs)
 
         thread = threading.Thread(target=task, daemon=True)

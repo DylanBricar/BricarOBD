@@ -40,6 +40,11 @@ logger = logging.getLogger(__name__)
 def main():
     """Initialize and run the OBD Diagnostic application."""
     setup_logging()
+
+    # Install dev console logging handler (captures everything for debug)
+    from utils.dev_console import setup_dev_logging
+    setup_dev_logging()
+
     logger.info(f"Starting {APP_NAME} v{APP_VERSION}")
 
     # Check for demo mode

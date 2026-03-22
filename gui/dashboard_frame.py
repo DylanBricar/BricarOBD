@@ -247,6 +247,8 @@ class DashboardFrame(ctk.CTkFrame):
         if not self.app.connection or not self.app.connection.is_connected():
             return
 
+        from utils.dev_console import log_user_action
+        log_user_action("Dashboard", "Start monitoring")
         self.monitoring = True
         self.monitor_btn.configure(text=t("dash_stop"), fg_color=COLORS["danger"])
         self.update_vehicle_info()

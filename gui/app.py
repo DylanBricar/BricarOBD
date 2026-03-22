@@ -124,6 +124,17 @@ class OBDApp(ctk.CTk):
         footer = ctk.CTkFrame(self.sidebar, fg_color="transparent")
         footer.pack(fill="x", padx=12, pady=12, side="bottom")
 
+        # Dev console button
+        self.dev_console_btn = ctk.CTkButton(
+            footer, text="Dev Console", width=100, height=24,
+            font=FONTS["small"], fg_color=COLORS["bg_card"],
+            hover_color=COLORS["bg_card_hover"],
+            text_color=COLORS["text_muted"],
+            command=self._toggle_dev_console,
+        )
+        self.dev_console_btn.pack(pady=(0, 8))
+        self._dev_console_window = None
+
         # Version label
         ctk.CTkLabel(
             footer, text=f"v{APP_VERSION}", font=FONTS["small"],
@@ -208,9 +219,12 @@ class OBDApp(ctk.CTk):
         Args:
             frame_name: Name of frame to show
         """
-        # Bug 1: Don't reload if already showing
+        # Don't reload if already showing
         if self.current_frame_name == frame_name:
             return
+
+        from utils.dev_console import log_user_action
+        log_user_action("Navigate", frame_name)
 
         if self.current_frame_name and self.current_frame_name in self.frames:
             self.frames[self.current_frame_name].pack_forget()
@@ -302,6 +316,15 @@ class OBDApp(ctk.CTk):
         """Refresh navigation button labels with new language."""
         for btn, i18n_key in self.nav_buttons_list:
             btn.configure(text=t(i18n_key))
+
+    def _toggle_dev_console(self):
+        """Open or focus the developer console window."""
+        from utils.dev_console import get_dev_handler, DevConsoleWindow
+        if self._dev_console_window and self._dev_console_window.winfo_exists():
+            self._dev_console_window.focus()
+            return
+        self._dev_console_window = DevConsoleWindow(self)
+        get_dev_handler().set_console(self._dev_console_window)
 
     def _refresh_status_bar(self):
         """Refresh status bar text with current language."""

@@ -196,7 +196,12 @@ class ELM327Connection:
             cmd = f"{mode}{pid}"
         else:
             cmd = mode
-        return self.send_command(cmd, timeout=2)
+
+        from utils.dev_console import log_obd_command
+        log_obd_command("TX", cmd)
+        response = self.send_command(cmd, timeout=2)
+        log_obd_command("RX", cmd, response.strip()[:80] if response else "(no response)")
+        return response
 
     def send_raw(self, hex_string: str) -> str:
         """Send raw hex command for UDS.
@@ -219,7 +224,12 @@ class ELM327Connection:
             raise ValueError("AT commands not allowed via send_raw()")
         if len(clean) > 16:
             logger.warning(f"Long hex command ({len(clean)} chars): {clean[:8]}...")
-        return self.send_command(clean, timeout=5)
+
+        from utils.dev_console import log_obd_command
+        log_obd_command("TX", f"RAW:{clean}")
+        response = self.send_command(clean, timeout=5)
+        log_obd_command("RX", f"RAW:{clean}", response.strip()[:80] if response else "(no response)")
+        return response
 
     def is_connected(self) -> bool:
         """Check if currently connected."""
