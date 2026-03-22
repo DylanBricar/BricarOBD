@@ -2395,6 +2395,2344 @@ REPAIR_TIPS = {
         },
         "difficulty": 2,
     },
+    # --- O2 heater circuit codes ---
+    "P0030": {
+        "causes": {
+            "fr": ["Circuit chauffage sonde O2 banc 1 capteur 1 défectueux", "Fusible grillé", "Câblage endommagé"],
+            "en": ["HO2S heater circuit bank 1 sensor 1 fault", "Blown fuse", "Damaged wiring"],
+        },
+        "quick_check": {
+            "fr": "Vérifier le fusible du circuit chauffage sonde O2. Mesurer la résistance du chauffage.",
+            "en": "Check O2 heater circuit fuse. Measure heater resistance.",
+        },
+        "difficulty": 2,
+    },
+    "P0031": {
+        "causes": {
+            "fr": ["Circuit chauffage sonde O2 B1S1 résistance trop basse", "Court-circuit dans le câblage", "Sonde O2 défectueuse"],
+            "en": ["HO2S heater circuit B1S1 low resistance", "Short circuit in wiring", "Faulty O2 sensor"],
+        },
+        "quick_check": {
+            "fr": "Mesurer la résistance du chauffage sonde O2 (normalement 2-30 ohms). Vérifier le câblage.",
+            "en": "Measure O2 heater resistance (normally 2-30 ohms). Check wiring.",
+        },
+        "difficulty": 2,
+    },
+    "P0032": {
+        "causes": {
+            "fr": ["Circuit chauffage sonde O2 B1S1 résistance trop haute", "Circuit ouvert", "Connecteur corrodé"],
+            "en": ["HO2S heater circuit B1S1 high resistance", "Open circuit", "Corroded connector"],
+        },
+        "quick_check": {
+            "fr": "Vérifier la continuité du câblage chauffage sonde O2. Inspecter les connecteurs.",
+            "en": "Check O2 heater wiring continuity. Inspect connectors.",
+        },
+        "difficulty": 2,
+    },
+    "P0036": {
+        "causes": {
+            "fr": ["Circuit chauffage sonde O2 banc 1 capteur 2 défectueux", "Fusible grillé", "Câblage coupé"],
+            "en": ["HO2S heater circuit bank 1 sensor 2 fault", "Blown fuse", "Cut wiring"],
+        },
+        "quick_check": {
+            "fr": "Vérifier le fusible. Mesurer la résistance du chauffage sonde O2 aval.",
+            "en": "Check fuse. Measure downstream O2 heater resistance.",
+        },
+        "difficulty": 2,
+    },
+    "P0037": {
+        "causes": {
+            "fr": ["Circuit chauffage sonde O2 B1S2 résistance trop basse", "Court-circuit", "Sonde défectueuse"],
+            "en": ["HO2S heater circuit B1S2 low resistance", "Short circuit", "Faulty sensor"],
+        },
+        "quick_check": {
+            "fr": "Mesurer la résistance du chauffage (2-30 ohms). Vérifier le câblage vers la sonde aval.",
+            "en": "Measure heater resistance (2-30 ohms). Check wiring to downstream sensor.",
+        },
+        "difficulty": 2,
+    },
+    "P0038": {
+        "causes": {
+            "fr": ["Circuit chauffage sonde O2 B1S2 résistance trop haute", "Circuit ouvert", "Connecteur endommagé"],
+            "en": ["HO2S heater circuit B1S2 high resistance", "Open circuit", "Damaged connector"],
+        },
+        "quick_check": {
+            "fr": "Vérifier la continuité du câblage. Inspecter le connecteur de la sonde aval.",
+            "en": "Check wiring continuity. Inspect downstream sensor connector.",
+        },
+        "difficulty": 2,
+    },
+    "P0050": {
+        "causes": {
+            "fr": ["Circuit chauffage sonde O2 banc 2 capteur 1 défectueux", "Fusible grillé", "Câblage endommagé"],
+            "en": ["HO2S heater circuit bank 2 sensor 1 fault", "Blown fuse", "Damaged wiring"],
+        },
+        "quick_check": {
+            "fr": "Vérifier le fusible du circuit chauffage sonde O2 banc 2. Mesurer la résistance.",
+            "en": "Check bank 2 O2 heater circuit fuse. Measure resistance.",
+        },
+        "difficulty": 2,
+    },
+    "P0051": {
+        "causes": {
+            "fr": ["Circuit chauffage sonde O2 B2S1 résistance trop basse", "Court-circuit", "Sonde défectueuse"],
+            "en": ["HO2S heater circuit B2S1 low resistance", "Short circuit", "Faulty sensor"],
+        },
+        "quick_check": {
+            "fr": "Mesurer la résistance du chauffage sonde O2 banc 2 amont.",
+            "en": "Measure bank 2 upstream O2 heater resistance.",
+        },
+        "difficulty": 2,
+    },
+    "P0052": {
+        "causes": {
+            "fr": ["Circuit chauffage sonde O2 B2S1 résistance trop haute", "Circuit ouvert", "Connecteur corrodé"],
+            "en": ["HO2S heater circuit B2S1 high resistance", "Open circuit", "Corroded connector"],
+        },
+        "quick_check": {
+            "fr": "Vérifier la continuité du câblage chauffage sonde O2 banc 2.",
+            "en": "Check bank 2 O2 heater wiring continuity.",
+        },
+        "difficulty": 2,
+    },
+    "P0056": {
+        "causes": {
+            "fr": ["Circuit chauffage sonde O2 banc 2 capteur 2 défectueux", "Fusible grillé", "Câblage coupé"],
+            "en": ["HO2S heater circuit bank 2 sensor 2 fault", "Blown fuse", "Cut wiring"],
+        },
+        "quick_check": {
+            "fr": "Vérifier le fusible. Mesurer la résistance du chauffage sonde O2 B2S2.",
+            "en": "Check fuse. Measure B2S2 O2 heater resistance.",
+        },
+        "difficulty": 2,
+    },
+    "P0057": {
+        "causes": {
+            "fr": ["Circuit chauffage sonde O2 B2S2 résistance trop basse", "Court-circuit", "Sonde défectueuse"],
+            "en": ["HO2S heater circuit B2S2 low resistance", "Short circuit", "Faulty sensor"],
+        },
+        "quick_check": {
+            "fr": "Mesurer la résistance du chauffage (2-30 ohms). Inspecter le câblage.",
+            "en": "Measure heater resistance (2-30 ohms). Inspect wiring.",
+        },
+        "difficulty": 2,
+    },
+    "P0058": {
+        "causes": {
+            "fr": ["Circuit chauffage sonde O2 B2S2 résistance trop haute", "Circuit ouvert", "Connecteur endommagé"],
+            "en": ["HO2S heater circuit B2S2 high resistance", "Open circuit", "Damaged connector"],
+        },
+        "quick_check": {
+            "fr": "Vérifier la continuité du câblage. Inspecter le connecteur sonde O2 B2S2.",
+            "en": "Check wiring continuity. Inspect B2S2 O2 sensor connector.",
+        },
+        "difficulty": 2,
+    },
+    # --- MAP sensor codes ---
+    "P0106": {
+        "causes": {
+            "fr": ["Capteur MAP signal hors plage", "Fuite au collecteur d'admission", "Tuyau de dépression bouché ou percé"],
+            "en": ["MAP sensor signal out of range", "Intake manifold leak", "Vacuum hose clogged or cracked"],
+        },
+        "quick_check": {
+            "fr": "Vérifier les durites de dépression. Tester le capteur MAP avec un manomètre.",
+            "en": "Check vacuum hoses. Test MAP sensor with a gauge.",
+        },
+        "difficulty": 2,
+    },
+    "P0107": {
+        "causes": {
+            "fr": ["Capteur MAP signal trop bas", "Circuit court à la masse", "Capteur défectueux"],
+            "en": ["MAP sensor signal too low", "Short to ground", "Faulty sensor"],
+        },
+        "quick_check": {
+            "fr": "Vérifier le câblage du capteur MAP. Mesurer la tension de sortie.",
+            "en": "Check MAP sensor wiring. Measure output voltage.",
+        },
+        "difficulty": 2,
+    },
+    "P0108": {
+        "causes": {
+            "fr": ["Capteur MAP signal trop élevé", "Circuit ouvert", "Fuite d'air importante"],
+            "en": ["MAP sensor signal too high", "Open circuit", "Major air leak"],
+        },
+        "quick_check": {
+            "fr": "Vérifier la connexion du capteur MAP. Rechercher les fuites d'air.",
+            "en": "Check MAP sensor connection. Look for air leaks.",
+        },
+        "difficulty": 2,
+    },
+    "P0109": {
+        "causes": {
+            "fr": ["Capteur MAP signal intermittent", "Connecteur mal engagé", "Câblage endommagé"],
+            "en": ["Intermittent MAP sensor signal", "Poorly seated connector", "Damaged wiring"],
+        },
+        "quick_check": {
+            "fr": "Nettoyer et réenfoncer le connecteur MAP. Vérifier le câblage.",
+            "en": "Clean and reseat MAP connector. Check wiring.",
+        },
+        "difficulty": 1,
+    },
+    # --- Coolant temperature sensor codes ---
+    "P0116": {
+        "causes": {
+            "fr": ["Capteur température liquide de refroidissement hors plage", "Thermostat bloqué", "Niveau de liquide bas"],
+            "en": ["ECT sensor signal out of range", "Stuck thermostat", "Low coolant level"],
+        },
+        "quick_check": {
+            "fr": "Vérifier le niveau de liquide de refroidissement. Tester le thermostat.",
+            "en": "Check coolant level. Test thermostat.",
+        },
+        "difficulty": 1,
+    },
+    "P0117": {
+        "causes": {
+            "fr": ["Capteur ECT signal trop bas", "Court-circuit à la masse", "Capteur défectueux"],
+            "en": ["ECT sensor signal too low", "Short to ground", "Faulty sensor"],
+        },
+        "quick_check": {
+            "fr": "Mesurer la résistance du capteur ECT (varie selon la température). Vérifier le câblage.",
+            "en": "Measure ECT sensor resistance (varies with temperature). Check wiring.",
+        },
+        "difficulty": 2,
+    },
+    "P0118": {
+        "causes": {
+            "fr": ["Capteur ECT signal trop élevé", "Circuit ouvert", "Connecteur corrodé"],
+            "en": ["ECT sensor signal too high", "Open circuit", "Corroded connector"],
+        },
+        "quick_check": {
+            "fr": "Vérifier la continuité du câblage ECT. Inspecter le connecteur.",
+            "en": "Check ECT wiring continuity. Inspect connector.",
+        },
+        "difficulty": 2,
+    },
+    "P0119": {
+        "causes": {
+            "fr": ["Capteur ECT signal intermittent", "Connecteur desserré", "Câblage endommagé"],
+            "en": ["Intermittent ECT sensor signal", "Loose connector", "Damaged wiring"],
+        },
+        "quick_check": {
+            "fr": "Réenfoncer le connecteur ECT. Vérifier le câblage visuellement.",
+            "en": "Reseat ECT connector. Visually inspect wiring.",
+        },
+        "difficulty": 1,
+    },
+    # --- O2 sensor additional codes ---
+    "P0139": {
+        "causes": {
+            "fr": ["Sonde O2 B1S2 réponse lente", "Sonde vieillissante", "Fuite d'échappement"],
+            "en": ["O2 sensor B1S2 slow response", "Aging sensor", "Exhaust leak"],
+        },
+        "quick_check": {
+            "fr": "Vérifier l'oscillation de la sonde O2 aval avec un scanner. Rechercher les fuites d'échappement.",
+            "en": "Check downstream O2 sensor oscillation with scanner. Look for exhaust leaks.",
+        },
+        "difficulty": 2,
+    },
+    "P0154": {
+        "causes": {
+            "fr": ["Sonde O2 B2S1 pas d'activité", "Sonde défectueuse", "Câblage coupé", "Fusible grillé"],
+            "en": ["O2 sensor B2S1 no activity", "Faulty sensor", "Cut wiring", "Blown fuse"],
+        },
+        "quick_check": {
+            "fr": "Vérifier que la sonde O2 banc 2 amont reçoit bien la tension de référence.",
+            "en": "Verify bank 2 upstream O2 sensor receives reference voltage.",
+        },
+        "difficulty": 2,
+    },
+    "P0159": {
+        "causes": {
+            "fr": ["Sonde O2 B2S2 réponse lente", "Sonde vieillissante", "Fuite d'échappement"],
+            "en": ["O2 sensor B2S2 slow response", "Aging sensor", "Exhaust leak"],
+        },
+        "quick_check": {
+            "fr": "Vérifier l'oscillation de la sonde O2 B2S2 avec un scanner.",
+            "en": "Check B2S2 O2 sensor oscillation with scanner.",
+        },
+        "difficulty": 2,
+    },
+    # --- Fuel composition/temperature/pressure sensor codes ---
+    "P0176": {
+        "causes": {
+            "fr": ["Capteur composition carburant défectueux", "Câblage endommagé", "Connecteur corrodé"],
+            "en": ["Fuel composition sensor faulty", "Damaged wiring", "Corroded connector"],
+        },
+        "quick_check": {
+            "fr": "Vérifier le connecteur du capteur de composition carburant. Tester le signal.",
+            "en": "Check fuel composition sensor connector. Test signal.",
+        },
+        "difficulty": 2,
+    },
+    "P0177": {
+        "causes": {
+            "fr": ["Capteur composition carburant signal hors plage", "Capteur contaminé", "Câblage défectueux"],
+            "en": ["Fuel composition sensor out of range", "Contaminated sensor", "Faulty wiring"],
+        },
+        "quick_check": {
+            "fr": "Vérifier la qualité du carburant. Inspecter le capteur.",
+            "en": "Check fuel quality. Inspect sensor.",
+        },
+        "difficulty": 2,
+    },
+    "P0178": {
+        "causes": {
+            "fr": ["Capteur composition carburant signal trop bas", "Court-circuit", "Capteur défectueux"],
+            "en": ["Fuel composition sensor signal low", "Short circuit", "Faulty sensor"],
+        },
+        "quick_check": {
+            "fr": "Mesurer la tension de sortie du capteur. Vérifier le câblage.",
+            "en": "Measure sensor output voltage. Check wiring.",
+        },
+        "difficulty": 2,
+    },
+    "P0180": {
+        "causes": {
+            "fr": ["Capteur température carburant A défectueux", "Câblage endommagé", "Connecteur corrodé"],
+            "en": ["Fuel temperature sensor A faulty", "Damaged wiring", "Corroded connector"],
+        },
+        "quick_check": {
+            "fr": "Mesurer la résistance du capteur température carburant. Vérifier le câblage.",
+            "en": "Measure fuel temperature sensor resistance. Check wiring.",
+        },
+        "difficulty": 2,
+    },
+    "P0181": {
+        "causes": {
+            "fr": ["Capteur température carburant hors plage", "Capteur défectueux", "Problème circuit électrique"],
+            "en": ["Fuel temperature sensor out of range", "Faulty sensor", "Electrical circuit issue"],
+        },
+        "quick_check": {
+            "fr": "Comparer la lecture du capteur avec la température ambiante moteur froid.",
+            "en": "Compare sensor reading with ambient temperature when engine is cold.",
+        },
+        "difficulty": 2,
+    },
+    "P0182": {
+        "causes": {
+            "fr": ["Capteur température carburant signal trop bas", "Court-circuit à la masse", "Capteur défectueux"],
+            "en": ["Fuel temperature sensor signal low", "Short to ground", "Faulty sensor"],
+        },
+        "quick_check": {
+            "fr": "Vérifier le câblage du capteur. Mesurer la résistance.",
+            "en": "Check sensor wiring. Measure resistance.",
+        },
+        "difficulty": 2,
+    },
+    "P0183": {
+        "causes": {
+            "fr": ["Capteur température carburant signal trop élevé", "Circuit ouvert", "Connecteur endommagé"],
+            "en": ["Fuel temperature sensor signal high", "Open circuit", "Damaged connector"],
+        },
+        "quick_check": {
+            "fr": "Vérifier la continuité du câblage. Inspecter le connecteur.",
+            "en": "Check wiring continuity. Inspect connector.",
+        },
+        "difficulty": 2,
+    },
+    "P0190": {
+        "causes": {
+            "fr": ["Capteur pression rampe carburant défectueux", "Câblage endommagé", "Pression rail insuffisante"],
+            "en": ["Fuel rail pressure sensor faulty", "Damaged wiring", "Insufficient rail pressure"],
+        },
+        "quick_check": {
+            "fr": "Vérifier la pression de la rampe avec un manomètre. Tester le capteur.",
+            "en": "Check rail pressure with gauge. Test sensor.",
+        },
+        "difficulty": 3,
+    },
+    "P0192": {
+        "causes": {
+            "fr": ["Capteur pression rail signal trop bas", "Court-circuit", "Pompe haute pression défaillante"],
+            "en": ["Fuel rail pressure sensor signal low", "Short circuit", "Failing high-pressure pump"],
+        },
+        "quick_check": {
+            "fr": "Mesurer la tension de sortie du capteur pression rail. Vérifier la pompe HP.",
+            "en": "Measure rail pressure sensor output voltage. Check HP pump.",
+        },
+        "difficulty": 3,
+    },
+    "P0193": {
+        "causes": {
+            "fr": ["Capteur pression rail signal trop élevé", "Circuit ouvert", "Régulateur de pression défectueux"],
+            "en": ["Fuel rail pressure sensor signal high", "Open circuit", "Faulty pressure regulator"],
+        },
+        "quick_check": {
+            "fr": "Vérifier le régulateur de pression. Tester le câblage du capteur.",
+            "en": "Check pressure regulator. Test sensor wiring.",
+        },
+        "difficulty": 3,
+    },
+    # --- Engine shutoff / overtemp / overspeed ---
+    "P0215": {
+        "causes": {
+            "fr": ["Solénoïde d'arrêt moteur défectueux", "Câblage endommagé", "Relais défectueux"],
+            "en": ["Engine shutoff solenoid faulty", "Damaged wiring", "Faulty relay"],
+        },
+        "quick_check": {
+            "fr": "Tester le solénoïde d'arrêt moteur avec un multimètre. Vérifier le relais.",
+            "en": "Test engine shutoff solenoid with multimeter. Check relay.",
+        },
+        "difficulty": 3,
+    },
+    "P0217": {
+        "causes": {
+            "fr": ["Moteur en surchauffe", "Thermostat bloqué fermé", "Ventilateur de refroidissement en panne", "Fuite de liquide de refroidissement"],
+            "en": ["Engine overheating", "Thermostat stuck closed", "Cooling fan failure", "Coolant leak"],
+        },
+        "quick_check": {
+            "fr": "Vérifier le niveau de liquide de refroidissement. Tester le ventilateur et le thermostat.",
+            "en": "Check coolant level. Test cooling fan and thermostat.",
+        },
+        "difficulty": 2,
+    },
+    "P0219": {
+        "causes": {
+            "fr": ["Sur-régime moteur détecté", "Capteur régime défectueux", "Problème de transmission", "Rétrogradage intempestif"],
+            "en": ["Engine overspeed detected", "Faulty speed sensor", "Transmission issue", "Unintended downshift"],
+        },
+        "quick_check": {
+            "fr": "Vérifier le capteur de régime moteur. Contrôler la transmission.",
+            "en": "Check engine speed sensor. Inspect transmission.",
+        },
+        "difficulty": 3,
+    },
+    # --- Turbo wastegate solenoid ---
+    "P0243": {
+        "causes": {
+            "fr": ["Solénoïde wastegate turbo A défectueux", "Câblage endommagé", "Connecteur corrodé"],
+            "en": ["Turbo wastegate solenoid A faulty", "Damaged wiring", "Corroded connector"],
+        },
+        "quick_check": {
+            "fr": "Tester le solénoïde wastegate avec un multimètre. Vérifier le connecteur.",
+            "en": "Test wastegate solenoid with multimeter. Check connector.",
+        },
+        "difficulty": 2,
+    },
+    "P0244": {
+        "causes": {
+            "fr": ["Solénoïde wastegate turbo A signal hors plage", "Membrane percée", "Fuite de dépression"],
+            "en": ["Turbo wastegate solenoid A signal out of range", "Punctured diaphragm", "Vacuum leak"],
+        },
+        "quick_check": {
+            "fr": "Vérifier les durites de dépression du wastegate. Tester le solénoïde.",
+            "en": "Check wastegate vacuum hoses. Test solenoid.",
+        },
+        "difficulty": 2,
+    },
+    "P0245": {
+        "causes": {
+            "fr": ["Solénoïde wastegate turbo A signal trop bas", "Court-circuit à la masse", "Solénoïde défectueux"],
+            "en": ["Turbo wastegate solenoid A signal low", "Short to ground", "Faulty solenoid"],
+        },
+        "quick_check": {
+            "fr": "Mesurer la résistance du solénoïde wastegate. Vérifier le câblage.",
+            "en": "Measure wastegate solenoid resistance. Check wiring.",
+        },
+        "difficulty": 2,
+    },
+    # --- Injection pump fuel metering (diesel) ---
+    "P0251": {
+        "causes": {
+            "fr": ["Pompe injection dosage carburant A défectueux", "Régulateur de débit diesel usé", "Câblage endommagé"],
+            "en": ["Injection pump fuel metering A fault", "Worn diesel flow regulator", "Damaged wiring"],
+        },
+        "quick_check": {
+            "fr": "Vérifier le régulateur de débit sur la pompe d'injection. Tester le câblage.",
+            "en": "Check flow regulator on injection pump. Test wiring.",
+        },
+        "difficulty": 3,
+    },
+    "P0252": {
+        "causes": {
+            "fr": ["Dosage carburant pompe injection A hors plage", "Capteur de débit défectueux", "Problème pompe HP"],
+            "en": ["Injection pump fuel metering A out of range", "Faulty flow sensor", "HP pump issue"],
+        },
+        "quick_check": {
+            "fr": "Contrôler les pressions de la pompe d'injection diesel.",
+            "en": "Check diesel injection pump pressures.",
+        },
+        "difficulty": 3,
+    },
+    "P0253": {
+        "causes": {
+            "fr": ["Dosage carburant pompe injection A signal trop bas", "Court-circuit", "Régulateur bloqué"],
+            "en": ["Injection pump fuel metering A signal low", "Short circuit", "Stuck regulator"],
+        },
+        "quick_check": {
+            "fr": "Mesurer le signal du régulateur de dosage. Vérifier le câblage.",
+            "en": "Measure metering regulator signal. Check wiring.",
+        },
+        "difficulty": 3,
+    },
+    # --- Injector circuit low/high codes ---
+    "P0261": {
+        "causes": {
+            "fr": ["Circuit injecteur cylindre 1 signal trop bas", "Court-circuit à la masse", "Injecteur défectueux"],
+            "en": ["Injector circuit cylinder 1 low", "Short to ground", "Faulty injector"],
+        },
+        "quick_check": {
+            "fr": "Mesurer la résistance de l'injecteur cyl 1 (normalement 12-16 ohms). Vérifier le câblage.",
+            "en": "Measure cylinder 1 injector resistance (normally 12-16 ohms). Check wiring.",
+        },
+        "difficulty": 2,
+    },
+    "P0262": {
+        "causes": {
+            "fr": ["Circuit injecteur cylindre 1 signal trop haut", "Circuit ouvert", "Problème driver ECU"],
+            "en": ["Injector circuit cylinder 1 high", "Open circuit", "ECU driver issue"],
+        },
+        "quick_check": {
+            "fr": "Vérifier la continuité du câblage injecteur cyl 1. Tester le signal ECU.",
+            "en": "Check cylinder 1 injector wiring continuity. Test ECU signal.",
+        },
+        "difficulty": 2,
+    },
+    "P0263": {
+        "causes": {
+            "fr": ["Contribution cylindre 1 trop élevée", "Injecteur qui fuit", "Problème de compression"],
+            "en": ["Cylinder 1 contribution too high", "Leaking injector", "Compression issue"],
+        },
+        "quick_check": {
+            "fr": "Faire un test de contribution des injecteurs. Vérifier la compression cyl 1.",
+            "en": "Perform injector contribution test. Check cylinder 1 compression.",
+        },
+        "difficulty": 3,
+    },
+    "P0264": {
+        "causes": {
+            "fr": ["Circuit injecteur cylindre 2 signal trop bas", "Court-circuit à la masse", "Injecteur défectueux"],
+            "en": ["Injector circuit cylinder 2 low", "Short to ground", "Faulty injector"],
+        },
+        "quick_check": {
+            "fr": "Mesurer la résistance de l'injecteur cyl 2. Vérifier le câblage.",
+            "en": "Measure cylinder 2 injector resistance. Check wiring.",
+        },
+        "difficulty": 2,
+    },
+    "P0265": {
+        "causes": {
+            "fr": ["Circuit injecteur cylindre 2 signal trop haut", "Circuit ouvert", "Problème driver ECU"],
+            "en": ["Injector circuit cylinder 2 high", "Open circuit", "ECU driver issue"],
+        },
+        "quick_check": {
+            "fr": "Vérifier la continuité du câblage injecteur cyl 2.",
+            "en": "Check cylinder 2 injector wiring continuity.",
+        },
+        "difficulty": 2,
+    },
+    "P0266": {
+        "causes": {
+            "fr": ["Contribution cylindre 2 trop élevée", "Injecteur qui fuit", "Problème de compression"],
+            "en": ["Cylinder 2 contribution too high", "Leaking injector", "Compression issue"],
+        },
+        "quick_check": {
+            "fr": "Faire un test de contribution des injecteurs. Vérifier la compression cyl 2.",
+            "en": "Perform injector contribution test. Check cylinder 2 compression.",
+        },
+        "difficulty": 3,
+    },
+    "P0267": {
+        "causes": {
+            "fr": ["Circuit injecteur cylindre 3 signal trop bas", "Court-circuit à la masse", "Injecteur défectueux"],
+            "en": ["Injector circuit cylinder 3 low", "Short to ground", "Faulty injector"],
+        },
+        "quick_check": {
+            "fr": "Mesurer la résistance de l'injecteur cyl 3. Vérifier le câblage.",
+            "en": "Measure cylinder 3 injector resistance. Check wiring.",
+        },
+        "difficulty": 2,
+    },
+    "P0268": {
+        "causes": {
+            "fr": ["Circuit injecteur cylindre 3 signal trop haut", "Circuit ouvert", "Problème driver ECU"],
+            "en": ["Injector circuit cylinder 3 high", "Open circuit", "ECU driver issue"],
+        },
+        "quick_check": {
+            "fr": "Vérifier la continuité du câblage injecteur cyl 3.",
+            "en": "Check cylinder 3 injector wiring continuity.",
+        },
+        "difficulty": 2,
+    },
+    # --- Misfire monitor / crankshaft learning / ignition ---
+    "P0310": {
+        "causes": {
+            "fr": ["Moniteur de ratés d'allumage non disponible", "Conditions de test non remplies", "Problème ECU"],
+            "en": ["Misfire monitor not available", "Test conditions not met", "ECU issue"],
+        },
+        "quick_check": {
+            "fr": "Effectuer un cycle de conduite complet. Vérifier les autres codes défaut actifs.",
+            "en": "Complete a full drive cycle. Check for other active fault codes.",
+        },
+        "difficulty": 2,
+    },
+    "P0315": {
+        "causes": {
+            "fr": ["Variation capteur vilebrequin non apprise", "Remplacement récent du vilebrequin", "ECU nécessite réapprentissage"],
+            "en": ["Crankshaft position sensor variation not learned", "Recent crankshaft replacement", "ECU needs relearning"],
+        },
+        "quick_check": {
+            "fr": "Effectuer la procédure d'apprentissage du capteur vilebrequin avec un outil de diagnostic.",
+            "en": "Perform crankshaft sensor learning procedure with diagnostic tool.",
+        },
+        "difficulty": 2,
+    },
+    "P0320": {
+        "causes": {
+            "fr": ["Circuit entrée régime moteur défectueux", "Capteur de régime défectueux", "Câblage endommagé", "Relucteur endommagé"],
+            "en": ["Engine speed input circuit fault", "Faulty speed sensor", "Damaged wiring", "Damaged reluctor ring"],
+        },
+        "quick_check": {
+            "fr": "Tester le capteur de régime avec un multimètre. Inspecter le relucteur.",
+            "en": "Test speed sensor with multimeter. Inspect reluctor ring.",
+        },
+        "difficulty": 2,
+    },
+    # --- Knock sensor 2 ---
+    "P0331": {
+        "causes": {
+            "fr": ["Capteur de cliquetis 2 signal hors plage", "Capteur desserré", "Câblage endommagé"],
+            "en": ["Knock sensor 2 signal out of range", "Loose sensor", "Damaged wiring"],
+        },
+        "quick_check": {
+            "fr": "Vérifier le couple de serrage du capteur de cliquetis 2. Tester le câblage.",
+            "en": "Check knock sensor 2 torque. Test wiring.",
+        },
+        "difficulty": 2,
+    },
+    # --- Camshaft sensor bank 2 ---
+    "P0345": {
+        "causes": {
+            "fr": ["Capteur position arbre à cames banc 2 défectueux", "Câblage endommagé", "Connecteur corrodé"],
+            "en": ["Camshaft position sensor bank 2 faulty", "Damaged wiring", "Corroded connector"],
+        },
+        "quick_check": {
+            "fr": "Tester le capteur AAC banc 2 avec un multimètre. Vérifier le connecteur.",
+            "en": "Test bank 2 camshaft sensor with multimeter. Check connector.",
+        },
+        "difficulty": 2,
+    },
+    "P0346": {
+        "causes": {
+            "fr": ["Capteur AAC banc 2 signal hors plage", "Entrefer incorrect", "Distribution décalée"],
+            "en": ["Bank 2 camshaft sensor signal out of range", "Incorrect air gap", "Timing misaligned"],
+        },
+        "quick_check": {
+            "fr": "Vérifier l'entrefer du capteur AAC banc 2. Contrôler la distribution.",
+            "en": "Check bank 2 camshaft sensor air gap. Inspect timing.",
+        },
+        "difficulty": 2,
+    },
+    "P0347": {
+        "causes": {
+            "fr": ["Capteur AAC banc 2 signal trop bas", "Court-circuit à la masse", "Capteur défectueux"],
+            "en": ["Bank 2 camshaft sensor signal low", "Short to ground", "Faulty sensor"],
+        },
+        "quick_check": {
+            "fr": "Mesurer la tension de sortie du capteur AAC banc 2. Vérifier le câblage.",
+            "en": "Measure bank 2 camshaft sensor output voltage. Check wiring.",
+        },
+        "difficulty": 2,
+    },
+    "P0348": {
+        "causes": {
+            "fr": ["Capteur AAC banc 2 signal trop élevé", "Circuit ouvert", "Connecteur endommagé"],
+            "en": ["Bank 2 camshaft sensor signal high", "Open circuit", "Damaged connector"],
+        },
+        "quick_check": {
+            "fr": "Vérifier la continuité du câblage capteur AAC banc 2.",
+            "en": "Check bank 2 camshaft sensor wiring continuity.",
+        },
+        "difficulty": 2,
+    },
+    "P0349": {
+        "causes": {
+            "fr": ["Capteur AAC banc 2 signal intermittent", "Connecteur desserré", "Câblage intermittent"],
+            "en": ["Bank 2 camshaft sensor intermittent signal", "Loose connector", "Intermittent wiring"],
+        },
+        "quick_check": {
+            "fr": "Réenfoncer le connecteur du capteur AAC banc 2. Inspecter le câblage.",
+            "en": "Reseat bank 2 camshaft sensor connector. Inspect wiring.",
+        },
+        "difficulty": 2,
+    },
+    # --- Glow plug circuit (DIESEL) ---
+    "P0380": {
+        "causes": {
+            "fr": ["Circuit bougies de préchauffage défectueux", "Bougie de préchauffage grillée", "Relais de préchauffage en panne", "Câblage endommagé"],
+            "en": ["Glow plug circuit fault", "Burned glow plug", "Failed glow plug relay", "Damaged wiring"],
+        },
+        "quick_check": {
+            "fr": "Mesurer la résistance de chaque bougie de préchauffage (normalement 0,5-2 ohms). Tester le relais.",
+            "en": "Measure each glow plug resistance (normally 0.5-2 ohms). Test relay.",
+        },
+        "difficulty": 2,
+    },
+    "P0381": {
+        "causes": {
+            "fr": ["Voyant préchauffage défectueux", "Ampoule tableau de bord grillée", "Câblage défectueux"],
+            "en": ["Glow plug indicator circuit fault", "Burned dashboard bulb", "Faulty wiring"],
+        },
+        "quick_check": {
+            "fr": "Vérifier l'ampoule du voyant préchauffage au tableau de bord.",
+            "en": "Check glow plug indicator bulb on dashboard.",
+        },
+        "difficulty": 1,
+    },
+    "P0382": {
+        "causes": {
+            "fr": ["Module de préchauffage temps excessif", "Bougies de préchauffage usées", "Tension batterie faible"],
+            "en": ["Glow plug module excessive time", "Worn glow plugs", "Low battery voltage"],
+        },
+        "quick_check": {
+            "fr": "Vérifier la tension de la batterie. Tester les bougies de préchauffage.",
+            "en": "Check battery voltage. Test glow plugs.",
+        },
+        "difficulty": 2,
+    },
+    # --- EGR specific ---
+    "P0405": {
+        "causes": {
+            "fr": ["Capteur position EGR signal trop bas", "Court-circuit à la masse", "Capteur EGR défectueux"],
+            "en": ["EGR position sensor signal low", "Short to ground", "Faulty EGR sensor"],
+        },
+        "quick_check": {
+            "fr": "Mesurer la tension de sortie du capteur de position EGR. Vérifier le câblage.",
+            "en": "Measure EGR position sensor output voltage. Check wiring.",
+        },
+        "difficulty": 2,
+    },
+    "P0406": {
+        "causes": {
+            "fr": ["Capteur position EGR signal trop élevé", "Circuit ouvert", "Connecteur corrodé"],
+            "en": ["EGR position sensor signal high", "Open circuit", "Corroded connector"],
+        },
+        "quick_check": {
+            "fr": "Vérifier la continuité du câblage capteur EGR. Nettoyer le connecteur.",
+            "en": "Check EGR sensor wiring continuity. Clean connector.",
+        },
+        "difficulty": 2,
+    },
+    # --- EVAP vent control ---
+    "P0446": {
+        "causes": {
+            "fr": ["Circuit contrôle ventilation EVAP défectueux", "Électrovanne de ventilation bloquée", "Câblage endommagé"],
+            "en": ["EVAP vent control circuit fault", "Stuck vent solenoid", "Damaged wiring"],
+        },
+        "quick_check": {
+            "fr": "Tester l'électrovanne de ventilation EVAP. Vérifier le connecteur.",
+            "en": "Test EVAP vent solenoid. Check connector.",
+        },
+        "difficulty": 2,
+    },
+    "P0447": {
+        "causes": {
+            "fr": ["Circuit ventilation EVAP ouvert", "Électrovanne défectueuse", "Connecteur débranché"],
+            "en": ["EVAP vent control circuit open", "Faulty solenoid", "Disconnected connector"],
+        },
+        "quick_check": {
+            "fr": "Vérifier la continuité du circuit de ventilation EVAP.",
+            "en": "Check EVAP vent circuit continuity.",
+        },
+        "difficulty": 2,
+    },
+    "P0448": {
+        "causes": {
+            "fr": ["Circuit ventilation EVAP court-circuit", "Câblage pincé", "Électrovanne en court-circuit"],
+            "en": ["EVAP vent control circuit shorted", "Pinched wiring", "Shorted solenoid"],
+        },
+        "quick_check": {
+            "fr": "Inspecter le câblage de l'électrovanne de ventilation EVAP.",
+            "en": "Inspect EVAP vent solenoid wiring.",
+        },
+        "difficulty": 2,
+    },
+    "P0449": {
+        "causes": {
+            "fr": ["Électrovanne de ventilation EVAP défectueuse", "Connecteur corrodé", "Câblage endommagé"],
+            "en": ["EVAP vent solenoid faulty", "Corroded connector", "Damaged wiring"],
+        },
+        "quick_check": {
+            "fr": "Tester l'électrovanne de ventilation avec un multimètre. Vérifier le connecteur.",
+            "en": "Test vent solenoid with multimeter. Check connector.",
+        },
+        "difficulty": 2,
+    },
+    "P0450": {
+        "causes": {
+            "fr": ["Capteur pression EVAP défectueux", "Câblage endommagé", "Connecteur corrodé"],
+            "en": ["EVAP pressure sensor faulty", "Damaged wiring", "Corroded connector"],
+        },
+        "quick_check": {
+            "fr": "Tester le capteur de pression EVAP avec un multimètre.",
+            "en": "Test EVAP pressure sensor with multimeter.",
+        },
+        "difficulty": 2,
+    },
+    # --- Exhaust pressure sensor ---
+    "P0470": {
+        "causes": {
+            "fr": ["Capteur pression échappement défectueux", "Câblage endommagé", "Connecteur bouché par la suie"],
+            "en": ["Exhaust pressure sensor faulty", "Damaged wiring", "Connector clogged with soot"],
+        },
+        "quick_check": {
+            "fr": "Nettoyer le capteur pression échappement. Vérifier les tuyaux de prise de pression.",
+            "en": "Clean exhaust pressure sensor. Check pressure pickup tubes.",
+        },
+        "difficulty": 2,
+    },
+    "P0471": {
+        "causes": {
+            "fr": ["Capteur pression échappement signal hors plage", "Tuyau de prise bouché", "Capteur encrassé"],
+            "en": ["Exhaust pressure sensor out of range", "Clogged pickup tube", "Dirty sensor"],
+        },
+        "quick_check": {
+            "fr": "Nettoyer les tuyaux de prise de pression. Comparer la lecture capteur avec la pression atmosphérique moteur éteint.",
+            "en": "Clean pressure pickup tubes. Compare sensor reading with atmospheric pressure when engine off.",
+        },
+        "difficulty": 2,
+    },
+    "P0472": {
+        "causes": {
+            "fr": ["Capteur pression échappement signal trop bas", "Court-circuit", "Capteur défectueux"],
+            "en": ["Exhaust pressure sensor signal low", "Short circuit", "Faulty sensor"],
+        },
+        "quick_check": {
+            "fr": "Mesurer la tension de sortie du capteur pression échappement.",
+            "en": "Measure exhaust pressure sensor output voltage.",
+        },
+        "difficulty": 2,
+    },
+    "P0473": {
+        "causes": {
+            "fr": ["Capteur pression échappement signal trop élevé", "Circuit ouvert", "Connecteur endommagé"],
+            "en": ["Exhaust pressure sensor signal high", "Open circuit", "Damaged connector"],
+        },
+        "quick_check": {
+            "fr": "Vérifier la continuité du câblage capteur pression échappement.",
+            "en": "Check exhaust pressure sensor wiring continuity.",
+        },
+        "difficulty": 2,
+    },
+    # --- Exhaust pressure control valve ---
+    "P0475": {
+        "causes": {
+            "fr": ["Vanne de contrôle pression échappement défectueuse", "Câblage endommagé", "Vanne grippée"],
+            "en": ["Exhaust pressure control valve faulty", "Damaged wiring", "Stuck valve"],
+        },
+        "quick_check": {
+            "fr": "Tester la vanne de contrôle pression échappement. Vérifier le fonctionnement mécanique.",
+            "en": "Test exhaust pressure control valve. Check mechanical operation.",
+        },
+        "difficulty": 3,
+    },
+    "P0476": {
+        "causes": {
+            "fr": ["Vanne contrôle pression échappement signal hors plage", "Membrane percée", "Câblage défectueux"],
+            "en": ["Exhaust pressure control valve signal out of range", "Punctured diaphragm", "Faulty wiring"],
+        },
+        "quick_check": {
+            "fr": "Inspecter la membrane de la vanne. Vérifier le câblage.",
+            "en": "Inspect valve diaphragm. Check wiring.",
+        },
+        "difficulty": 3,
+    },
+    "P0477": {
+        "causes": {
+            "fr": ["Vanne contrôle pression échappement signal trop bas", "Court-circuit", "Vanne bloquée ouverte"],
+            "en": ["Exhaust pressure control valve signal low", "Short circuit", "Valve stuck open"],
+        },
+        "quick_check": {
+            "fr": "Mesurer le signal de commande de la vanne. Vérifier le fonctionnement.",
+            "en": "Measure valve control signal. Check operation.",
+        },
+        "difficulty": 3,
+    },
+    "P0478": {
+        "causes": {
+            "fr": ["Vanne contrôle pression échappement signal trop élevé", "Circuit ouvert", "Vanne bloquée fermée"],
+            "en": ["Exhaust pressure control valve signal high", "Open circuit", "Valve stuck closed"],
+        },
+        "quick_check": {
+            "fr": "Vérifier la continuité du câblage de la vanne. Tester le fonctionnement mécanique.",
+            "en": "Check valve wiring continuity. Test mechanical operation.",
+        },
+        "difficulty": 3,
+    },
+    # --- EGR throttle control ---
+    "P0488": {
+        "causes": {
+            "fr": ["Contrôle EGR papillon position hors plage", "Papillon EGR encrassé", "Capteur position défectueux"],
+            "en": ["EGR throttle control position out of range", "Dirty EGR throttle", "Faulty position sensor"],
+        },
+        "quick_check": {
+            "fr": "Nettoyer le papillon EGR. Vérifier le capteur de position.",
+            "en": "Clean EGR throttle. Check position sensor.",
+        },
+        "difficulty": 2,
+    },
+    "P0489": {
+        "causes": {
+            "fr": ["Circuit contrôle EGR signal trop bas", "Court-circuit", "Câblage endommagé"],
+            "en": ["EGR control circuit signal low", "Short circuit", "Damaged wiring"],
+        },
+        "quick_check": {
+            "fr": "Mesurer la tension du circuit de commande EGR. Vérifier le câblage.",
+            "en": "Measure EGR control circuit voltage. Check wiring.",
+        },
+        "difficulty": 2,
+    },
+    "P0490": {
+        "causes": {
+            "fr": ["Circuit contrôle EGR signal trop élevé", "Circuit ouvert", "Connecteur endommagé"],
+            "en": ["EGR control circuit signal high", "Open circuit", "Damaged connector"],
+        },
+        "quick_check": {
+            "fr": "Vérifier la continuité du circuit de commande EGR.",
+            "en": "Check EGR control circuit continuity.",
+        },
+        "difficulty": 2,
+    },
+    # --- EVAP flow low/high ---
+    "P0497": {
+        "causes": {
+            "fr": ["Débit EVAP trop bas", "Électrovanne EVAP bloquée fermée", "Tuyau bouché"],
+            "en": ["EVAP flow too low", "EVAP solenoid stuck closed", "Clogged hose"],
+        },
+        "quick_check": {
+            "fr": "Vérifier les tuyaux du système EVAP. Tester l'électrovanne.",
+            "en": "Check EVAP system hoses. Test solenoid.",
+        },
+        "difficulty": 2,
+    },
+    "P0498": {
+        "causes": {
+            "fr": ["Débit EVAP trop élevé", "Électrovanne EVAP bloquée ouverte", "Fuite dans le système"],
+            "en": ["EVAP flow too high", "EVAP solenoid stuck open", "System leak"],
+        },
+        "quick_check": {
+            "fr": "Rechercher les fuites dans le système EVAP. Tester l'électrovanne.",
+            "en": "Look for leaks in EVAP system. Test solenoid.",
+        },
+        "difficulty": 2,
+    },
+    # --- Idle control ---
+    "P0506": {
+        "causes": {
+            "fr": ["Ralenti trop bas", "Vanne de ralenti encrassée", "Fuite d'air au collecteur", "Papillon encrassé"],
+            "en": ["Idle speed too low", "Dirty idle control valve", "Intake manifold air leak", "Dirty throttle body"],
+        },
+        "quick_check": {
+            "fr": "Nettoyer le papillon et la vanne de ralenti. Rechercher les fuites d'air.",
+            "en": "Clean throttle body and idle control valve. Look for air leaks.",
+        },
+        "difficulty": 1,
+    },
+    "P0508": {
+        "causes": {
+            "fr": ["Circuit contrôle ralenti signal trop bas", "Court-circuit", "Vanne de ralenti défectueuse"],
+            "en": ["Idle control circuit signal low", "Short circuit", "Faulty idle control valve"],
+        },
+        "quick_check": {
+            "fr": "Tester la vanne de contrôle de ralenti avec un multimètre.",
+            "en": "Test idle control valve with multimeter.",
+        },
+        "difficulty": 2,
+    },
+    "P0509": {
+        "causes": {
+            "fr": ["Circuit contrôle ralenti signal trop élevé", "Circuit ouvert", "Câblage endommagé"],
+            "en": ["Idle control circuit signal high", "Open circuit", "Damaged wiring"],
+        },
+        "quick_check": {
+            "fr": "Vérifier la continuité du câblage de la vanne de ralenti.",
+            "en": "Check idle control valve wiring continuity.",
+        },
+        "difficulty": 2,
+    },
+    # --- Oil pressure sensor ---
+    "P0521": {
+        "causes": {
+            "fr": ["Capteur pression huile signal hors plage", "Niveau d'huile bas", "Capteur défectueux"],
+            "en": ["Oil pressure sensor signal out of range", "Low oil level", "Faulty sensor"],
+        },
+        "quick_check": {
+            "fr": "Vérifier le niveau d'huile. Tester le capteur de pression avec un manomètre mécanique.",
+            "en": "Check oil level. Test pressure sensor with mechanical gauge.",
+        },
+        "difficulty": 2,
+    },
+    "P0522": {
+        "causes": {
+            "fr": ["Capteur pression huile signal trop bas", "Pression huile réellement basse", "Court-circuit"],
+            "en": ["Oil pressure sensor signal low", "Actually low oil pressure", "Short circuit"],
+        },
+        "quick_check": {
+            "fr": "ATTENTION : Arrêter le moteur si la pression huile est réellement basse. Vérifier le niveau d'huile immédiatement.",
+            "en": "WARNING: Stop engine if oil pressure is actually low. Check oil level immediately.",
+        },
+        "difficulty": 2,
+    },
+    "P0523": {
+        "causes": {
+            "fr": ["Capteur pression huile signal trop élevé", "Circuit ouvert", "Capteur défectueux"],
+            "en": ["Oil pressure sensor signal high", "Open circuit", "Faulty sensor"],
+        },
+        "quick_check": {
+            "fr": "Vérifier le connecteur du capteur de pression huile. Tester la continuité.",
+            "en": "Check oil pressure sensor connector. Test continuity.",
+        },
+        "difficulty": 2,
+    },
+    # --- Intake air heater (DIESEL) ---
+    "P0540": {
+        "causes": {
+            "fr": ["Circuit réchauffeur air admission défectueux", "Résistance chauffante grillée", "Relais défectueux"],
+            "en": ["Intake air heater circuit fault", "Burned heating element", "Faulty relay"],
+        },
+        "quick_check": {
+            "fr": "Tester le relais du réchauffeur d'air. Mesurer la résistance de l'élément chauffant.",
+            "en": "Test air heater relay. Measure heating element resistance.",
+        },
+        "difficulty": 2,
+    },
+    "P0541": {
+        "causes": {
+            "fr": ["Circuit réchauffeur air admission A signal trop bas", "Court-circuit", "Câblage endommagé"],
+            "en": ["Intake air heater circuit A signal low", "Short circuit", "Damaged wiring"],
+        },
+        "quick_check": {
+            "fr": "Mesurer la tension du circuit réchauffeur. Vérifier le câblage.",
+            "en": "Measure heater circuit voltage. Check wiring.",
+        },
+        "difficulty": 2,
+    },
+    "P0542": {
+        "causes": {
+            "fr": ["Circuit réchauffeur air admission A signal trop élevé", "Circuit ouvert", "Connecteur endommagé"],
+            "en": ["Intake air heater circuit A signal high", "Open circuit", "Damaged connector"],
+        },
+        "quick_check": {
+            "fr": "Vérifier la continuité du circuit réchauffeur air admission.",
+            "en": "Check intake air heater circuit continuity.",
+        },
+        "difficulty": 2,
+    },
+    "P0543": {
+        "causes": {
+            "fr": ["Circuit réchauffeur air admission A circuit ouvert", "Résistance coupée", "Câblage coupé"],
+            "en": ["Intake air heater circuit A open", "Broken heating element", "Cut wiring"],
+        },
+        "quick_check": {
+            "fr": "Tester la continuité de la résistance chauffante et du câblage.",
+            "en": "Test heating element and wiring continuity.",
+        },
+        "difficulty": 2,
+    },
+    "P0544": {
+        "causes": {
+            "fr": ["Capteur température air admission échappement défectueux", "Câblage endommagé", "Connecteur corrodé"],
+            "en": ["Exhaust gas temperature sensor faulty", "Damaged wiring", "Corroded connector"],
+        },
+        "quick_check": {
+            "fr": "Tester le capteur de température des gaz d'échappement avec un multimètre.",
+            "en": "Test exhaust gas temperature sensor with multimeter.",
+        },
+        "difficulty": 2,
+    },
+    # --- Power steering pressure sensor ---
+    "P0550": {
+        "causes": {
+            "fr": ["Capteur pression direction assistée défectueux", "Câblage endommagé", "Connecteur corrodé"],
+            "en": ["Power steering pressure sensor faulty", "Damaged wiring", "Corroded connector"],
+        },
+        "quick_check": {
+            "fr": "Tester le capteur de pression DA avec un multimètre. Vérifier le connecteur.",
+            "en": "Test PS pressure sensor with multimeter. Check connector.",
+        },
+        "difficulty": 2,
+    },
+    "P0551": {
+        "causes": {
+            "fr": ["Capteur pression DA signal hors plage", "Niveau liquide DA bas", "Capteur défectueux"],
+            "en": ["PS pressure sensor signal out of range", "Low PS fluid level", "Faulty sensor"],
+        },
+        "quick_check": {
+            "fr": "Vérifier le niveau de liquide de direction assistée. Tester le capteur.",
+            "en": "Check power steering fluid level. Test sensor.",
+        },
+        "difficulty": 2,
+    },
+    "P0552": {
+        "causes": {
+            "fr": ["Capteur pression DA signal trop bas", "Court-circuit à la masse", "Capteur défectueux"],
+            "en": ["PS pressure sensor signal low", "Short to ground", "Faulty sensor"],
+        },
+        "quick_check": {
+            "fr": "Mesurer la tension de sortie du capteur pression DA.",
+            "en": "Measure PS pressure sensor output voltage.",
+        },
+        "difficulty": 2,
+    },
+    "P0553": {
+        "causes": {
+            "fr": ["Capteur pression DA signal trop élevé", "Circuit ouvert", "Connecteur endommagé"],
+            "en": ["PS pressure sensor signal high", "Open circuit", "Damaged connector"],
+        },
+        "quick_check": {
+            "fr": "Vérifier la continuité du câblage capteur pression DA.",
+            "en": "Check PS pressure sensor wiring continuity.",
+        },
+        "difficulty": 2,
+    },
+    # --- Cruise control ---
+    "P0564": {
+        "causes": {
+            "fr": ["Signal régulateur de vitesse multi-fonctions hors plage", "Commodo défectueux", "Câblage endommagé"],
+            "en": ["Cruise control multi-function signal out of range", "Faulty stalk switch", "Damaged wiring"],
+        },
+        "quick_check": {
+            "fr": "Tester les boutons du régulateur de vitesse. Vérifier le câblage du commodo.",
+            "en": "Test cruise control buttons. Check stalk switch wiring.",
+        },
+        "difficulty": 2,
+    },
+    "P0566": {
+        "causes": {
+            "fr": ["Signal OFF régulateur de vitesse défectueux", "Interrupteur régulateur défectueux", "Câblage coupé"],
+            "en": ["Cruise control OFF signal fault", "Faulty cruise switch", "Cut wiring"],
+        },
+        "quick_check": {
+            "fr": "Tester l'interrupteur OFF du régulateur. Vérifier le câblage.",
+            "en": "Test cruise control OFF switch. Check wiring.",
+        },
+        "difficulty": 2,
+    },
+    "P0567": {
+        "causes": {
+            "fr": ["Signal RESUME régulateur de vitesse défectueux", "Bouton RESUME usé", "Connecteur défectueux"],
+            "en": ["Cruise control RESUME signal fault", "Worn RESUME button", "Faulty connector"],
+        },
+        "quick_check": {
+            "fr": "Tester le bouton RESUME du régulateur. Vérifier le connecteur.",
+            "en": "Test cruise control RESUME button. Check connector.",
+        },
+        "difficulty": 2,
+    },
+    "P0568": {
+        "causes": {
+            "fr": ["Signal SET régulateur de vitesse défectueux", "Bouton SET usé", "Câblage endommagé"],
+            "en": ["Cruise control SET signal fault", "Worn SET button", "Damaged wiring"],
+        },
+        "quick_check": {
+            "fr": "Tester le bouton SET du régulateur. Vérifier le câblage.",
+            "en": "Test cruise control SET button. Check wiring.",
+        },
+        "difficulty": 2,
+    },
+    # --- Vehicle options / starter / alternator ---
+    "P0610": {
+        "causes": {
+            "fr": ["Erreur options véhicule dans l'ECU", "ECU mal configuré", "Remplacement ECU sans programmation"],
+            "en": ["Vehicle options error in ECU", "Misconfigured ECU", "ECU replacement without programming"],
+        },
+        "quick_check": {
+            "fr": "Reprogrammer l'ECU avec les bonnes options véhicule via un outil constructeur.",
+            "en": "Reprogram ECU with correct vehicle options via manufacturer tool.",
+        },
+        "difficulty": 3,
+    },
+    "P0615": {
+        "causes": {
+            "fr": ["Circuit relais démarreur défectueux", "Relais démarreur en panne", "Câblage endommagé"],
+            "en": ["Starter relay circuit fault", "Failed starter relay", "Damaged wiring"],
+        },
+        "quick_check": {
+            "fr": "Tester le relais démarreur avec un multimètre. Vérifier le câblage.",
+            "en": "Test starter relay with multimeter. Check wiring.",
+        },
+        "difficulty": 2,
+    },
+    "P0616": {
+        "causes": {
+            "fr": ["Circuit relais démarreur signal trop bas", "Court-circuit", "Masse défectueuse"],
+            "en": ["Starter relay circuit signal low", "Short circuit", "Bad ground"],
+        },
+        "quick_check": {
+            "fr": "Vérifier les points de masse du circuit démarreur. Tester le relais.",
+            "en": "Check starter circuit ground points. Test relay.",
+        },
+        "difficulty": 2,
+    },
+    "P0617": {
+        "causes": {
+            "fr": ["Circuit relais démarreur signal trop élevé", "Circuit ouvert", "Relais collé"],
+            "en": ["Starter relay circuit signal high", "Open circuit", "Stuck relay"],
+        },
+        "quick_check": {
+            "fr": "Vérifier si le relais démarreur est collé. Tester la continuité.",
+            "en": "Check if starter relay is stuck. Test continuity.",
+        },
+        "difficulty": 2,
+    },
+    "P0620": {
+        "causes": {
+            "fr": ["Circuit contrôle alternateur défectueux", "Alternateur en panne", "Régulateur de tension défectueux"],
+            "en": ["Generator control circuit fault", "Failed alternator", "Faulty voltage regulator"],
+        },
+        "quick_check": {
+            "fr": "Mesurer la tension de charge (normalement 13,5-14,5V). Tester l'alternateur.",
+            "en": "Measure charging voltage (normally 13.5-14.5V). Test alternator.",
+        },
+        "difficulty": 2,
+    },
+    "P0621": {
+        "causes": {
+            "fr": ["Circuit voyant alternateur défectueux", "Ampoule grillée", "Câblage coupé"],
+            "en": ["Generator lamp circuit fault", "Burned bulb", "Cut wiring"],
+        },
+        "quick_check": {
+            "fr": "Vérifier l'ampoule du voyant de charge. Tester le câblage.",
+            "en": "Check charge indicator bulb. Test wiring.",
+        },
+        "difficulty": 1,
+    },
+    "P0622": {
+        "causes": {
+            "fr": ["Circuit contrôle champ alternateur défectueux", "Balais alternateur usés", "Régulateur défectueux"],
+            "en": ["Generator field control circuit fault", "Worn alternator brushes", "Faulty regulator"],
+        },
+        "quick_check": {
+            "fr": "Tester l'alternateur sous charge. Vérifier les balais et le régulateur.",
+            "en": "Test alternator under load. Check brushes and regulator.",
+        },
+        "difficulty": 3,
+    },
+    # --- Fuel pump control ---
+    "P0625": {
+        "causes": {
+            "fr": ["Circuit contrôle alternateur signal trop bas", "Court-circuit", "Alternateur défectueux"],
+            "en": ["Generator field terminal circuit low", "Short circuit", "Faulty alternator"],
+        },
+        "quick_check": {
+            "fr": "Mesurer la tension au borne d'excitation alternateur. Vérifier le câblage.",
+            "en": "Measure voltage at alternator field terminal. Check wiring.",
+        },
+        "difficulty": 2,
+    },
+    "P0626": {
+        "causes": {
+            "fr": ["Circuit contrôle alternateur signal trop élevé", "Circuit ouvert", "Régulateur défectueux"],
+            "en": ["Generator field terminal circuit high", "Open circuit", "Faulty regulator"],
+        },
+        "quick_check": {
+            "fr": "Vérifier la continuité du câblage excitation alternateur.",
+            "en": "Check alternator field wiring continuity.",
+        },
+        "difficulty": 2,
+    },
+    "P0627": {
+        "causes": {
+            "fr": ["Circuit commande pompe à carburant défectueux", "Relais pompe en panne", "Câblage endommagé"],
+            "en": ["Fuel pump control circuit fault", "Failed fuel pump relay", "Damaged wiring"],
+        },
+        "quick_check": {
+            "fr": "Tester le relais de pompe à carburant. Vérifier le fusible et le câblage.",
+            "en": "Test fuel pump relay. Check fuse and wiring.",
+        },
+        "difficulty": 2,
+    },
+    "P0628": {
+        "causes": {
+            "fr": ["Circuit commande pompe carburant signal trop bas", "Court-circuit", "Pompe défectueuse"],
+            "en": ["Fuel pump control circuit signal low", "Short circuit", "Faulty pump"],
+        },
+        "quick_check": {
+            "fr": "Mesurer la tension au relais pompe carburant. Vérifier le câblage.",
+            "en": "Measure voltage at fuel pump relay. Check wiring.",
+        },
+        "difficulty": 2,
+    },
+    "P0629": {
+        "causes": {
+            "fr": ["Circuit commande pompe carburant signal trop élevé", "Circuit ouvert", "Relais collé"],
+            "en": ["Fuel pump control circuit signal high", "Open circuit", "Stuck relay"],
+        },
+        "quick_check": {
+            "fr": "Vérifier si le relais pompe carburant est collé. Tester la continuité.",
+            "en": "Check if fuel pump relay is stuck. Test continuity.",
+        },
+        "difficulty": 2,
+    },
+    # --- VIN / throttle actuator ---
+    "P0630": {
+        "causes": {
+            "fr": ["VIN non programmé dans l'ECU", "ECU remplacé sans reprogrammation", "Mémoire ECU corrompue"],
+            "en": ["VIN not programmed in ECU", "ECU replaced without reprogramming", "Corrupted ECU memory"],
+        },
+        "quick_check": {
+            "fr": "Programmer le VIN dans l'ECU avec un outil de diagnostic constructeur.",
+            "en": "Program VIN into ECU with manufacturer diagnostic tool.",
+        },
+        "difficulty": 3,
+    },
+    "P0631": {
+        "causes": {
+            "fr": ["VIN incompatible avec l'ECU", "ECU provenant d'un autre véhicule", "Erreur de programmation"],
+            "en": ["VIN incompatible with ECU", "ECU from another vehicle", "Programming error"],
+        },
+        "quick_check": {
+            "fr": "Vérifier la correspondance du VIN entre l'ECU et le véhicule. Reprogrammer si nécessaire.",
+            "en": "Verify VIN match between ECU and vehicle. Reprogram if needed.",
+        },
+        "difficulty": 3,
+    },
+    "P0638": {
+        "causes": {
+            "fr": ["Actionneur papillon commande hors plage", "Papillon grippé", "Capteur position défectueux", "Encrassement sévère"],
+            "en": ["Throttle actuator control out of range", "Stuck throttle", "Faulty position sensor", "Severe carbon buildup"],
+        },
+        "quick_check": {
+            "fr": "Nettoyer le corps de papillon. Vérifier le fonctionnement mécanique du papillon.",
+            "en": "Clean throttle body. Check throttle mechanical operation.",
+        },
+        "difficulty": 2,
+    },
+    # --- A/C clutch relay ---
+    "P0645": {
+        "causes": {
+            "fr": ["Circuit relais embrayage compresseur A/C défectueux", "Relais en panne", "Câblage endommagé"],
+            "en": ["A/C clutch relay circuit fault", "Failed relay", "Damaged wiring"],
+        },
+        "quick_check": {
+            "fr": "Tester le relais embrayage compresseur A/C. Vérifier le fusible.",
+            "en": "Test A/C clutch relay. Check fuse.",
+        },
+        "difficulty": 2,
+    },
+    "P0646": {
+        "causes": {
+            "fr": ["Circuit relais embrayage A/C signal trop bas", "Court-circuit", "Relais défectueux"],
+            "en": ["A/C clutch relay circuit signal low", "Short circuit", "Faulty relay"],
+        },
+        "quick_check": {
+            "fr": "Mesurer la tension au relais A/C. Vérifier le câblage.",
+            "en": "Measure voltage at A/C relay. Check wiring.",
+        },
+        "difficulty": 2,
+    },
+    "P0647": {
+        "causes": {
+            "fr": ["Circuit relais embrayage A/C signal trop élevé", "Circuit ouvert", "Relais collé"],
+            "en": ["A/C clutch relay circuit signal high", "Open circuit", "Stuck relay"],
+        },
+        "quick_check": {
+            "fr": "Vérifier si le relais A/C est collé. Tester la continuité.",
+            "en": "Check if A/C relay is stuck. Test continuity.",
+        },
+        "difficulty": 2,
+    },
+    # --- MIL control / reference voltage ---
+    "P0650": {
+        "causes": {
+            "fr": ["Circuit commande voyant MIL défectueux", "Ampoule MIL grillée", "Câblage coupé"],
+            "en": ["MIL control circuit fault", "Burned MIL bulb", "Cut wiring"],
+        },
+        "quick_check": {
+            "fr": "Vérifier l'ampoule du voyant moteur (MIL). Tester le câblage.",
+            "en": "Check engine warning light (MIL) bulb. Test wiring.",
+        },
+        "difficulty": 1,
+    },
+    "P0651": {
+        "causes": {
+            "fr": ["Tension de référence capteur B hors plage", "Court-circuit sur la ligne 5V", "Capteur en court-circuit"],
+            "en": ["Sensor reference voltage B out of range", "Short on 5V line", "Shorted sensor"],
+        },
+        "quick_check": {
+            "fr": "Mesurer la tension de référence 5V sur les capteurs. Débrancher les capteurs un par un pour trouver le défaut.",
+            "en": "Measure 5V reference voltage on sensors. Disconnect sensors one by one to find fault.",
+        },
+        "difficulty": 2,
+    },
+    "P0652": {
+        "causes": {
+            "fr": ["Tension de référence capteur B trop basse", "Court-circuit à la masse", "Câblage endommagé"],
+            "en": ["Sensor reference voltage B low", "Short to ground", "Damaged wiring"],
+        },
+        "quick_check": {
+            "fr": "Mesurer la tension de référence. Débrancher les capteurs un par un.",
+            "en": "Measure reference voltage. Disconnect sensors one by one.",
+        },
+        "difficulty": 2,
+    },
+    "P0653": {
+        "causes": {
+            "fr": ["Tension de référence capteur B trop haute", "Circuit ouvert", "Problème ECU"],
+            "en": ["Sensor reference voltage B high", "Open circuit", "ECU issue"],
+        },
+        "quick_check": {
+            "fr": "Vérifier la continuité du câblage de référence. Tester l'ECU.",
+            "en": "Check reference wiring continuity. Test ECU.",
+        },
+        "difficulty": 3,
+    },
+    "P0654": {
+        "causes": {
+            "fr": ["Circuit sortie RPM moteur défectueux", "Signal tachymètre absent", "Câblage endommagé"],
+            "en": ["Engine RPM output circuit fault", "Missing tachometer signal", "Damaged wiring"],
+        },
+        "quick_check": {
+            "fr": "Vérifier le signal tachymètre au tableau de bord. Tester le câblage.",
+            "en": "Check tachometer signal at dashboard. Test wiring.",
+        },
+        "difficulty": 2,
+    },
+    # --- Intake manifold tuning valve ---
+    "P0660": {
+        "causes": {
+            "fr": ["Circuit vanne de résonance admission défectueux", "Vanne grippée", "Câblage endommagé"],
+            "en": ["Intake manifold tuning valve circuit fault", "Stuck valve", "Damaged wiring"],
+        },
+        "quick_check": {
+            "fr": "Tester la vanne de résonance d'admission. Vérifier le fonctionnement mécanique.",
+            "en": "Test intake manifold tuning valve. Check mechanical operation.",
+        },
+        "difficulty": 2,
+    },
+    "P0661": {
+        "causes": {
+            "fr": ["Circuit vanne résonance admission banc 1 signal trop bas", "Court-circuit", "Vanne défectueuse"],
+            "en": ["Intake manifold tuning valve bank 1 circuit low", "Short circuit", "Faulty valve"],
+        },
+        "quick_check": {
+            "fr": "Mesurer la résistance de l'actionneur vanne de résonance banc 1.",
+            "en": "Measure bank 1 tuning valve actuator resistance.",
+        },
+        "difficulty": 2,
+    },
+    "P0662": {
+        "causes": {
+            "fr": ["Circuit vanne résonance admission banc 1 signal trop élevé", "Circuit ouvert", "Connecteur endommagé"],
+            "en": ["Intake manifold tuning valve bank 1 circuit high", "Open circuit", "Damaged connector"],
+        },
+        "quick_check": {
+            "fr": "Vérifier la continuité du câblage vanne de résonance banc 1.",
+            "en": "Check bank 1 tuning valve wiring continuity.",
+        },
+        "difficulty": 2,
+    },
+    "P0663": {
+        "causes": {
+            "fr": ["Circuit vanne résonance admission banc 2 défectueux", "Vanne grippée", "Câblage endommagé"],
+            "en": ["Intake manifold tuning valve bank 2 circuit fault", "Stuck valve", "Damaged wiring"],
+        },
+        "quick_check": {
+            "fr": "Tester la vanne de résonance d'admission banc 2.",
+            "en": "Test bank 2 intake manifold tuning valve.",
+        },
+        "difficulty": 2,
+    },
+    "P0664": {
+        "causes": {
+            "fr": ["Circuit vanne résonance admission banc 2 signal trop bas", "Court-circuit", "Vanne défectueuse"],
+            "en": ["Intake manifold tuning valve bank 2 circuit low", "Short circuit", "Faulty valve"],
+        },
+        "quick_check": {
+            "fr": "Mesurer la résistance de l'actionneur vanne de résonance banc 2.",
+            "en": "Measure bank 2 tuning valve actuator resistance.",
+        },
+        "difficulty": 2,
+    },
+    "P0665": {
+        "causes": {
+            "fr": ["Circuit vanne résonance admission banc 2 signal trop élevé", "Circuit ouvert", "Connecteur endommagé"],
+            "en": ["Intake manifold tuning valve bank 2 circuit high", "Open circuit", "Damaged connector"],
+        },
+        "quick_check": {
+            "fr": "Vérifier la continuité du câblage vanne de résonance banc 2.",
+            "en": "Check bank 2 tuning valve wiring continuity.",
+        },
+        "difficulty": 2,
+    },
+    # --- Glow plug module + individual plugs (DIESEL) ---
+    "P0670": {
+        "causes": {
+            "fr": ["Module de commande bougies de préchauffage défectueux", "Relais de préchauffage en panne", "Câblage endommagé"],
+            "en": ["Glow plug control module fault", "Failed glow plug relay", "Damaged wiring"],
+        },
+        "quick_check": {
+            "fr": "Tester le module de commande de préchauffage. Vérifier l'alimentation et la masse.",
+            "en": "Test glow plug control module. Check power supply and ground.",
+        },
+        "difficulty": 2,
+    },
+    "P0671": {
+        "causes": {
+            "fr": ["Circuit bougie de préchauffage cylindre 1 défectueux", "Bougie grillée", "Câblage coupé"],
+            "en": ["Glow plug circuit cylinder 1 fault", "Burned glow plug", "Cut wiring"],
+        },
+        "quick_check": {
+            "fr": "Mesurer la résistance de la bougie de préchauffage cyl 1 (normalement 0,5-2 ohms).",
+            "en": "Measure cylinder 1 glow plug resistance (normally 0.5-2 ohms).",
+        },
+        "difficulty": 2,
+    },
+    "P0672": {
+        "causes": {
+            "fr": ["Circuit bougie de préchauffage cylindre 2 défectueux", "Bougie grillée", "Câblage coupé"],
+            "en": ["Glow plug circuit cylinder 2 fault", "Burned glow plug", "Cut wiring"],
+        },
+        "quick_check": {
+            "fr": "Mesurer la résistance de la bougie de préchauffage cyl 2 (normalement 0,5-2 ohms).",
+            "en": "Measure cylinder 2 glow plug resistance (normally 0.5-2 ohms).",
+        },
+        "difficulty": 2,
+    },
+    "P0673": {
+        "causes": {
+            "fr": ["Circuit bougie de préchauffage cylindre 3 défectueux", "Bougie grillée", "Câblage coupé"],
+            "en": ["Glow plug circuit cylinder 3 fault", "Burned glow plug", "Cut wiring"],
+        },
+        "quick_check": {
+            "fr": "Mesurer la résistance de la bougie de préchauffage cyl 3 (normalement 0,5-2 ohms).",
+            "en": "Measure cylinder 3 glow plug resistance (normally 0.5-2 ohms).",
+        },
+        "difficulty": 2,
+    },
+    "P0674": {
+        "causes": {
+            "fr": ["Circuit bougie de préchauffage cylindre 4 défectueux", "Bougie grillée", "Câblage coupé"],
+            "en": ["Glow plug circuit cylinder 4 fault", "Burned glow plug", "Cut wiring"],
+        },
+        "quick_check": {
+            "fr": "Mesurer la résistance de la bougie de préchauffage cyl 4 (normalement 0,5-2 ohms).",
+            "en": "Measure cylinder 4 glow plug resistance (normally 0.5-2 ohms).",
+        },
+        "difficulty": 2,
+    },
+    # --- ECM power relay ---
+    "P0685": {
+        "causes": {
+            "fr": ["Circuit relais puissance ECM défectueux", "Relais principal en panne", "Câblage endommagé"],
+            "en": ["ECM power relay circuit fault", "Failed main relay", "Damaged wiring"],
+        },
+        "quick_check": {
+            "fr": "Tester le relais principal ECM. Vérifier l'alimentation et le fusible.",
+            "en": "Test ECM main relay. Check power supply and fuse.",
+        },
+        "difficulty": 3,
+    },
+    "P0686": {
+        "causes": {
+            "fr": ["Circuit relais puissance ECM signal trop bas", "Court-circuit", "Masse défectueuse"],
+            "en": ["ECM power relay circuit signal low", "Short circuit", "Bad ground"],
+        },
+        "quick_check": {
+            "fr": "Mesurer la tension au relais principal ECM. Vérifier les masses.",
+            "en": "Measure voltage at ECM main relay. Check grounds.",
+        },
+        "difficulty": 3,
+    },
+    "P0687": {
+        "causes": {
+            "fr": ["Circuit relais puissance ECM signal trop élevé", "Circuit ouvert", "Relais collé"],
+            "en": ["ECM power relay circuit signal high", "Open circuit", "Stuck relay"],
+        },
+        "quick_check": {
+            "fr": "Vérifier si le relais ECM est collé. Tester la continuité du câblage.",
+            "en": "Check if ECM relay is stuck. Test wiring continuity.",
+        },
+        "difficulty": 3,
+    },
+    # --- Fan control ---
+    "P0691": {
+        "causes": {
+            "fr": ["Circuit ventilateur refroidissement 1 signal trop bas", "Court-circuit", "Ventilateur en panne"],
+            "en": ["Cooling fan 1 circuit low", "Short circuit", "Failed fan"],
+        },
+        "quick_check": {
+            "fr": "Tester le ventilateur de refroidissement en direct. Vérifier le relais et le fusible.",
+            "en": "Test cooling fan directly. Check relay and fuse.",
+        },
+        "difficulty": 2,
+    },
+    "P0692": {
+        "causes": {
+            "fr": ["Circuit ventilateur refroidissement 1 signal trop élevé", "Circuit ouvert", "Relais collé"],
+            "en": ["Cooling fan 1 circuit high", "Open circuit", "Stuck relay"],
+        },
+        "quick_check": {
+            "fr": "Vérifier si le relais ventilateur est collé. Tester la continuité.",
+            "en": "Check if fan relay is stuck. Test continuity.",
+        },
+        "difficulty": 2,
+    },
+    "P0693": {
+        "causes": {
+            "fr": ["Circuit ventilateur refroidissement 2 signal trop bas", "Court-circuit", "Ventilateur en panne"],
+            "en": ["Cooling fan 2 circuit low", "Short circuit", "Failed fan"],
+        },
+        "quick_check": {
+            "fr": "Tester le ventilateur de refroidissement 2 en direct. Vérifier le relais.",
+            "en": "Test cooling fan 2 directly. Check relay.",
+        },
+        "difficulty": 2,
+    },
+    # --- Transmission fluid temperature ---
+    "P0710": {
+        "causes": {
+            "fr": ["Capteur température huile de transmission défectueux", "Câblage endommagé", "Connecteur corrodé"],
+            "en": ["Transmission fluid temperature sensor faulty", "Damaged wiring", "Corroded connector"],
+        },
+        "quick_check": {
+            "fr": "Vérifier le niveau et l'état de l'huile de transmission. Tester le capteur.",
+            "en": "Check transmission fluid level and condition. Test sensor.",
+        },
+        "difficulty": 2,
+    },
+    "P0711": {
+        "causes": {
+            "fr": ["Capteur température transmission signal hors plage", "Huile transmission dégradée", "Capteur défectueux"],
+            "en": ["Transmission temp sensor out of range", "Degraded transmission fluid", "Faulty sensor"],
+        },
+        "quick_check": {
+            "fr": "Comparer la lecture capteur avec la température ambiante moteur froid. Vérifier l'huile.",
+            "en": "Compare sensor reading with ambient temp when cold. Check fluid.",
+        },
+        "difficulty": 2,
+    },
+    "P0712": {
+        "causes": {
+            "fr": ["Capteur température transmission signal trop bas", "Court-circuit à la masse", "Capteur défectueux"],
+            "en": ["Transmission temp sensor signal low", "Short to ground", "Faulty sensor"],
+        },
+        "quick_check": {
+            "fr": "Mesurer la résistance du capteur température transmission.",
+            "en": "Measure transmission temperature sensor resistance.",
+        },
+        "difficulty": 2,
+    },
+    "P0713": {
+        "causes": {
+            "fr": ["Capteur température transmission signal trop élevé", "Circuit ouvert", "Connecteur endommagé"],
+            "en": ["Transmission temp sensor signal high", "Open circuit", "Damaged connector"],
+        },
+        "quick_check": {
+            "fr": "Vérifier la continuité du câblage capteur température transmission.",
+            "en": "Check transmission temp sensor wiring continuity.",
+        },
+        "difficulty": 2,
+    },
+    # --- Engine speed input / gear ratio ---
+    "P0725": {
+        "causes": {
+            "fr": ["Circuit entrée régime moteur transmission défectueux", "Capteur régime défectueux", "Câblage endommagé"],
+            "en": ["Engine speed input circuit (transmission) fault", "Faulty speed sensor", "Damaged wiring"],
+        },
+        "quick_check": {
+            "fr": "Tester le capteur de régime moteur côté transmission. Vérifier le câblage.",
+            "en": "Test engine speed sensor on transmission side. Check wiring.",
+        },
+        "difficulty": 2,
+    },
+    "P0730": {
+        "causes": {
+            "fr": ["Rapport de transmission incorrect", "Huile transmission dégradée", "Embrayage interne usé", "Solénoïde de passage défectueux"],
+            "en": ["Incorrect gear ratio", "Degraded transmission fluid", "Worn internal clutch", "Faulty shift solenoid"],
+        },
+        "quick_check": {
+            "fr": "Vérifier le niveau et l'état de l'huile de transmission. Effectuer un test routier.",
+            "en": "Check transmission fluid level and condition. Perform road test.",
+        },
+        "difficulty": 3,
+    },
+    "P0731": {
+        "causes": {
+            "fr": ["Rapport 1 incorrect", "Embrayage 1ère usé", "Solénoïde de passage défectueux", "Huile dégradée"],
+            "en": ["Gear 1 ratio incorrect", "Worn 1st gear clutch", "Faulty shift solenoid", "Degraded fluid"],
+        },
+        "quick_check": {
+            "fr": "Vérifier l'huile de transmission. Tester le passage en 1ère.",
+            "en": "Check transmission fluid. Test 1st gear engagement.",
+        },
+        "difficulty": 3,
+    },
+    "P0732": {
+        "causes": {
+            "fr": ["Rapport 2 incorrect", "Embrayage 2ème usé", "Solénoïde de passage défectueux", "Huile dégradée"],
+            "en": ["Gear 2 ratio incorrect", "Worn 2nd gear clutch", "Faulty shift solenoid", "Degraded fluid"],
+        },
+        "quick_check": {
+            "fr": "Vérifier l'huile de transmission. Tester le passage en 2ème.",
+            "en": "Check transmission fluid. Test 2nd gear engagement.",
+        },
+        "difficulty": 3,
+    },
+    "P0733": {
+        "causes": {
+            "fr": ["Rapport 3 incorrect", "Embrayage 3ème usé", "Solénoïde de passage défectueux", "Huile dégradée"],
+            "en": ["Gear 3 ratio incorrect", "Worn 3rd gear clutch", "Faulty shift solenoid", "Degraded fluid"],
+        },
+        "quick_check": {
+            "fr": "Vérifier l'huile de transmission. Tester le passage en 3ème.",
+            "en": "Check transmission fluid. Test 3rd gear engagement.",
+        },
+        "difficulty": 3,
+    },
+    "P0734": {
+        "causes": {
+            "fr": ["Rapport 4 incorrect", "Embrayage 4ème usé", "Solénoïde de passage défectueux", "Huile dégradée"],
+            "en": ["Gear 4 ratio incorrect", "Worn 4th gear clutch", "Faulty shift solenoid", "Degraded fluid"],
+        },
+        "quick_check": {
+            "fr": "Vérifier l'huile de transmission. Tester le passage en 4ème.",
+            "en": "Check transmission fluid. Test 4th gear engagement.",
+        },
+        "difficulty": 3,
+    },
+    "P0735": {
+        "causes": {
+            "fr": ["Rapport 5 incorrect", "Embrayage 5ème usé", "Solénoïde de passage défectueux", "Huile dégradée"],
+            "en": ["Gear 5 ratio incorrect", "Worn 5th gear clutch", "Faulty shift solenoid", "Degraded fluid"],
+        },
+        "quick_check": {
+            "fr": "Vérifier l'huile de transmission. Tester le passage en 5ème.",
+            "en": "Check transmission fluid. Test 5th gear engagement.",
+        },
+        "difficulty": 3,
+    },
+    # --- Torque converter clutch ---
+    "P0740": {
+        "causes": {
+            "fr": ["Circuit embrayage convertisseur de couple défectueux", "Solénoïde TCC en panne", "Câblage endommagé"],
+            "en": ["Torque converter clutch circuit fault", "Failed TCC solenoid", "Damaged wiring"],
+        },
+        "quick_check": {
+            "fr": "Tester le solénoïde TCC avec un multimètre. Vérifier le câblage.",
+            "en": "Test TCC solenoid with multimeter. Check wiring.",
+        },
+        "difficulty": 3,
+    },
+    "P0741": {
+        "causes": {
+            "fr": ["Embrayage convertisseur de couple bloqué", "Solénoïde TCC défectueux", "Huile transmission contaminée"],
+            "en": ["Torque converter clutch stuck", "Faulty TCC solenoid", "Contaminated transmission fluid"],
+        },
+        "quick_check": {
+            "fr": "Vérifier l'état de l'huile de transmission. Tester le solénoïde TCC.",
+            "en": "Check transmission fluid condition. Test TCC solenoid.",
+        },
+        "difficulty": 3,
+    },
+    "P0742": {
+        "causes": {
+            "fr": ["Embrayage convertisseur de couple collé engagé", "Solénoïde TCC bloqué", "Problème hydraulique"],
+            "en": ["Torque converter clutch stuck engaged", "Stuck TCC solenoid", "Hydraulic issue"],
+        },
+        "quick_check": {
+            "fr": "Vérifier si le véhicule cale à l'arrêt (TCC collé). Tester le solénoïde.",
+            "en": "Check if vehicle stalls at stop (stuck TCC). Test solenoid.",
+        },
+        "difficulty": 3,
+    },
+    "P0743": {
+        "causes": {
+            "fr": ["Circuit embrayage convertisseur de couple problème électrique", "Court-circuit", "Câblage endommagé"],
+            "en": ["Torque converter clutch circuit electrical fault", "Short circuit", "Damaged wiring"],
+        },
+        "quick_check": {
+            "fr": "Mesurer la résistance du solénoïde TCC. Vérifier le câblage.",
+            "en": "Measure TCC solenoid resistance. Check wiring.",
+        },
+        "difficulty": 3,
+    },
+    "P0744": {
+        "causes": {
+            "fr": ["Embrayage convertisseur de couple intermittent", "Solénoïde TCC intermittent", "Connecteur desserré"],
+            "en": ["Torque converter clutch intermittent", "Intermittent TCC solenoid", "Loose connector"],
+        },
+        "quick_check": {
+            "fr": "Vérifier le connecteur du solénoïde TCC. Inspecter le câblage.",
+            "en": "Check TCC solenoid connector. Inspect wiring.",
+        },
+        "difficulty": 3,
+    },
+    # --- Pressure control solenoid ---
+    "P0745": {
+        "causes": {
+            "fr": ["Solénoïde contrôle pression transmission défectueux", "Câblage endommagé", "Huile transmission dégradée"],
+            "en": ["Transmission pressure control solenoid fault", "Damaged wiring", "Degraded transmission fluid"],
+        },
+        "quick_check": {
+            "fr": "Vérifier l'huile de transmission. Tester le solénoïde de pression.",
+            "en": "Check transmission fluid. Test pressure solenoid.",
+        },
+        "difficulty": 3,
+    },
+    "P0746": {
+        "causes": {
+            "fr": ["Solénoïde contrôle pression bloqué", "Obstruction hydraulique", "Solénoïde défectueux"],
+            "en": ["Pressure control solenoid stuck", "Hydraulic obstruction", "Faulty solenoid"],
+        },
+        "quick_check": {
+            "fr": "Vérifier l'état de l'huile de transmission (particules, odeur brûlée).",
+            "en": "Check transmission fluid condition (particles, burnt smell).",
+        },
+        "difficulty": 3,
+    },
+    "P0747": {
+        "causes": {
+            "fr": ["Solénoïde contrôle pression collé engagé", "Problème hydraulique", "Câblage en court-circuit"],
+            "en": ["Pressure control solenoid stuck on", "Hydraulic issue", "Shorted wiring"],
+        },
+        "quick_check": {
+            "fr": "Tester le solénoïde de pression avec un multimètre. Vérifier le câblage.",
+            "en": "Test pressure solenoid with multimeter. Check wiring.",
+        },
+        "difficulty": 3,
+    },
+    "P0748": {
+        "causes": {
+            "fr": ["Circuit solénoïde contrôle pression problème électrique", "Court-circuit", "Connecteur corrodé"],
+            "en": ["Pressure control solenoid circuit electrical fault", "Short circuit", "Corroded connector"],
+        },
+        "quick_check": {
+            "fr": "Mesurer la résistance du solénoïde. Inspecter le connecteur.",
+            "en": "Measure solenoid resistance. Inspect connector.",
+        },
+        "difficulty": 3,
+    },
+    "P0749": {
+        "causes": {
+            "fr": ["Solénoïde contrôle pression intermittent", "Connecteur desserré", "Câblage intermittent"],
+            "en": ["Pressure control solenoid intermittent", "Loose connector", "Intermittent wiring"],
+        },
+        "quick_check": {
+            "fr": "Vérifier le connecteur du solénoïde de pression. Inspecter le câblage.",
+            "en": "Check pressure solenoid connector. Inspect wiring.",
+        },
+        "difficulty": 3,
+    },
+    # --- Shift solenoid ---
+    "P0751": {
+        "causes": {
+            "fr": ["Solénoïde de passage A bloqué", "Huile transmission contaminée", "Problème hydraulique"],
+            "en": ["Shift solenoid A stuck", "Contaminated transmission fluid", "Hydraulic issue"],
+        },
+        "quick_check": {
+            "fr": "Vérifier l'état de l'huile de transmission. Tester le solénoïde de passage A.",
+            "en": "Check transmission fluid condition. Test shift solenoid A.",
+        },
+        "difficulty": 3,
+    },
+    "P0752": {
+        "causes": {
+            "fr": ["Solénoïde de passage A collé engagé", "Solénoïde défectueux", "Obstruction hydraulique"],
+            "en": ["Shift solenoid A stuck on", "Faulty solenoid", "Hydraulic obstruction"],
+        },
+        "quick_check": {
+            "fr": "Tester le solénoïde de passage A. Vérifier le corps de valve.",
+            "en": "Test shift solenoid A. Check valve body.",
+        },
+        "difficulty": 3,
+    },
+    "P0753": {
+        "causes": {
+            "fr": ["Circuit solénoïde de passage A problème électrique", "Court-circuit", "Câblage endommagé"],
+            "en": ["Shift solenoid A circuit electrical fault", "Short circuit", "Damaged wiring"],
+        },
+        "quick_check": {
+            "fr": "Mesurer la résistance du solénoïde A. Vérifier le câblage.",
+            "en": "Measure solenoid A resistance. Check wiring.",
+        },
+        "difficulty": 3,
+    },
+    "P0754": {
+        "causes": {
+            "fr": ["Solénoïde de passage A intermittent", "Connecteur desserré", "Câblage défectueux"],
+            "en": ["Shift solenoid A intermittent", "Loose connector", "Faulty wiring"],
+        },
+        "quick_check": {
+            "fr": "Vérifier le connecteur du solénoïde A. Inspecter le câblage.",
+            "en": "Check solenoid A connector. Inspect wiring.",
+        },
+        "difficulty": 3,
+    },
+    "P0755": {
+        "causes": {
+            "fr": ["Solénoïde de passage B défectueux", "Câblage endommagé", "Huile transmission dégradée"],
+            "en": ["Shift solenoid B fault", "Damaged wiring", "Degraded transmission fluid"],
+        },
+        "quick_check": {
+            "fr": "Tester le solénoïde de passage B. Vérifier l'huile de transmission.",
+            "en": "Test shift solenoid B. Check transmission fluid.",
+        },
+        "difficulty": 3,
+    },
+    "P0756": {
+        "causes": {
+            "fr": ["Solénoïde de passage B bloqué", "Huile transmission contaminée", "Problème hydraulique"],
+            "en": ["Shift solenoid B stuck", "Contaminated transmission fluid", "Hydraulic issue"],
+        },
+        "quick_check": {
+            "fr": "Vérifier l'état de l'huile de transmission. Tester le solénoïde B.",
+            "en": "Check transmission fluid condition. Test solenoid B.",
+        },
+        "difficulty": 3,
+    },
+    # --- P2xxx: DPF efficiency ---
+    "P2002": {
+        "causes": {
+            "fr": ["Filtre à particules (FAP) efficacité en dessous du seuil banc 1", "FAP saturé", "Régénérations échouées", "Capteur pression différentielle défectueux"],
+            "en": ["DPF efficiency below threshold bank 1", "Saturated DPF", "Failed regenerations", "Faulty differential pressure sensor"],
+        },
+        "quick_check": {
+            "fr": "Vérifier le niveau de suie du FAP avec un scanner. Tenter une régénération forcée. Vérifier le capteur de pression différentielle.",
+            "en": "Check DPF soot level with scanner. Attempt forced regeneration. Check differential pressure sensor.",
+        },
+        "difficulty": 3,
+    },
+    "P2003": {
+        "causes": {
+            "fr": ["Filtre à particules (FAP) efficacité en dessous du seuil banc 2", "FAP saturé", "Problème de régénération"],
+            "en": ["DPF efficiency below threshold bank 2", "Saturated DPF", "Regeneration issue"],
+        },
+        "quick_check": {
+            "fr": "Vérifier le niveau de suie du FAP banc 2. Tenter une régénération forcée.",
+            "en": "Check bank 2 DPF soot level. Attempt forced regeneration.",
+        },
+        "difficulty": 3,
+    },
+    # --- Intake manifold runner ---
+    "P2004": {
+        "causes": {
+            "fr": ["Volets admission collecteur bloqués ouverts banc 1", "Actionneur défectueux", "Volets cassés"],
+            "en": ["Intake manifold runner stuck open bank 1", "Faulty actuator", "Broken flaps"],
+        },
+        "quick_check": {
+            "fr": "Vérifier le fonctionnement des volets d'admission banc 1. Inspecter l'actionneur.",
+            "en": "Check bank 1 intake runner flap operation. Inspect actuator.",
+        },
+        "difficulty": 2,
+    },
+    "P2005": {
+        "causes": {
+            "fr": ["Volets admission collecteur bloqués ouverts banc 2", "Actionneur défectueux", "Volets cassés"],
+            "en": ["Intake manifold runner stuck open bank 2", "Faulty actuator", "Broken flaps"],
+        },
+        "quick_check": {
+            "fr": "Vérifier le fonctionnement des volets d'admission banc 2.",
+            "en": "Check bank 2 intake runner flap operation.",
+        },
+        "difficulty": 2,
+    },
+    "P2006": {
+        "causes": {
+            "fr": ["Volets admission collecteur bloqués fermés banc 1", "Encrassement des volets", "Actionneur grippé"],
+            "en": ["Intake manifold runner stuck closed bank 1", "Carbon buildup on flaps", "Stuck actuator"],
+        },
+        "quick_check": {
+            "fr": "Nettoyer les volets d'admission banc 1. Vérifier l'actionneur.",
+            "en": "Clean bank 1 intake runner flaps. Check actuator.",
+        },
+        "difficulty": 2,
+    },
+    "P2007": {
+        "causes": {
+            "fr": ["Volets admission collecteur bloqués fermés banc 2", "Encrassement des volets", "Actionneur grippé"],
+            "en": ["Intake manifold runner stuck closed bank 2", "Carbon buildup on flaps", "Stuck actuator"],
+        },
+        "quick_check": {
+            "fr": "Nettoyer les volets d'admission banc 2. Vérifier l'actionneur.",
+            "en": "Clean bank 2 intake runner flaps. Check actuator.",
+        },
+        "difficulty": 2,
+    },
+    "P2008": {
+        "causes": {
+            "fr": ["Circuit commande volets admission défectueux", "Câblage endommagé", "Connecteur corrodé"],
+            "en": ["Intake manifold runner control circuit fault", "Damaged wiring", "Corroded connector"],
+        },
+        "quick_check": {
+            "fr": "Tester le circuit de commande des volets d'admission. Vérifier le connecteur.",
+            "en": "Test intake runner control circuit. Check connector.",
+        },
+        "difficulty": 2,
+    },
+    # --- Throttle actuator ---
+    "P2101": {
+        "causes": {
+            "fr": ["Actionneur papillon moteur signal hors plage", "Papillon grippé", "Câblage endommagé"],
+            "en": ["Throttle actuator motor signal out of range", "Stuck throttle", "Damaged wiring"],
+        },
+        "quick_check": {
+            "fr": "Nettoyer le corps de papillon. Vérifier le câblage de l'actionneur.",
+            "en": "Clean throttle body. Check actuator wiring.",
+        },
+        "difficulty": 2,
+    },
+    "P2102": {
+        "causes": {
+            "fr": ["Actionneur papillon moteur signal trop bas", "Court-circuit", "Moteur papillon défectueux"],
+            "en": ["Throttle actuator motor signal low", "Short circuit", "Faulty throttle motor"],
+        },
+        "quick_check": {
+            "fr": "Mesurer la tension au moteur de l'actionneur papillon. Vérifier le câblage.",
+            "en": "Measure throttle actuator motor voltage. Check wiring.",
+        },
+        "difficulty": 2,
+    },
+    "P2103": {
+        "causes": {
+            "fr": ["Actionneur papillon moteur signal trop élevé", "Circuit ouvert", "Connecteur endommagé"],
+            "en": ["Throttle actuator motor signal high", "Open circuit", "Damaged connector"],
+        },
+        "quick_check": {
+            "fr": "Vérifier la continuité du câblage moteur papillon. Inspecter le connecteur.",
+            "en": "Check throttle motor wiring continuity. Inspect connector.",
+        },
+        "difficulty": 2,
+    },
+    # --- Throttle actuator stuck ---
+    "P2110": {
+        "causes": {
+            "fr": ["Système de contrôle papillon - mode forcé limité", "Papillon bloqué", "Défaut grave actionneur"],
+            "en": ["Throttle actuator control system - forced limited power", "Stuck throttle", "Severe actuator fault"],
+        },
+        "quick_check": {
+            "fr": "Vérifier les autres codes défaut associés. Nettoyer le corps de papillon.",
+            "en": "Check for related fault codes. Clean throttle body.",
+        },
+        "difficulty": 3,
+    },
+    "P2111": {
+        "causes": {
+            "fr": ["Actionneur papillon bloqué ouvert", "Ressort de rappel cassé", "Encrassement sévère du papillon"],
+            "en": ["Throttle actuator stuck open", "Broken return spring", "Severe throttle carbon buildup"],
+        },
+        "quick_check": {
+            "fr": "Vérifier manuellement que le papillon se ferme complètement. Nettoyer le corps de papillon.",
+            "en": "Manually verify throttle closes completely. Clean throttle body.",
+        },
+        "difficulty": 2,
+    },
+    "P2112": {
+        "causes": {
+            "fr": ["Actionneur papillon bloqué fermé", "Papillon grippé", "Moteur actionneur en panne"],
+            "en": ["Throttle actuator stuck closed", "Stuck throttle", "Failed actuator motor"],
+        },
+        "quick_check": {
+            "fr": "Vérifier manuellement que le papillon s'ouvre. Tester le moteur de l'actionneur.",
+            "en": "Manually verify throttle opens. Test actuator motor.",
+        },
+        "difficulty": 3,
+    },
+    # --- Throttle actuator current range ---
+    "P2118": {
+        "causes": {
+            "fr": ["Courant moteur actionneur papillon hors plage", "Moteur papillon en surcharge", "Câblage défectueux"],
+            "en": ["Throttle actuator motor current out of range", "Throttle motor overloaded", "Faulty wiring"],
+        },
+        "quick_check": {
+            "fr": "Vérifier que le papillon se déplace librement. Mesurer le courant du moteur.",
+            "en": "Verify throttle moves freely. Measure motor current.",
+        },
+        "difficulty": 2,
+    },
+    "P2119": {
+        "causes": {
+            "fr": ["Actionneur papillon - angle d'ouverture hors plage", "Capteur position défectueux", "Papillon encrassé"],
+            "en": ["Throttle actuator - opening angle out of range", "Faulty position sensor", "Dirty throttle"],
+        },
+        "quick_check": {
+            "fr": "Nettoyer le corps de papillon. Vérifier les capteurs de position.",
+            "en": "Clean throttle body. Check position sensors.",
+        },
+        "difficulty": 2,
+    },
+    # --- Pedal position sensor ---
+    "P2122": {
+        "causes": {
+            "fr": ["Capteur position pédale D signal trop bas", "Court-circuit à la masse", "Capteur pédale défectueux"],
+            "en": ["Pedal position sensor D signal low", "Short to ground", "Faulty pedal sensor"],
+        },
+        "quick_check": {
+            "fr": "Mesurer la tension du capteur pédale en appuyant progressivement. Vérifier le câblage.",
+            "en": "Measure pedal sensor voltage while pressing gradually. Check wiring.",
+        },
+        "difficulty": 2,
+    },
+    "P2123": {
+        "causes": {
+            "fr": ["Capteur position pédale D signal trop élevé", "Circuit ouvert", "Connecteur endommagé"],
+            "en": ["Pedal position sensor D signal high", "Open circuit", "Damaged connector"],
+        },
+        "quick_check": {
+            "fr": "Vérifier la continuité du câblage capteur pédale. Inspecter le connecteur.",
+            "en": "Check pedal sensor wiring continuity. Inspect connector.",
+        },
+        "difficulty": 2,
+    },
+    "P2127": {
+        "causes": {
+            "fr": ["Capteur position pédale E signal trop bas", "Court-circuit à la masse", "Capteur pédale défectueux"],
+            "en": ["Pedal position sensor E signal low", "Short to ground", "Faulty pedal sensor"],
+        },
+        "quick_check": {
+            "fr": "Mesurer la tension du capteur pédale E. Comparer avec le capteur D.",
+            "en": "Measure pedal sensor E voltage. Compare with sensor D.",
+        },
+        "difficulty": 2,
+    },
+    "P2128": {
+        "causes": {
+            "fr": ["Capteur position pédale E signal trop élevé", "Circuit ouvert", "Connecteur endommagé"],
+            "en": ["Pedal position sensor E signal high", "Open circuit", "Damaged connector"],
+        },
+        "quick_check": {
+            "fr": "Vérifier la continuité du câblage capteur pédale E. Inspecter le connecteur.",
+            "en": "Check pedal sensor E wiring continuity. Inspect connector.",
+        },
+        "difficulty": 2,
+    },
+    "P2135": {
+        "causes": {
+            "fr": ["Corrélation capteurs position papillon A/B incohérente", "Capteur TPS défectueux", "Câblage endommagé", "Corps de papillon défectueux"],
+            "en": ["Throttle position sensor A/B correlation fault", "Faulty TPS", "Damaged wiring", "Faulty throttle body"],
+        },
+        "quick_check": {
+            "fr": "Comparer les signaux TPS A et B avec un scanner. Nettoyer le corps de papillon.",
+            "en": "Compare TPS A and B signals with scanner. Clean throttle body.",
+        },
+        "difficulty": 2,
+    },
+    "P2138": {
+        "causes": {
+            "fr": ["Corrélation capteurs position pédale D/E incohérente", "Capteur pédale défectueux", "Câblage endommagé"],
+            "en": ["Pedal position sensor D/E correlation fault", "Faulty pedal sensor", "Damaged wiring"],
+        },
+        "quick_check": {
+            "fr": "Comparer les signaux capteurs pédale D et E avec un scanner. Vérifier le câblage.",
+            "en": "Compare pedal sensors D and E signals with scanner. Check wiring.",
+        },
+        "difficulty": 2,
+    },
+    # --- O2 sensor stuck rich/lean ---
+    "P2196": {
+        "causes": {
+            "fr": ["Sonde O2 bloquée riche banc 1 capteur 1", "Injecteur qui fuit", "Pression carburant trop élevée", "Sonde défectueuse"],
+            "en": ["O2 sensor stuck rich bank 1 sensor 1", "Leaking injector", "Fuel pressure too high", "Faulty sensor"],
+        },
+        "quick_check": {
+            "fr": "Vérifier la pression carburant. Inspecter les injecteurs. Tester la sonde O2.",
+            "en": "Check fuel pressure. Inspect injectors. Test O2 sensor.",
+        },
+        "difficulty": 2,
+    },
+    "P2197": {
+        "causes": {
+            "fr": ["Sonde O2 bloquée pauvre banc 1 capteur 1", "Fuite d'air admission", "Pression carburant trop basse", "Sonde défectueuse"],
+            "en": ["O2 sensor stuck lean bank 1 sensor 1", "Intake air leak", "Fuel pressure too low", "Faulty sensor"],
+        },
+        "quick_check": {
+            "fr": "Rechercher les fuites d'air. Vérifier la pression carburant. Tester la sonde O2.",
+            "en": "Look for air leaks. Check fuel pressure. Test O2 sensor.",
+        },
+        "difficulty": 2,
+    },
+    # --- Turbo boost pressure ---
+    "P2261": {
+        "causes": {
+            "fr": ["Surpression turbo - signal mécanique non détecté", "Wastegate bloqué", "Capsule de dépression percée"],
+            "en": ["Turbo boost pressure not detected - mechanical", "Stuck wastegate", "Punctured vacuum capsule"],
+        },
+        "quick_check": {
+            "fr": "Vérifier le fonctionnement du wastegate. Inspecter les durites de dépression.",
+            "en": "Check wastegate operation. Inspect vacuum hoses.",
+        },
+        "difficulty": 2,
+    },
+    "P2262": {
+        "causes": {
+            "fr": ["Pression turbo détectée mais non demandée", "Solénoïde wastegate bloqué", "Fuite de dépression"],
+            "en": ["Turbo boost pressure detected but not requested", "Stuck wastegate solenoid", "Vacuum leak"],
+        },
+        "quick_check": {
+            "fr": "Tester le solénoïde wastegate. Vérifier les durites de dépression du turbo.",
+            "en": "Test wastegate solenoid. Check turbo vacuum hoses.",
+        },
+        "difficulty": 2,
+    },
+    "P2263": {
+        "causes": {
+            "fr": ["Performance système turbo/compresseur - surpression ou sous-pression", "Turbo usé", "Fuite au collecteur d'échappement"],
+            "en": ["Turbo/supercharger system performance - over/under boost", "Worn turbo", "Exhaust manifold leak"],
+        },
+        "quick_check": {
+            "fr": "Vérifier le jeu axial et radial du turbo. Rechercher les fuites d'échappement.",
+            "en": "Check turbo axial and radial play. Look for exhaust leaks.",
+        },
+        "difficulty": 3,
+    },
+    # --- Water in fuel / air leaks ---
+    "P2269": {
+        "causes": {
+            "fr": ["Eau détectée dans le carburant", "Filtre à carburant saturé d'eau", "Condensation dans le réservoir"],
+            "en": ["Water in fuel detected", "Water-saturated fuel filter", "Condensation in fuel tank"],
+        },
+        "quick_check": {
+            "fr": "Purger le filtre à carburant (si purge disponible). Remplacer le filtre à carburant.",
+            "en": "Drain fuel filter (if drain available). Replace fuel filter.",
+        },
+        "difficulty": 1,
+    },
+    "P2279": {
+        "causes": {
+            "fr": ["Fuite d'air dans le système d'admission", "Durite d'air fissurée", "Joint collecteur défectueux"],
+            "en": ["Intake air system leak", "Cracked air hose", "Faulty manifold gasket"],
+        },
+        "quick_check": {
+            "fr": "Rechercher les fuites d'air avec un spray carburant moteur tournant. Inspecter les durites.",
+            "en": "Look for air leaks with carb cleaner spray while engine running. Inspect hoses.",
+        },
+        "difficulty": 2,
+    },
+    "P2282": {
+        "causes": {
+            "fr": ["Fuite d'air entre le débitmètre et le papillon", "Durite intercooler percée", "Collier desserré"],
+            "en": ["Air leak between MAF and throttle body", "Punctured intercooler hose", "Loose clamp"],
+        },
+        "quick_check": {
+            "fr": "Inspecter les durites entre le MAF et le papillon. Vérifier les colliers de serrage.",
+            "en": "Inspect hoses between MAF and throttle. Check hose clamps.",
+        },
+        "difficulty": 1,
+    },
+    "P2291": {
+        "causes": {
+            "fr": ["Pression de contrôle injecteur trop basse", "Pompe haute pression défaillante", "Régulateur de pression usé", "Fuite retour injecteur"],
+            "en": ["Injector control pressure too low", "Failing high-pressure pump", "Worn pressure regulator", "Injector return leak"],
+        },
+        "quick_check": {
+            "fr": "Mesurer la pression rail carburant. Vérifier les retours injecteurs pour fuites.",
+            "en": "Measure fuel rail pressure. Check injector returns for leaks.",
+        },
+        "difficulty": 3,
+    },
+    # --- DPF differential pressure sensor ---
+    "P2452": {
+        "causes": {
+            "fr": ["Capteur pression différentielle FAP défectueux", "Tuyaux bouchés par la suie", "Câblage endommagé"],
+            "en": ["DPF differential pressure sensor faulty", "Soot-clogged tubes", "Damaged wiring"],
+        },
+        "quick_check": {
+            "fr": "Nettoyer les tuyaux du capteur de pression différentielle FAP. Tester le capteur.",
+            "en": "Clean DPF differential pressure sensor tubes. Test sensor.",
+        },
+        "difficulty": 2,
+    },
+    "P2453": {
+        "causes": {
+            "fr": ["Capteur pression différentielle FAP signal hors plage", "Tuyaux partiellement bouchés", "Capteur encrassé"],
+            "en": ["DPF differential pressure sensor out of range", "Partially clogged tubes", "Dirty sensor"],
+        },
+        "quick_check": {
+            "fr": "Comparer la lecture avec la pression atmosphérique moteur éteint. Nettoyer les tuyaux.",
+            "en": "Compare reading with atmospheric pressure when engine off. Clean tubes.",
+        },
+        "difficulty": 2,
+    },
+    "P2454": {
+        "causes": {
+            "fr": ["Capteur pression différentielle FAP signal trop bas", "Court-circuit", "Tuyaux débranchés"],
+            "en": ["DPF differential pressure sensor signal low", "Short circuit", "Disconnected tubes"],
+        },
+        "quick_check": {
+            "fr": "Vérifier que les tuyaux sont bien branchés. Mesurer la tension du capteur.",
+            "en": "Verify tubes are properly connected. Measure sensor voltage.",
+        },
+        "difficulty": 2,
+    },
+    "P2455": {
+        "causes": {
+            "fr": ["Capteur pression différentielle FAP signal trop élevé", "Circuit ouvert", "Capteur défectueux"],
+            "en": ["DPF differential pressure sensor signal high", "Open circuit", "Faulty sensor"],
+        },
+        "quick_check": {
+            "fr": "Vérifier la continuité du câblage. Tester le capteur de pression différentielle.",
+            "en": "Check wiring continuity. Test differential pressure sensor.",
+        },
+        "difficulty": 2,
+    },
+    # --- DPF regeneration (CRITICAL for diesel) ---
+    "P2457": {
+        "causes": {
+            "fr": ["Régénération FAP incomplète", "Trajets trop courts empêchant la régénération", "Additif FAP vide", "Capteur température EGT défectueux"],
+            "en": ["DPF regeneration incomplete", "Trips too short for regeneration", "DPF additive empty", "Faulty EGT sensor"],
+        },
+        "quick_check": {
+            "fr": "Effectuer un trajet autoroute de 30 min pour régénération. Vérifier le niveau d'additif FAP (Eolys/Infineum).",
+            "en": "Drive 30 min on highway for regeneration. Check DPF additive level (Eolys/Infineum).",
+        },
+        "difficulty": 2,
+    },
+    "P2458": {
+        "causes": {
+            "fr": ["Durée de régénération FAP excessive", "FAP très chargé en suie", "Problème de température d'échappement"],
+            "en": ["DPF regeneration duration too long", "Heavily soot-loaded DPF", "Exhaust temperature issue"],
+        },
+        "quick_check": {
+            "fr": "Vérifier le niveau de suie du FAP avec un scanner. Contrôler les capteurs de température d'échappement.",
+            "en": "Check DPF soot level with scanner. Inspect exhaust temperature sensors.",
+        },
+        "difficulty": 3,
+    },
+    "P2459": {
+        "causes": {
+            "fr": ["Fréquence de régénération FAP trop élevée", "Qualité de carburant médiocre", "Injecteur qui fuit", "Problème huile moteur"],
+            "en": ["DPF regeneration frequency too high", "Poor fuel quality", "Leaking injector", "Engine oil issue"],
+        },
+        "quick_check": {
+            "fr": "Vérifier la qualité du carburant. Contrôler les injecteurs. Vérifier le niveau d'huile (dilution carburant).",
+            "en": "Check fuel quality. Inspect injectors. Check oil level (fuel dilution).",
+        },
+        "difficulty": 2,
+    },
+    "P2463": {
+        "causes": {
+            "fr": ["FAP accumulation de suie excessive", "Régénérations répétitivement interrompues", "Conduite urbaine exclusive", "Additif FAP vide"],
+            "en": ["DPF excessive soot accumulation", "Repeatedly interrupted regenerations", "Exclusive urban driving", "DPF additive empty"],
+        },
+        "quick_check": {
+            "fr": "Tenter une régénération forcée avec un outil de diagnostic. Si le FAP est >80% chargé, un nettoyage professionnel peut être nécessaire.",
+            "en": "Attempt forced regeneration with diagnostic tool. If DPF is >80% loaded, professional cleaning may be needed.",
+        },
+        "difficulty": 3,
+    },
+    # --- NOx sensor (Euro 6 diesel) ---
+    "P2BAD": {
+        "causes": {
+            "fr": ["Capteur NOx amont signal incorrect", "Capteur NOx défectueux", "Câblage endommagé", "Problème de catalyseur SCR"],
+            "en": ["Upstream NOx sensor incorrect signal", "Faulty NOx sensor", "Damaged wiring", "SCR catalyst issue"],
+        },
+        "quick_check": {
+            "fr": "Vérifier le capteur NOx amont avec un outil de diagnostic. Contrôler le niveau d'AdBlue.",
+            "en": "Check upstream NOx sensor with diagnostic tool. Verify AdBlue level.",
+        },
+        "difficulty": 3,
+    },
+    "P2BAE": {
+        "causes": {
+            "fr": ["Capteur NOx aval signal incorrect", "Capteur NOx défectueux", "Système SCR inefficace", "Qualité AdBlue dégradée"],
+            "en": ["Downstream NOx sensor incorrect signal", "Faulty NOx sensor", "Ineffective SCR system", "Degraded AdBlue quality"],
+        },
+        "quick_check": {
+            "fr": "Vérifier le capteur NOx aval. Contrôler la qualité et le niveau d'AdBlue. Vérifier le catalyseur SCR.",
+            "en": "Check downstream NOx sensor. Verify AdBlue quality and level. Inspect SCR catalyst.",
+        },
+        "difficulty": 3,
+    },
 }
 
 # Forum URLs by manufacturer (for repair guide searches)
