@@ -37,38 +37,38 @@ a = Analysis(
 
 pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
 
-exe = EXE(
-    pyz,
-    a.scripts,
-    [],
-    exclude_binaries=True,
-    name='BricarOBD',
-    debug=False,
-    bootloader_ignore_signals=False,
-    strip=False,
-    upx=True,
-    console=False,
-    disable_windowed_traceback=False,
-    argv_emulation=True if platform.system() == 'Darwin' else False,
-    target_arch=None,
-    codesign_identity=None,
-    entitlements_file=None,
-    icon='assets/icon.png',
-)
-
-coll = COLLECT(
-    exe,
-    a.binaries,
-    a.zipfiles,
-    a.datas,
-    strip=False,
-    upx=True,
-    upx_exclude=[],
-    name='BricarOBD',
-)
-
-# macOS .app bundle
 if platform.system() == 'Darwin':
+    # macOS: onedir + .app bundle (required for .app structure)
+    exe = EXE(
+        pyz,
+        a.scripts,
+        [],
+        exclude_binaries=True,
+        name='BricarOBD',
+        debug=False,
+        bootloader_ignore_signals=False,
+        strip=False,
+        upx=True,
+        console=False,
+        disable_windowed_traceback=False,
+        argv_emulation=True,
+        target_arch=None,
+        codesign_identity=None,
+        entitlements_file=None,
+        icon='assets/icon.png',
+    )
+
+    coll = COLLECT(
+        exe,
+        a.binaries,
+        a.zipfiles,
+        a.datas,
+        strip=False,
+        upx=True,
+        upx_exclude=[],
+        name='BricarOBD',
+    )
+
     app = BUNDLE(
         coll,
         name='BricarOBD.app',
@@ -77,8 +77,27 @@ if platform.system() == 'Darwin':
         info_plist={
             'CFBundleName': 'BricarOBD',
             'CFBundleDisplayName': 'BricarOBD',
-            'CFBundleVersion': '1.0.0',
-            'CFBundleShortVersionString': '1.0.0',
+            'CFBundleVersion': '1.1.0',
+            'CFBundleShortVersionString': '1.1.0',
             'NSHighResolutionCapable': True,
         },
+    )
+else:
+    # Windows: single .exe (everything bundled inside)
+    exe = EXE(
+        pyz,
+        a.scripts,
+        a.binaries,
+        a.zipfiles,
+        a.datas,
+        [],
+        name='BricarOBD',
+        debug=False,
+        bootloader_ignore_signals=False,
+        strip=False,
+        upx=True,
+        console=False,
+        disable_windowed_traceback=False,
+        target_arch=None,
+        icon='assets/icon.png',
     )

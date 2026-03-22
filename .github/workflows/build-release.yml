@@ -61,14 +61,11 @@ jobs:
       - name: Build .exe
         run: pyinstaller build.spec --noconfirm
 
-      - name: Create zip
-        run: Compress-Archive -Path dist/BricarOBD -DestinationPath dist/BricarOBD-Windows.zip
-
       - name: Upload Windows artifact
         uses: actions/upload-artifact@v4
         with:
           name: BricarOBD-Windows
-          path: dist/BricarOBD-Windows.zip
+          path: dist/BricarOBD.exe
 
   release:
     needs: [build-macos, build-windows]
@@ -93,7 +90,7 @@ jobs:
         with:
           files: |
             artifacts/BricarOBD-macOS.dmg
-            artifacts/BricarOBD-Windows.zip
+            artifacts/BricarOBD.exe
           body: |
             ## BricarOBD ${{ github.ref_name }}
 
@@ -101,7 +98,7 @@ jobs:
 
             ### Downloads
             - **macOS**: `BricarOBD-macOS.dmg` — Open and drag to Applications
-            - **Windows**: `BricarOBD-Windows.zip` — Extract and run `BricarOBD.exe`
+            - **Windows**: `BricarOBD.exe` — Double-click to run (single file, no install)
 
             ### Features
             - Auto vehicle detection via VIN (39 manufacturers)
