@@ -41,13 +41,10 @@ class DevConsoleHandler(logging.Handler):
 
     def set_console(self, console):
         self._console = console
-        # Flush buffer to console (delayed to ensure window is rendered)
-        console.after(200, self._flush_buffer)
 
-    def _flush_buffer(self):
-        if self._console:
-            for record in self._buffer:
-                self._console.append_log(record)
+    def get_buffered_logs(self):
+        """Return all buffered log entries."""
+        return list(self._buffer)
 
     def emit(self, record):
         try:
@@ -57,7 +54,10 @@ class DevConsoleHandler(logging.Handler):
                 self._log_file.write(msg + "\n")
                 self._log_file.flush()
             if self._console:
-                self._console.append_log(msg)
+                try:
+                    self._console.after(0, self._console.append_log, msg)
+                except Exception:
+                    pass
         except Exception:
             pass
 
@@ -86,6 +86,16 @@ class DevConsoleWindow(ctk.CTkToplevel):
 
         self._paused = False
         self._setup_ui()
+
+        # Flush buffered logs after UI is ready
+        self.after(300, self._load_buffered_logs)
+
+    def _load_buffered_logs(self):
+        """Load all previously buffered logs into the textbox."""
+        handler = get_dev_handler()
+        logs = handler.get_buffered_logs()
+        for msg in logs:
+            self.append_log(msg)
 
     def _setup_ui(self):
         # Toolbar
