@@ -279,7 +279,6 @@ class AdvancedManager:
 
         # Send stop command after a short delay (for actuator tests)
         if stop_cmd:
-            import time
             time.sleep(2)
             self._send_raw(stop_cmd)
 

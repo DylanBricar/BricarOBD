@@ -10,7 +10,7 @@ from gui.theme import COLORS, FONTS, _bind_scroll_recursive
 from gui.dialogs import SafetyConfirmDialog
 from i18n import t, get_lang, on_lang_change
 from obd_core.advanced_operations import (
-    get_operations_for_make, get_all_categories, CATEGORIES,
+    get_operations_for_make, CATEGORIES,
 )
 
 logger = logging.getLogger(__name__)

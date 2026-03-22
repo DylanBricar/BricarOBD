@@ -1,7 +1,6 @@
 """Modern 2026 theme for OBD Diagnostic Pro."""
 
 import customtkinter as ctk
-import math
 
 # ── Color Palette ──────────────────────────────────────────────
 COLORS = {
@@ -51,14 +50,6 @@ COLORS = {
 # ── Font Stack ─────────────────────────────────────────────────
 # Cross-platform font fallback
 import platform
-
-def _safe_font(*families_and_params):
-    """Return a font tuple with cross-platform fallback.
-    On macOS: SF Pro Display/Text, Menlo
-    On Windows: Segoe UI, Consolas
-    On Linux: Ubuntu, DejaVu Sans Mono
-    """
-    return families_and_params  # CTk handles fallback internally via tkinter
 
 FONTS = {
     "h1": ("Helvetica", 26, "bold"),

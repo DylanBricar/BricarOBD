@@ -2,14 +2,15 @@
 
 import csv
 import customtkinter as ctk
+import logging
 import threading
-from collections import deque
 from datetime import datetime
-from pathlib import Path
 
 from gui.theme import COLORS, FONTS, GaugeWidget, GraphWidget, StatusCard, _bind_scroll_recursive
 from config import DASHBOARD_REFRESH_MS, GRAPH_HISTORY_SAMPLES, CSV_DIR
 from i18n import t, on_lang_change
+
+logger = logging.getLogger(__name__)
 
 
 class DashboardFrame(ctk.CTkFrame):
@@ -355,8 +356,8 @@ class DashboardFrame(ctk.CTkFrame):
                     self._csv_writer.writerow(row)
                     self._csv_file.flush()
 
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug(f"Dashboard update error: {e}")
 
     def _toggle_csv_recording(self):
         """Start or stop CSV recording."""
@@ -432,7 +433,8 @@ class DashboardFrame(ctk.CTkFrame):
                 if elm_v:
                     self.after(0, lambda v=elm_v: self.elm_voltage_label.configure(
                         text=f"{t('dash_elm_voltage')}: {v.strip()}"))
-            except Exception: pass
+            except Exception as e:
+                    logger.debug(f"ELM voltage read error: {e}")
 
             # Fuel status
             FUEL_STATUS_NAMES = {
@@ -479,8 +481,8 @@ class DashboardFrame(ctk.CTkFrame):
                     self.obd_standard_label.configure(text=f"{t('dash_obd_standard')}: {obd_name}")
 
             self.after(0, update_ui)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug(f"Vehicle info update error: {e}")
 
     def _on_lang_change(self, lang=None):
         """Rebuild UI with new language.

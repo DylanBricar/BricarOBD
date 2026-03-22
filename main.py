@@ -14,11 +14,10 @@ from pathlib import Path
 # Ensure project root is in path
 sys.path.insert(0, str(Path(__file__).parent))
 
-from config import APP_NAME, APP_VERSION, LOG_DIR
+from config import APP_NAME, APP_VERSION
 from utils.logger import setup_logging
 
 # Core modules
-from obd_core.connection import ELM327Connection
 from obd_core.safety import SafetyGuard
 from obd_core.obd_reader import OBDReader
 from obd_core.uds_client import UDSClient

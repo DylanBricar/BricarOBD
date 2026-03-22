@@ -319,7 +319,6 @@ class DTCFrame(ctk.CTkFrame):
 
     def show_freeze_frame(self, dtc_code):
         """Read and display freeze frame data for a DTC."""
-        import threading
         def task():
             freeze_data = {}
             pids_to_read = [0x04, 0x05, 0x0C, 0x0D, 0x0F, 0x11, 0x42, 0x0B, 0x0E]
@@ -444,7 +443,6 @@ class DTCFrame(ctk.CTkFrame):
         ctk.CTkLabel(scroll, text=t("dtc_help_links"), font=FONTS["body_bold"],
                      text_color=COLORS["accent"]).pack(anchor="w", pady=(0, 8))
 
-        search_query = f"{dtc_code} {vehicle}"
         repair_word = "réparation" if lang == "fr" else "repair"
 
         links = [
