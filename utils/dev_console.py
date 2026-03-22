@@ -80,10 +80,9 @@ class DevConsoleWindow(ctk.CTkToplevel):
         y = (self.winfo_screenheight() - h) // 2
         self.geometry(f"{w}x{h}+{x}+{y}")
 
-        # Bring to front
-        self.lift()
+        # Bring to front and keep on top
+        self.attributes('-topmost', True)
         self.focus_force()
-        self.after(100, lambda: self.attributes('-topmost', False))
 
         self._paused = False
         self._setup_ui()
