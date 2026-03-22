@@ -22,15 +22,27 @@ jobs:
       - name: Install dependencies
         run: |
           pip install -r requirements.txt
-          pip install pyinstaller
+          pip install nuitka ordered-set zstandard
 
-      - name: Build .app
-        run: pyinstaller build.spec --noconfirm
+      - name: Build with Nuitka
+        run: |
+          python -m nuitka \
+            --standalone \
+            --enable-plugin=tk-inter \
+            --include-package-data=customtkinter \
+            --include-data-dir=assets=assets \
+            --include-data-dir=data=data \
+            --macos-create-app-bundle \
+            --macos-app-icon=assets/icon.png \
+            --macos-app-name=BricarOBD \
+            --macos-app-version=${{ github.ref_name }} \
+            --output-dir=build \
+            main.py
 
       - name: Create .dmg
         run: |
           mkdir -p dist/dmg
-          cp -R dist/BricarOBD.app dist/dmg/
+          cp -R build/main.app dist/dmg/BricarOBD.app
           ln -s /Applications dist/dmg/Applications
           hdiutil create -volname "BricarOBD" \
             -srcfolder dist/dmg \
@@ -56,10 +68,25 @@ jobs:
       - name: Install dependencies
         run: |
           pip install -r requirements.txt
-          pip install pyinstaller
+          pip install nuitka ordered-set zstandard
 
-      - name: Build .exe
-        run: pyinstaller build.spec --noconfirm
+      - name: Build with Nuitka
+        run: |
+          python -m nuitka `
+            --onefile `
+            --enable-plugin=tk-inter `
+            --include-package-data=customtkinter `
+            --include-data-dir=assets=assets `
+            --include-data-dir=data=data `
+            --windows-console-mode=disable `
+            --windows-icon-from-ico=assets/icon.png `
+            --windows-product-name=BricarOBD `
+            --windows-file-version=1.1.0.0 `
+            --windows-product-version=1.1.0.0 `
+            --windows-company-name=DylanBricar `
+            --output-filename=BricarOBD.exe `
+            --output-dir=dist `
+            main.py
 
       - name: Upload Windows artifact
         uses: actions/upload-artifact@v4
@@ -95,6 +122,7 @@ jobs:
             ## BricarOBD ${{ github.ref_name }}
 
             Professional OBD-II diagnostic tool for all vehicles.
+            Built with Nuitka (compiled Python → native code).
 
             ### Downloads
             - **macOS**: `BricarOBD-macOS.dmg` — Open and drag to Applications

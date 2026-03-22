@@ -35,9 +35,14 @@ logs/
 data/sessions/*.json
 !data/sessions/.gitkeep
 
-# Build artifacts (PyInstaller)
+# Build artifacts (Nuitka / PyInstaller)
 *.spec.bak
 *.dmg
+build/
+dist/
+*.build/
+*.dist/
+*.onefile-build/
 
 # Temporary files
 generate_logo.py
