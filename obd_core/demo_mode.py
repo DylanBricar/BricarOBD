@@ -316,19 +316,52 @@ class DemoConnection:
 
     def _simulate_mode06(self, mid):
         """Simulate Mode 06 test results (monitoring)."""
+        # Format: 46 MID 00 VAL_HI VAL_LO MIN MAX
         test_results = {
-            0x01: "46 01 00 FF FF 00 FF",  # O2 sensor 1 bank 1
-            0x02: "46 02 00 FF FF 00 FF",  # O2 sensor 1 bank 2
-            0x03: "46 03 00 FF FF 00 FF",  # O2 sensor 2 bank 1
-            0x04: "46 04 00 FF FF 00 FF",  # O2 sensor 2 bank 2
-            0x05: "46 05 00 FF FF 00 FF",  # O2 sensor 3 bank 1
-            0x06: "46 06 00 FF FF 00 FF",  # O2 sensor 3 bank 2
-            0x07: "46 07 00 FF FF 00 FF",  # O2 sensor 4 bank 1
-            0x08: "46 08 00 FF FF 00 FF",  # O2 sensor 4 bank 2
-            0x09: "46 09 00 FF FF 00 FF",  # Catalyst efficiency bank 1
-            0x0A: "46 0A 00 FF FF 00 FF",  # Catalyst efficiency bank 2
+            # Oxygen sensors
+            0x01: "46 01 00 00 B2 00 FF",  # O2 B1S1 — val=178, pass
+            0x02: "46 02 00 00 9A 00 FF",  # O2 B1S2 — val=154, pass
+            0x03: "46 03 00 00 C1 00 FF",  # O2 B2S1 — val=193, pass
+            0x04: "46 04 00 00 A5 00 FF",  # O2 B2S2 — val=165, pass
+            0x05: "46 05 00 00 88 00 FF",  # O2 B1S3 — val=136, pass
+            0x06: "46 06 00 00 7F 00 FF",  # O2 B1S4 — val=127, pass
+            0x07: "46 07 00 00 D3 00 FF",  # O2 B2S3 — val=211, pass
+            0x08: "46 08 00 00 90 00 FF",  # O2 B2S4 — val=144, pass
+            # Catalyst
+            0x09: "46 09 00 00 6E 00 FF",  # Catalyst B1 — val=110, pass
+            0x0A: "46 0A 00 00 72 00 FF",  # Catalyst B2 — val=114, pass
+            # Heated catalyst
+            0x0B: "46 0B 00 00 A0 00 FF",  # Heated Cat B1 — val=160, pass
+            0x0C: "46 0C 00 00 98 00 FF",  # Heated Cat B2 — val=152, pass
+            # EVAP
+            0x0D: "46 0D 00 00 05 00 19",  # EVAP leak — val=5, pass (max=25)
+            0x0E: "46 0E 00 00 42 00 FF",  # EVAP purge — val=66, pass
+            # Secondary air
+            0x0F: "46 0F 00 00 8C 00 FF",  # Secondary air B1 — pass
+            0x10: "46 10 00 00 87 00 FF",  # Secondary air B2 — pass
+            # O2 heaters
+            0x12: "46 12 00 00 C0 00 FF",  # O2 heater B1S1 — pass
+            0x13: "46 13 00 00 B5 00 FF",  # O2 heater B1S2 — pass
+            0x14: "46 14 00 00 BB 00 FF",  # O2 heater B2S1 — pass
+            0x15: "46 15 00 00 BA 00 FF",  # O2 heater B2S2 — pass
+            # EGR
+            0x1F: "46 1F 00 00 38 00 FF",  # EGR flow — val=56, pass
+            0x20: "46 20 00 00 44 00 FF",  # EGR VVT — val=68, pass
+            # Misfire
+            0x21: "46 21 00 00 00 00 0A",  # Misfire Cyl1 — val=0, pass (max=10)
+            0x22: "46 22 00 00 01 00 0A",  # Misfire Cyl2 — val=1, pass
+            0x23: "46 23 00 00 00 00 0A",  # Misfire Cyl3 — val=0, pass
+            0x24: "46 24 00 00 02 00 0A",  # Misfire Cyl4 — val=2, pass
+            0x27: "46 27 00 00 03 00 14",  # Misfire General — val=3, pass (max=20)
+            # Fuel system
+            0x31: "46 31 00 00 7D 00 FF",  # Fuel System B1 — val=125, pass
+            0x32: "46 32 00 00 80 00 FF",  # Fuel System B2 — val=128, pass
+            # DPF
+            0x39: "46 39 00 00 1A 00 64",  # PM Filter B1 — val=26, pass (max=100)
+            # Boost
+            0x3B: "46 3B 00 00 55 00 FF",  # Boost pressure — val=85, pass
         }
-        return test_results.get(mid, "46 00 00 FF FF 00 FF")
+        return test_results.get(mid, "NO DATA")
 
     def _simulate_mode09(self, info_type):
         """Simulate Mode 09 vehicle info."""

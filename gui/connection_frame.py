@@ -58,7 +58,7 @@ class ConnectionFrame(ctk.CTkFrame):
             self, text=t("conn_title"), font=FONTS["heading"],
             text_color=COLORS["text_primary"]
         )
-        self.title_label.pack(anchor="w", pady=(0, 20))
+        self.title_label.pack(anchor="w", pady=(0, 12))
 
         self.config_card = self._create_card(self, t("conn_configuration"))
         self.config_card.pack(fill="x", pady=(0, 12))
@@ -113,7 +113,7 @@ class ConnectionFrame(ctk.CTkFrame):
             button_row, text=t("conn_connect"), width=140,
             command=self._on_connect_btn_clicked,
             fg_color=COLORS["success"], hover_color="#0DA574",
-            text_color="#FFFFFF",
+            text_color="#FFFFFF", text_color_disabled="#FFFFFF",
             corner_radius=8
         )
         self.connect_btn.pack(side="left", padx=(0, 12))
@@ -122,6 +122,7 @@ class ConnectionFrame(ctk.CTkFrame):
             button_row, text=t("conn_disconnect"), width=140,
             command=self.disconnect,
             fg_color=COLORS["text_muted"], hover_color=COLORS["text_muted"],
+            text_color_disabled="#FFFFFF",
             corner_radius=8,
             state="disabled"
         )
@@ -226,7 +227,7 @@ class ConnectionFrame(ctk.CTkFrame):
             from obd_core.uds_client import UDSClient
             from obd_core.dtc_manager import DTCManager
 
-            self.after(0, self.log_message, f"Connecting to {port}...")
+            self.after(0, self.log_message, t("conn_connecting_to", port=port))
             try:
                 demo_conn = DemoConnection()
                 success = demo_conn.connect()
@@ -238,16 +239,16 @@ class ConnectionFrame(ctk.CTkFrame):
                 self.app.dtc_manager = DTCManager(self.app.obd_reader, self.app.uds_client, self.app.safety)
                 self.after(0, self._on_connect_result, success)
             except Exception as e:
-                self.after(0, self.log_message, f"Demo mode error: {str(e)}")
+                self.after(0, self.log_message, t("conn_demo_error", error=str(e)))
                 self.after(0, self._on_connect_result, False)
             return
 
-        self.after(0, self.log_message, f"Connecting to {port} @ {baud}...")
+        self.after(0, self.log_message, t("conn_connecting_to", port=f"{port} @ {baud}"))
         try:
             success = self.app.connection.connect(port, baud)
             self.after(0, self._on_connect_result, success)
         except Exception as e:
-            self.after(0, self.log_message, f"Connection error: {str(e)}")
+            self.after(0, self.log_message, t("conn_error", error=str(e)))
             self.after(0, self._on_connect_result, False)
 
     def _on_connect_result(self, success):
@@ -272,7 +273,7 @@ class ConnectionFrame(ctk.CTkFrame):
                     from obd_core.vin_decoder import decode_vin, get_profile_key_for_make
 
                     # Step 1: Read VIN
-                    self.after(0, self.log_message, "1/3 Lecture du VIN...")
+                    self.after(0, self.log_message, t("conn_step_vin"))
                     vehicle_info = self.app.obd_reader.get_vehicle_info()
                     vin = vehicle_info.get("vin", "")
 
@@ -288,28 +289,28 @@ class ConnectionFrame(ctk.CTkFrame):
                         self.app.detected_make = make
 
                         vehicle_str = f"{make} ({year})" if year else make
-                        self.after(0, self.log_message, f"   → {vehicle_str} [VIN: {vin[:8]}...]")
+                        self.after(0, self.log_message, t("conn_step_vin_result", vehicle=vehicle_str, vin=vin[:8]))
                     else:
                         self.app.detected_vehicle = None
                         self.app.detected_make = ""
-                        self.after(0, self.log_message, "   → VIN non disponible")
+                        self.after(0, self.log_message, t("conn_step_vin_unavailable"))
 
                     # Step 2: Discover supported PIDs
-                    self.after(0, self.log_message, "2/3 Découverte des PIDs supportés...")
+                    self.after(0, self.log_message, t("conn_step_pids"))
                     supported = self.app.obd_reader.discover_supported_pids()
-                    self.after(0, self.log_message, f"   → {len(supported)} PIDs supportés")
+                    self.after(0, self.log_message, t("conn_step_pids_result", count=len(supported)))
 
                     # Step 3: Scan ECUs with manufacturer-specific addresses
-                    self.after(0, self.log_message, f"3/3 Scan des ECUs ({make})...")
+                    self.after(0, self.log_message, t("conn_step_ecus", make=make))
                     ecus = self.app.uds_client.scan_ecus(make=make)
                     self.app.discovered_ecus = ecus
-                    self.after(0, self.log_message, f"   → {len(ecus)} ECU(s) détecté(s)")
+                    self.after(0, self.log_message, t("conn_step_ecus_result", count=len(ecus)))
 
                     # Final summary
                     self.after(0, self._update_vehicle_display, make, year)
 
                 except Exception as e:
-                    self.after(0, self.log_message, f"Auto-détection: {str(e)}")
+                    self.after(0, self.log_message, t("conn_autodetect_error", error=str(e)))
 
             threading.Thread(target=detect_vehicle, daemon=True).start()
         else:
@@ -325,7 +326,7 @@ class ConnectionFrame(ctk.CTkFrame):
 
     def _disconnect_thread(self):
         """Background thread for disconnection."""
-        self.after(0, self.log_message, "Disconnecting...")
+        self.after(0, self.log_message, t("conn_disconnecting"))
         try:
             self.app.connection.disconnect()
             self.after(0, self._on_disconnect_result, True)
@@ -401,6 +402,9 @@ class ConnectionFrame(ctk.CTkFrame):
         self.disconnect_btn.configure(text=t("conn_disconnect"))
         self.status_card.winfo_children()[0].configure(text=t("conn_status"))
         self.log_label.configure(text=t("conn_log"))
+        # Update log card title
+        if self.log_card.winfo_children():
+            self.log_card.winfo_children()[0].configure(text=t("conn_log"))
 
         # Guard: don't wipe connection info if connected
         if self.app.connection and self.app.connection.is_connected():

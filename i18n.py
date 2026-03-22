@@ -1,7 +1,38 @@
 """Internationalization system for OBD Diagnostic Pro."""
 
-_current_lang = "fr"
+import json
+from pathlib import Path
+
+_SETTINGS_FILE = Path(__file__).parent / "data" / "settings.json"
 _listeners = []
+
+
+def _load_saved_lang() -> str:
+    """Load saved language preference, default to 'fr'."""
+    try:
+        if _SETTINGS_FILE.exists():
+            data = json.loads(_SETTINGS_FILE.read_text(encoding="utf-8"))
+            lang = data.get("language", "fr")
+            if lang in ("fr", "en"):
+                return lang
+    except Exception:
+        pass
+    return "fr"
+
+
+def _save_lang(lang: str) -> None:
+    """Persist language preference to settings file."""
+    try:
+        data = {}
+        if _SETTINGS_FILE.exists():
+            data = json.loads(_SETTINGS_FILE.read_text(encoding="utf-8"))
+        data["language"] = lang
+        _SETTINGS_FILE.write_text(json.dumps(data, indent=2), encoding="utf-8")
+    except Exception:
+        pass
+
+
+_current_lang = _load_saved_lang()
 
 TRANSLATIONS = {
     # App
@@ -171,11 +202,12 @@ TRANSLATIONS = {
     # Extra live data keys
     "live_refresh": {"fr": "Fréquence :", "en": "Refresh Rate:"},
     "live_select_label": {"fr": "Sélection des PIDs à surveiller :", "en": "Select PIDs to monitor:"},
-    "live_trend": {"fr": "Tendance", "en": "Trend"},
+    "live_trend": {"fr": "Variation", "en": "Change"},
+    "live_level": {"fr": "Niveau", "en": "Level"},
 
     # Help descriptions
     "conn_help": {"fr": "Configurez la connexion à votre adaptateur ELM327. Sélectionnez le port série et connectez-vous.", "en": "Configure connection to your ELM327 adapter. Select serial port and connect."},
-    "dash_help": {"fr": "Surveillance temps réel des paramètres du moteur et de l'état du véhicule.", "en": "Real-time monitoring of engine parameters and vehicle status."},
+    "dash_help": {"fr": "Surveillance en temps réel des paramètres du moteur et de l'état du véhicule.", "en": "Real-time monitoring of engine parameters and vehicle status."},
     "ecu_help": {"fr": "Scanner et identifier les calculateurs (ECU) du véhicule. Affiche les informations de chaque module.", "en": "Scan and identify vehicle ECUs. Shows information for each module."},
     "hist_help": {"fr": "Historique des sessions de diagnostic sauvegardées. Chargez, exportez ou supprimez des sessions.", "en": "History of saved diagnostic sessions. Load, export, or delete sessions."},
 
@@ -200,6 +232,17 @@ TRANSLATIONS = {
     # Vehicle detection
     "conn_vehicle_detected": {"fr": "Véhicule détecté : {make}", "en": "Vehicle detected: {make}"},
     "conn_vehicle_title": {"fr": "Diagnostic véhicule — {vehicle}", "en": "Vehicle Diagnostic — {vehicle}"},
+    "conn_connecting_to": {"fr": "Connexion à {port}...", "en": "Connecting to {port}..."},
+    "conn_demo_error": {"fr": "Erreur mode démo : {error}", "en": "Demo mode error: {error}"},
+    "conn_error": {"fr": "Erreur de connexion : {error}", "en": "Connection error: {error}"},
+    "conn_step_vin": {"fr": "1/3 Lecture du VIN...", "en": "1/3 Reading VIN..."},
+    "conn_step_vin_result": {"fr": "   → {vehicle} [VIN: {vin}...]", "en": "   → {vehicle} [VIN: {vin}...]"},
+    "conn_step_vin_unavailable": {"fr": "   → VIN non disponible", "en": "   → VIN not available"},
+    "conn_step_pids": {"fr": "2/3 Découverte des PIDs supportés...", "en": "2/3 Discovering supported PIDs..."},
+    "conn_step_pids_result": {"fr": "   → {count} PIDs supportés", "en": "   → {count} supported PIDs"},
+    "conn_step_ecus": {"fr": "3/3 Scan des ECUs ({make})...", "en": "3/3 Scanning ECUs ({make})..."},
+    "conn_step_ecus_result": {"fr": "   → {count} ECU(s) détecté(s)", "en": "   → {count} ECU(s) detected"},
+    "conn_autodetect_error": {"fr": "Auto-détection : {error}", "en": "Auto-detection: {error}"},
 
     # Monitors
     "monitors_title": {"fr": "Moniteurs & Info véhicule", "en": "Monitors & Vehicle Info"},
@@ -209,7 +252,7 @@ TRANSLATIONS = {
     "monitors_reading": {"fr": "Lecture en cours...", "en": "Reading..."},
     "monitors_empty": {"fr": "Cliquez sur un bouton pour lire les données.", "en": "Click a button to read data."},
     "monitors_no_results": {"fr": "Aucun résultat", "en": "No results"},
-    "monitors_results_found": {"fr": "résultat(s)", "en": "result(s) found"},
+    "monitors_results_found": {"fr": "résultat(s) trouvé(s)", "en": "result(s) found"},
     "monitors_test_results": {"fr": "Résultats des tests moniteurs", "en": "Monitor Test Results"},
     "monitors_vehicle_data": {"fr": "Données véhicule", "en": "Vehicle Data"},
     "monitors_make": {"fr": "Constructeur", "en": "Manufacturer"},
@@ -231,8 +274,6 @@ TRANSLATIONS = {
     "dash_monitors": {"fr": "Moniteurs", "en": "Monitors"},
 
     # Dialog
-    "dialog_close": {"fr": "Fermer", "en": "Close"},
-
     # Advanced tab
     "nav_advanced": {"fr": "Avancé", "en": "Advanced"},
     "adv_warning_title": {
@@ -288,6 +329,34 @@ TRANSLATIONS = {
         "en": "Click an ECU group to see its operations, or use search "
               "(e.g.: DPF, inject, throttle, EGR, 2E2481, oil, battery, actuator).",
     },
+
+    # CSV recording
+    "csv_record": {"fr": "Enregistrer", "en": "Record"},
+    "csv_stop": {"fr": "Arrêter enreg.", "en": "Stop Rec."},
+    "csv_recording": {"fr": "Enregistrement...", "en": "Recording..."},
+    "csv_saved": {"fr": "Enregistré : {file}", "en": "Saved: {file}"},
+    "csv_export": {"fr": "Exporter CSV", "en": "Export CSV"},
+
+    # Graphs
+    "graph_rpm": {"fr": "RPM", "en": "RPM"},
+    "graph_speed": {"fr": "Vitesse", "en": "Speed"},
+    "graph_temp": {"fr": "Température", "en": "Temperature"},
+    "graph_load": {"fr": "Charge", "en": "Load"},
+
+    # DTC repair help
+    "dtc_help_title": {"fr": "Aide au diagnostic", "en": "Diagnostic Help"},
+    "dtc_help_causes": {"fr": "Causes possibles", "en": "Possible Causes"},
+    "dtc_help_check": {"fr": "Vérification rapide", "en": "Quick Check"},
+    "dtc_help_difficulty": {"fr": "Difficulté", "en": "Difficulty"},
+    "dtc_help_diy_easy": {"fr": "Facile (DIY)", "en": "Easy (DIY)"},
+    "dtc_help_diy_medium": {"fr": "Intermédiaire", "en": "Intermediate"},
+    "dtc_help_mechanic": {"fr": "Mécanicien recommandé", "en": "Mechanic recommended"},
+    "dtc_help_links": {"fr": "Rechercher une solution", "en": "Search for a solution"},
+    "dtc_help_google": {"fr": "Google — Réparation", "en": "Google — Repair"},
+    "dtc_help_youtube": {"fr": "YouTube — Tuto vidéo", "en": "YouTube — Video tutorial"},
+    "dtc_help_obd_codes": {"fr": "OBD-Codes.com — Guide", "en": "OBD-Codes.com — Guide"},
+    "dtc_help_forum": {"fr": "Forum {make}", "en": "{make} Forum"},
+    "dtc_help_no_tips": {"fr": "Pas de fiche pour ce code. Utilisez les liens ci-dessous.", "en": "No tips for this code. Use the links below."},
 }
 
 
@@ -319,7 +388,7 @@ def get_lang() -> str:
 
 
 def set_lang(lang: str) -> None:
-    """Set current language and notify listeners.
+    """Set current language, persist to disk, and notify listeners.
 
     Args:
         lang: Language code ('fr' or 'en')
@@ -327,6 +396,7 @@ def set_lang(lang: str) -> None:
     global _current_lang
     if lang in ("fr", "en"):
         _current_lang = lang
+        _save_lang(lang)
         for callback in _listeners:
             try:
                 callback(lang)

@@ -7,7 +7,7 @@ from tkinter import filedialog
 from pathlib import Path
 from gui.theme import COLORS, FONTS, _bind_scroll_recursive
 from config import DTC_SEARCH_URL
-from i18n import t, on_lang_change
+from i18n import t, get_lang, on_lang_change
 
 
 class DTCFrame(ctk.CTkFrame):
@@ -36,12 +36,12 @@ class DTCFrame(ctk.CTkFrame):
             self, text=t("dtc_title"), font=FONTS["h3"],
             text_color=COLORS["text_primary"]
         )
-        self.title_label.pack(anchor="w", padx=16, pady=(4, 0))
+        self.title_label.pack(anchor="w", padx=16, pady=(0, 4))
 
-        ctk.CTkLabel(self, text=t("dtc_help"), font=FONTS["small"], text_color=COLORS["text_muted"]).pack(anchor="w", padx=16, pady=(0, 2))
+        ctk.CTkLabel(self, text=t("dtc_help"), font=FONTS["small"], text_color=COLORS["text_muted"]).pack(anchor="w", padx=16, pady=(0, 12))
 
         button_bar = ctk.CTkFrame(self, fg_color="transparent")
-        button_bar.pack(anchor="w", padx=16, pady=(0, 0), fill="x")
+        button_bar.pack(anchor="w", padx=16, pady=(0, 12), fill="x")
 
         ctk.CTkButton(
             button_bar, text=t("dtc_read_all"), fg_color=COLORS["accent"],
@@ -61,8 +61,8 @@ class DTCFrame(ctk.CTkFrame):
             command=self.read_permanent
         ).pack(side="left", padx=2)
 
-        separator = ctk.CTkFrame(button_bar, fg_color=COLORS["border"], width=2)
-        separator.pack(side="left", padx=6, fill="y")
+        separator = ctk.CTkFrame(button_bar, fg_color=COLORS["border"], width=1, height=24)
+        separator.pack(side="left", padx=10)
 
         ctk.CTkButton(
             button_bar, text=t("dtc_clear_all"), fg_color=COLORS["danger"],
@@ -250,15 +250,31 @@ class DTCFrame(ctk.CTkFrame):
             command=lambda c=dtc_record.code: self.show_freeze_frame(c)
         ).pack(side="left", padx=2)
 
+        ctk.CTkButton(
+            action_frame, text="?", width=28, height=24,
+            font=FONTS["small_bold"], fg_color=COLORS["warning"],
+            hover_color="#D97706",
+            command=lambda c=dtc_record.code: self._show_help_panel(c)
+        ).pack(side="left", padx=2)
+
         self.dtc_rows[dtc_record.code] = row_frame
 
     def search_web(self, dtc_code):
-        """Open web browser to search for DTC code.
+        """Open web browser to search for DTC code with detected vehicle info.
 
         Args:
             dtc_code: DTC code string (e.g., "P0420")
         """
-        url = DTC_SEARCH_URL.format(code=dtc_code, vehicle="vehicle")
+        # Build vehicle string from detected vehicle
+        make = getattr(self.app, 'detected_make', '') or ''
+        vehicle_info = getattr(self.app, 'detected_vehicle', None)
+        model = vehicle_info.get('model', '') if vehicle_info else ''
+        vehicle = f"{make} {model}".strip() or "vehicle"
+
+        # Use localized search term
+        search_term = "diagnostic véhicule" if get_lang() == "fr" else "vehicle diagnostic"
+
+        url = DTC_SEARCH_URL.format(code=dtc_code, vehicle=f"{vehicle} {search_term}")
         webbrowser.open(url)
 
     def save_single(self, dtc_record):
@@ -362,7 +378,99 @@ class DTCFrame(ctk.CTkFrame):
         ctk.CTkButton(popup, text=t("dialog_close"), width=100,
                       command=popup.destroy).pack(pady=(4, 12))
 
+    def _show_help_panel(self, dtc_code):
+        """Show repair help popup for a DTC code."""
+        from data.dtc_repair_tips import get_repair_tips, get_forum_url
+        from data.dtc_descriptions import get_dtc_description
+
+        lang = get_lang()
+        tips = get_repair_tips(dtc_code)
+        make = getattr(self.app, 'detected_make', '') or ''
+        vehicle_info = getattr(self.app, 'detected_vehicle', None)
+        model = vehicle_info.get('model', '') if vehicle_info else ''
+        vehicle = f"{make} {model}".strip() or "vehicle"
+        desc = get_dtc_description(dtc_code)
+
+        popup = ctk.CTkToplevel(self)
+        popup.title(f"{t('dtc_help_title')} — {dtc_code}")
+        popup.configure(fg_color=COLORS["bg_primary"])
+        w, h = 550, 520
+        x = (popup.winfo_screenwidth() - w) // 2
+        y = (popup.winfo_screenheight() - h) // 2
+        popup.geometry(f"{w}x{h}+{x}+{y}")
+        popup.resizable(False, False)
+        popup.transient(self)
+
+        # Header
+        ctk.CTkLabel(popup, text=f"{dtc_code} — {desc[:60]}", font=FONTS["h3"],
+                     text_color=COLORS["text_primary"]).pack(pady=(16, 4), padx=16)
+        if make:
+            ctk.CTkLabel(popup, text=vehicle, font=FONTS["small"],
+                         text_color=COLORS["text_muted"]).pack(pady=(0, 8))
+
+        scroll = ctk.CTkScrollableFrame(popup, fg_color="transparent")
+        scroll.pack(fill="both", expand=True, padx=16, pady=(0, 8))
+
+        if tips:
+            # Causes
+            ctk.CTkLabel(scroll, text=t("dtc_help_causes"), font=FONTS["body_bold"],
+                         text_color=COLORS["warning"]).pack(anchor="w", pady=(8, 4))
+            causes = tips["causes"].get(lang, tips["causes"].get("en", []))
+            for cause in causes:
+                ctk.CTkLabel(scroll, text=f"  • {cause}", font=FONTS["body"],
+                             text_color=COLORS["text_primary"]).pack(anchor="w", pady=1)
+
+            # Quick check
+            ctk.CTkLabel(scroll, text=t("dtc_help_check"), font=FONTS["body_bold"],
+                         text_color=COLORS["success"]).pack(anchor="w", pady=(12, 4))
+            check_text = tips["quick_check"].get(lang, tips["quick_check"].get("en", ""))
+            ctk.CTkLabel(scroll, text=check_text, font=FONTS["body"],
+                         text_color=COLORS["text_primary"], wraplength=480,
+                         justify="left").pack(anchor="w", pady=(0, 4))
+
+            # Difficulty
+            diff = tips.get("difficulty", 2)
+            diff_labels = {1: t("dtc_help_diy_easy"), 2: t("dtc_help_diy_medium"), 3: t("dtc_help_mechanic")}
+            diff_colors = {1: COLORS["success"], 2: COLORS["warning"], 3: COLORS["danger"]}
+            ctk.CTkLabel(scroll, text=f"{t('dtc_help_difficulty')}: {diff_labels.get(diff, '?')}",
+                         font=FONTS["body_bold"], text_color=diff_colors.get(diff, COLORS["text_muted"])
+                         ).pack(anchor="w", pady=(8, 4))
+        else:
+            ctk.CTkLabel(scroll, text=t("dtc_help_no_tips"), font=FONTS["body"],
+                         text_color=COLORS["text_muted"]).pack(anchor="w", pady=(8, 4))
+
+        # Links section
+        ctk.CTkFrame(scroll, fg_color=COLORS["border"], height=1).pack(fill="x", pady=(12, 8))
+        ctk.CTkLabel(scroll, text=t("dtc_help_links"), font=FONTS["body_bold"],
+                     text_color=COLORS["accent"]).pack(anchor="w", pady=(0, 8))
+
+        search_query = f"{dtc_code} {vehicle}"
+        repair_word = "réparation" if lang == "fr" else "repair"
+
+        links = [
+            (t("dtc_help_google"), f"https://www.google.com/search?q={dtc_code}+{vehicle}+{repair_word}"),
+            (t("dtc_help_youtube"), f"https://www.youtube.com/results?search_query={dtc_code}+{vehicle}+{repair_word}"),
+            (t("dtc_help_obd_codes"), f"https://www.obd-codes.com/{dtc_code.lower()}"),
+        ]
+
+        forum_url = get_forum_url(make)
+        if forum_url:
+            links.append((t("dtc_help_forum", make=make), f"{forum_url}search?q={dtc_code}"))
+
+        for label, url in links:
+            btn = ctk.CTkButton(
+                scroll, text=f"  {label}", font=FONTS["body"],
+                fg_color=COLORS["bg_card"], hover_color=COLORS["bg_card_hover"],
+                text_color=COLORS["accent"], anchor="w", height=32,
+                command=lambda u=url: webbrowser.open(u),
+            )
+            btn.pack(fill="x", pady=2)
+
+        ctk.CTkButton(popup, text=t("dialog_close"), width=100,
+                      command=popup.destroy).pack(pady=(4, 12))
+
     def _on_lang_change(self, lang=None):
-        """Update text on language change."""
-        self.title_label.configure(text=t("dtc_title"))
-        self.count_label.configure(text=t("dtc_found_zero"))
+        """Rebuild UI on language change."""
+        for widget in self.winfo_children():
+            widget.destroy()
+        self._setup_ui()

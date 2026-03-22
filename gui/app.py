@@ -47,8 +47,8 @@ class OBDApp(ctk.CTk):
         if os.path.exists(logo_path):
             try:
                 logo_img = ctk.CTkImage(light_image=Image.open(logo_path), dark_image=Image.open(logo_path), size=(160, 44))
-                logo_label = ctk.CTkLabel(self.sidebar, image=logo_img, text="", anchor="center")
-                logo_label.pack(pady=(20, 5), fill="x", expand=False, padx=0)
+                logo_label = ctk.CTkLabel(self.sidebar, image=logo_img, text="")
+                logo_label.pack(pady=(20, 5))
             except Exception:
                 # Fallback to text logo if image loading fails
                 app_header = ctk.CTkLabel(

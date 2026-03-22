@@ -105,11 +105,15 @@ jobs:
 
             ### Features
             - Auto vehicle detection via VIN (39 manufacturers)
-            - Real-time dashboard with gauges
-            - 70 OBD-II PIDs monitoring
-            - DTC read/clear/export with safety guards
+            - Real-time dashboard with gauges + live graphs
+            - 70 OBD-II PIDs monitoring with CSV recording
+            - 7,564 DTC codes with repair tips & multi-source help
+            - DTC read/clear/export with 5-layer safety guards
+            - Mode 06 monitor tests (35 MIDs) for emissions check
+            - 3.3M+ manufacturer-specific diagnostic operations
+            - 90 vehicle ECU profiles with CAN addresses
             - Extended ECU scan (230 DIDs)
-            - Bilingual FR/EN interface
+            - Bilingual FR/EN interface (persisted)
             - Demo mode (`--demo`)
 
             ### Requirements

@@ -94,3 +94,10 @@ DTC_SEARCH_URL = "https://www.google.com/search?q={code}+{vehicle}+diagnostic"
 LIVE_DATA_REFRESH_MS = 500
 DASHBOARD_REFRESH_MS = 1000
 CONNECTION_CHECK_MS = 3000
+
+# Live graphs
+GRAPH_HISTORY_SAMPLES = 60  # Number of samples to display in graphs
+
+# CSV recording
+CSV_DIR = DATA_DIR / "recordings"
+CSV_DIR.mkdir(parents=True, exist_ok=True)

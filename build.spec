@@ -12,6 +12,7 @@ a = Analysis(
     datas=[
         ('assets', 'assets'),
         ('data/dtc_descriptions.py', 'data'),
+        ('data/dtc_repair_tips.py', 'data'),
         ('data/__init__.py', 'data'),
         ('data/bricarobd_db_part_*', 'data'),
         ('i18n.py', '.'),

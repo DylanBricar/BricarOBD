@@ -1,10 +1,14 @@
 """Dashboard frame with live OBD data display."""
 
+import csv
 import customtkinter as ctk
 import threading
+from collections import deque
+from datetime import datetime
+from pathlib import Path
 
-from gui.theme import COLORS, FONTS, GaugeWidget, StatusCard, _bind_scroll_recursive
-from config import DASHBOARD_REFRESH_MS
+from gui.theme import COLORS, FONTS, GaugeWidget, GraphWidget, StatusCard, _bind_scroll_recursive
+from config import DASHBOARD_REFRESH_MS, GRAPH_HISTORY_SAMPLES, CSV_DIR
 from i18n import t, on_lang_change
 
 
@@ -23,7 +27,11 @@ class DashboardFrame(ctk.CTkFrame):
         self.monitoring = False
         self.update_id = None
         self._update_thread = None
-        self.pack(fill="both", expand=True, padx=20, pady=20)
+        self._csv_recording = False
+        self._csv_file = None
+        self._csv_writer = None
+        self._csv_lock = threading.Lock()
+        self.pack(fill="both", expand=True)
 
         # Register language change callback
         on_lang_change(self._on_lang_change)
@@ -33,7 +41,7 @@ class DashboardFrame(ctk.CTkFrame):
     def _setup_ui(self):
         """Setup scrollable container."""
         self.scroll_container = ctk.CTkScrollableFrame(self, fg_color="transparent")
-        self.scroll_container.pack(fill="both", expand=True, padx=16, pady=16)
+        self.scroll_container.pack(fill="both", expand=True)
         self._build_content()
         # Fix macOS trackpad scroll: propagate scroll events from all children
         self.after(500, lambda: _bind_scroll_recursive(self.scroll_container))
@@ -46,14 +54,14 @@ class DashboardFrame(ctk.CTkFrame):
             c, text=t("dash_title"), font=FONTS["heading"],
             text_color=COLORS["text_primary"]
         )
-        self.title_label.pack(anchor="w", pady=(0, 20))
+        self.title_label.pack(anchor="w", padx=16, pady=(0, 4))
 
         self.help_label = ctk.CTkLabel(c, text=t("dash_help"), font=FONTS["small"],
                      text_color=COLORS["text_muted"])
-        self.help_label.pack(anchor="w", pady=(0, 12))
+        self.help_label.pack(anchor="w", padx=16, pady=(0, 12))
 
         button_frame = ctk.CTkFrame(c, fg_color="transparent")
-        button_frame.pack(fill="x", pady=(0, 12))
+        button_frame.pack(fill="x", padx=16, pady=(0, 12))
 
         self.monitor_btn = ctk.CTkButton(
             button_frame, text=t("dash_start"), width=140,
@@ -62,8 +70,21 @@ class DashboardFrame(ctk.CTkFrame):
         )
         self.monitor_btn.pack(side="left")
 
+        self.csv_btn = ctk.CTkButton(
+            button_frame, text=t("csv_record"), width=140,
+            command=self._toggle_csv_recording,
+            fg_color=COLORS["accent"], hover_color=COLORS["accent_hover"],
+        )
+        self.csv_btn.pack(side="left", padx=(12, 0))
+
+        self.csv_status = ctk.CTkLabel(
+            button_frame, text="", font=FONTS["small"],
+            text_color=COLORS["text_muted"]
+        )
+        self.csv_status.pack(side="left", padx=(8, 0))
+
         gauge_row = ctk.CTkFrame(c, fg_color="transparent")
-        gauge_row.pack(fill="x", pady=(0, 12))
+        gauge_row.pack(fill="x", padx=16, pady=(0, 8))
 
         self.rpm_gauge = GaugeWidget(
             gauge_row, t("dash_rpm"), "RPM", 0, 8000, warning_threshold=5500,
@@ -88,6 +109,42 @@ class DashboardFrame(ctk.CTkFrame):
             danger_threshold=95, size=140
         )
         self.load_gauge.pack(side="left")
+
+        # Live graphs
+        graph_row = ctk.CTkFrame(c, fg_color="transparent")
+        graph_row.pack(fill="x", padx=16, pady=(0, 8))
+
+        self.rpm_graph = GraphWidget(
+            graph_row, t("graph_rpm"), "RPM", 0, 8000,
+            color=COLORS["success"], width=320, height=100,
+            max_samples=GRAPH_HISTORY_SAMPLES,
+            warning_threshold=5500, danger_threshold=7000
+        )
+        self.rpm_graph.pack(side="left", padx=(0, 6))
+
+        self.speed_graph = GraphWidget(
+            graph_row, t("graph_speed"), "km/h", 0, 250,
+            color=COLORS["accent"], width=320, height=100,
+            max_samples=GRAPH_HISTORY_SAMPLES,
+            warning_threshold=130, danger_threshold=180
+        )
+        self.speed_graph.pack(side="left", padx=(0, 6))
+
+        self.temp_graph = GraphWidget(
+            graph_row, t("graph_temp"), "°C", -40, 130,
+            color=COLORS["success"], width=320, height=100,
+            max_samples=GRAPH_HISTORY_SAMPLES,
+            warning_threshold=100, danger_threshold=115
+        )
+        self.temp_graph.pack(side="left", padx=(0, 6))
+
+        self.load_graph = GraphWidget(
+            graph_row, t("graph_load"), "%", 0, 100,
+            color="#8B5CF6", width=320, height=100,
+            max_samples=GRAPH_HISTORY_SAMPLES,
+            warning_threshold=80, danger_threshold=95
+        )
+        self.load_graph.pack(side="left")
 
         self.status_title_label = ctk.CTkLabel(
             c, text=t("dash_parameters"), font=FONTS["small"],
@@ -202,11 +259,19 @@ class DashboardFrame(ctk.CTkFrame):
             self.after_cancel(self.update_id)
             self.update_id = None
 
-        # Reset all gauges
-        self.rpm_gauge.set_value(0)
-        self.speed_gauge.set_value(0)
-        self.temp_gauge.set_value(0)
-        self.load_gauge.set_value(0)
+        # Reset all gauges and graphs
+        self.rpm_gauge.reset()
+        self.speed_gauge.reset()
+        self.temp_gauge.reset()
+        self.load_gauge.reset()
+        self.rpm_graph.reset()
+        self.speed_graph.reset()
+        self.temp_graph.reset()
+        self.load_graph.reset()
+
+        # Stop CSV if recording
+        if self._csv_recording:
+            self._stop_csv()
 
         # Reset all cards
         self.throttle_card.set_value("--")
@@ -241,19 +306,19 @@ class DashboardFrame(ctk.CTkFrame):
         try:
             rpm_val, _ = self.app.obd_reader.read_pid(0x0C)
             if rpm_val is not None:
-                self.after(0, lambda v=rpm_val: self.rpm_gauge.set_value(v))
+                self.after(0, lambda v=rpm_val: (self.rpm_gauge.set_value(v), self.rpm_graph.add_value(v)))
 
             speed_val, _ = self.app.obd_reader.read_pid(0x0D)
             if speed_val is not None:
-                self.after(0, lambda v=speed_val: self.speed_gauge.set_value(v))
+                self.after(0, lambda v=speed_val: (self.speed_gauge.set_value(v), self.speed_graph.add_value(v)))
 
             coolant_val, _ = self.app.obd_reader.read_pid(0x05)
             if coolant_val is not None:
-                self.after(0, lambda v=coolant_val: self.temp_gauge.set_value(v))
+                self.after(0, lambda v=coolant_val: (self.temp_gauge.set_value(v), self.temp_graph.add_value(v)))
 
             load_val, _ = self.app.obd_reader.read_pid(0x04)
             if load_val is not None:
-                self.after(0, lambda v=load_val: self.load_gauge.set_value(v))
+                self.after(0, lambda v=load_val: (self.load_gauge.set_value(v), self.load_graph.add_value(v)))
 
             throttle_val, _ = self.app.obd_reader.read_pid(0x11)
             if throttle_val is not None:
@@ -279,8 +344,55 @@ class DashboardFrame(ctk.CTkFrame):
             if timing_val is not None:
                 self.after(0, lambda v=timing_val: self.timing_card.set_value(f"{v:.1f}"))
 
+            # CSV recording (thread-safe)
+            with self._csv_lock:
+                if self._csv_recording and self._csv_writer:
+                    row = [datetime.now().isoformat()]
+                    for val in [rpm_val, speed_val, coolant_val, load_val,
+                                throttle_val, intake_val, maf_val, fuel_val,
+                                voltage_val, timing_val]:
+                        row.append(f"{val:.2f}" if val is not None else "")
+                    self._csv_writer.writerow(row)
+                    self._csv_file.flush()
+
         except Exception:
             pass
+
+    def _toggle_csv_recording(self):
+        """Start or stop CSV recording."""
+        if self._csv_recording:
+            self._stop_csv()
+        else:
+            self._start_csv()
+
+    def _start_csv(self):
+        """Start recording to CSV file."""
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        filepath = CSV_DIR / f"recording_{timestamp}.csv"
+        self._csv_file = open(filepath, "w", newline="", encoding="utf-8")
+        self._csv_writer = csv.writer(self._csv_file)
+        self._csv_writer.writerow([
+            "timestamp", "rpm", "speed_kmh", "coolant_c", "load_pct",
+            "throttle_pct", "intake_c", "maf_gs", "fuel_pct",
+            "voltage_v", "timing_deg"
+        ])
+        self._csv_recording = True
+        self._csv_filepath = filepath
+        self.csv_btn.configure(text=t("csv_stop"), fg_color=COLORS["danger"])
+        self.csv_status.configure(text=t("csv_recording"), text_color=COLORS["danger"])
+
+    def _stop_csv(self):
+        """Stop CSV recording and close file."""
+        with self._csv_lock:
+            self._csv_recording = False
+            if self._csv_file:
+                self._csv_file.flush()
+                self._csv_file.close()
+                self._csv_file = None
+                self._csv_writer = None
+        self.csv_btn.configure(text=t("csv_record"), fg_color=COLORS["accent"])
+        filename = self._csv_filepath.name if hasattr(self, '_csv_filepath') else ""
+        self.csv_status.configure(text=t("csv_saved", file=filename), text_color=COLORS["success"])
 
     def update_vehicle_info(self):
         """Read VIN and vehicle info once."""
@@ -320,7 +432,7 @@ class DashboardFrame(ctk.CTkFrame):
                 if elm_v:
                     self.after(0, lambda v=elm_v: self.elm_voltage_label.configure(
                         text=f"{t('dash_elm_voltage')}: {v.strip()}"))
-            except: pass
+            except Exception: pass
 
             # Fuel status
             FUEL_STATUS_NAMES = {
@@ -333,13 +445,23 @@ class DashboardFrame(ctk.CTkFrame):
                 self.after(0, lambda v=fs_name: self.fuel_status_label.configure(
                     text=f"{t('dash_fuel_status')}: {v}"))
 
-            # Monitor readiness
+            # Monitor readiness + MIL
             status_val, _ = self.app.obd_reader.read_pid(0x01)
             if status_val is not None:
                 mil_on = bool(int(status_val) & 0x80) if isinstance(status_val, (int, float)) else False
                 dtc_count = int(status_val) & 0x7F if isinstance(status_val, (int, float)) else 0
                 self.after(0, lambda m=mil_on, d=dtc_count: self.monitors_status_label.configure(
                     text=f"{t('dash_monitors')}: {'MIL ON' if m else 'MIL OFF'} | {d} DTC(s)"))
+
+                # Update MIL indicator label
+                if mil_on:
+                    mil_text = f"{t('dash_mil')}: ⚠ ON — {dtc_count} DTC(s)"
+                    mil_color = COLORS["danger"]
+                else:
+                    mil_text = f"{t('dash_mil')}: ✓ OFF"
+                    mil_color = COLORS.get("success", "#2ecc71")
+                self.after(0, lambda txt=mil_text, col=mil_color: self.mil_label.configure(
+                    text=txt, text_color=col))
 
             def update_ui():
                 if vin_val:

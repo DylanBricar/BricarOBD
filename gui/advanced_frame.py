@@ -68,7 +68,7 @@ class AdvancedFrame(ctk.CTkFrame):
         self.tab_verified.pack(side="left", padx=(0, 4))
 
         self.tab_unified = ctk.CTkButton(
-            tab_frame, text="Base complète (0 ops)", width=240, height=30,
+            tab_frame, text="Full database (0 ops)", width=240, height=30,
             font=FONTS["body_bold"],
             fg_color=COLORS["bg_card"], hover_color=COLORS["bg_card_hover"],
             text_color=COLORS["text_secondary"],
@@ -223,8 +223,8 @@ class AdvancedFrame(ctk.CTkFrame):
         if not make:
             self.vehicle_label.configure(text=t("adv_no_vehicle"))
             self._show_empty(
-                "Connectez-vous d'abord pour détecter le véhicule.\n"
-                "Connect first to detect the vehicle."
+                "Connect first to detect the vehicle.\n"
+                "Connectez-vous d'abord pour détecter le véhicule."
             )
             return
 
@@ -233,29 +233,27 @@ class AdvancedFrame(ctk.CTkFrame):
 
         if not udb.is_available():
             self._show_empty(
-                "Base unifiée non trouvée (data/unified_database.json).\n"
-                "Unified database not found."
+                "Unified database not found (data/bricarobd_database.zip)"
             )
             return
 
         if not udb.load():
-            self._show_empty("Failed to load unified database.")
+            self._show_empty("Failed to load unified database")
             return
 
         manufacturer = make_to_manufacturer(make)
         total = udb.count_for_manufacturer(manufacturer)
-        self.tab_unified.configure(text=f"Base complète ({total:,} ops)")
+        self.tab_unified.configure(text=f"Full database ({total:,} ops)")
 
         if total == 0:
-            self.vehicle_label.configure(text=f"{make}: aucune donnée")
+            self.vehicle_label.configure(text=f"{make}: no data")
             self._show_empty(
-                f"Aucune opération trouvée pour {make} dans la base unifiée.\n"
-                f"No operations found for {make} in the unified database."
+                f"No operations found for {make} in the unified database"
             )
             return
 
         self.vehicle_label.configure(
-            text=f"{make} ({manufacturer}): {total:,} opérations"
+            text=f"{make} ({manufacturer}): {total:,} operations"
         )
 
         # Show ECU groups
@@ -315,7 +313,7 @@ class AdvancedFrame(ctk.CTkFrame):
         self.vehicle_label.configure(text=f"{ecu_name} ({len(group_ops)} ops)")
 
         back = ctk.CTkButton(
-            self.ops_container, text="< Retour / Back", width=120, height=28,
+            self.ops_container, text="< Back", width=120, height=28,
             font=FONTS["small_bold"],
             fg_color=COLORS["bg_card"], hover_color=COLORS["bg_card_hover"],
             command=lambda: self._show_unified_ops(),
@@ -365,7 +363,7 @@ class AdvancedFrame(ctk.CTkFrame):
         from obd_core.unified_db import get_unified_db, make_to_manufacturer
         udb = get_unified_db()
         if not udb.load():
-            self._show_empty("Unified database not available.")
+            self._show_empty("Unified database not available")
             return
 
         manufacturer = make_to_manufacturer(make)
@@ -386,7 +384,7 @@ class AdvancedFrame(ctk.CTkFrame):
         self.vehicle_label.configure(text=f"Search ({make}): '{query}' — {len(results)} results")
 
         if not results:
-            self._show_empty(f"No results for '{query}' ({make})")
+            self._show_empty(f"No results for '{query}'")
             return
 
         for op in results:
@@ -434,7 +432,7 @@ class AdvancedFrame(ctk.CTkFrame):
         if len(op.get("sentbytes", "")) >= 4:
             service = op["sentbytes"][:2].upper()
             # Block flash programming services from even having buttons
-            if service not in ("34", "35", "36", "37", "3D", "28", "11"):
+            if service not in ("34", "35", "36", "37", "3D", "28", "11", "27"):
                 is_read = service in ("22", "21", "19")
                 if is_read:
                     read_btn = ctk.CTkButton(
@@ -466,7 +464,7 @@ class AdvancedFrame(ctk.CTkFrame):
 
         # SAFETY: Block flash programming services unconditionally
         service = sentbytes[:2].upper()
-        BLOCKED_SERVICES = {"34", "35", "36", "37", "3D", "28", "11"}
+        BLOCKED_SERVICES = {"34", "35", "36", "37", "3D", "28", "11", "27"}
         if service in BLOCKED_SERVICES:
             return
 
@@ -651,11 +649,6 @@ class AdvancedFrame(ctk.CTkFrame):
             command=lambda o=op, p=param_entries, s=status_label: self._on_execute(o, p, s),
         ).pack(side="right")
 
-        # Source link
-        source = op.get("source", "")
-        if source:
-            ctk.CTkLabel(bottom, text=f"Source: {source[:60]}", font=FONTS["small"],
-                         text_color=COLORS["text_muted"]).pack(side="left")
 
     def _create_risk_badge(self, parent, risk: str):
         risk_colors = {
@@ -728,10 +721,10 @@ class AdvancedFrame(ctk.CTkFrame):
                      wraplength=600).pack(pady=40)
 
     def _on_lang_change(self, lang=None):
-        self.warning_title.configure(text=t("adv_warning_title"))
-        self.warning_text.configure(text=t("adv_warning_text"))
-        if self._tab_var.get() == "verified":
-            self._show_verified_ops()
+        """Rebuild UI on language change."""
+        for widget in self.winfo_children():
+            widget.destroy()
+        self._setup_ui()
 
     def on_frame_shown(self):
         if self._tab_var.get() == "verified":

@@ -29,8 +29,7 @@ class SafetyGuard:
         self.last_clear_time = 0
 
     def classify_operation(self, service_id: int) -> OperationRisk:
-        """
-        Classify operation risk level.
+        """Classify operation risk level.
 
         Args:
             service_id: UDS service ID
@@ -48,8 +47,7 @@ class SafetyGuard:
             return OperationRisk.DANGEROUS
 
     def is_operation_allowed(self, service_id: int) -> tuple[bool, str]:
-        """
-        Check if operation is allowed.
+        """Check if operation is allowed.
 
         Args:
             service_id: UDS service ID
@@ -69,8 +67,7 @@ class SafetyGuard:
             return False, f"Service 0x{service_id:02X} is not in the safety allowlist"
 
     def validate_dtc_clear(self) -> tuple[bool, str]:
-        """
-        Validate DTC clear operation.
+        """Validate DTC clear operation.
 
         Returns:
             Tuple of (allowed: bool, reason: str)
@@ -89,8 +86,7 @@ class SafetyGuard:
         self.last_clear_time = time.time()
 
     def log_operation(self, operation: str, service_id: int, data: str, result: str) -> None:
-        """
-        Log an operation.
+        """Log an operation.
 
         Args:
             operation: Operation name
@@ -111,8 +107,7 @@ class SafetyGuard:
             self.operation_log = self.operation_log[-5000:]
 
     def get_operation_log(self) -> list:
-        """
-        Get operation log.
+        """Get operation log.
 
         Returns:
             List of logged operations
@@ -120,8 +115,7 @@ class SafetyGuard:
         return self.operation_log
 
     def get_risk_description(self, service_id: int) -> str:
-        """
-        Get human-readable risk description.
+        """Get human-readable risk description.
 
         Args:
             service_id: UDS service ID

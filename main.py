@@ -107,12 +107,16 @@ def main():
     # Handle window close
     def on_closing():
         logger.info("Shutting down...")
-        # Stop any active monitoring
+        # Stop any active monitoring and CSV recording
         try:
             if hasattr(dashboard_frame, 'stop_monitoring'):
                 dashboard_frame.stop_monitoring()
+            if hasattr(dashboard_frame, '_stop_csv') and dashboard_frame._csv_recording:
+                dashboard_frame._stop_csv()
             if hasattr(live_data_frame, 'stop_monitoring'):
                 live_data_frame.stop_monitoring()
+            if hasattr(live_data_frame, '_stop_csv') and live_data_frame._csv_recording:
+                live_data_frame._stop_csv()
         except Exception:
             pass
 

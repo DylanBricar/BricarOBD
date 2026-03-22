@@ -142,12 +142,18 @@ class GaugeWidget(ctk.CTkCanvas):
         self.warning_threshold = warning_threshold
         self.danger_threshold = danger_threshold
         self.size = size
-        self.current_value = min_val
+        self.current_value = None
         self._draw_gauge()
 
     def set_value(self, value):
         """Update gauge value."""
         self.current_value = max(self.min_val, min(self.max_val, value))
+        self.delete("all")
+        self._draw_gauge()
+
+    def reset(self):
+        """Reset gauge to idle state (no fill, '--' display)."""
+        self.current_value = None
         self.delete("all")
         self._draw_gauge()
 
@@ -165,22 +171,23 @@ class GaugeWidget(ctk.CTkCanvas):
         arc_w = 12
         start = 225
         sweep = 270
-        pct = (self.current_value - self.min_val) / max(self.max_val - self.min_val, 1)
-        fill_sweep = sweep * pct
 
         # Track arc
         self.create_arc(cx - r, cx - r, cx + r, cx + r,
                         start=start, extent=-sweep,
                         outline=COLORS["gauge_track"], width=arc_w, style="arc")
 
-        # Fill arc
-        if fill_sweep > 0:
-            self.create_arc(cx - r, cx - r, cx + r, cx + r,
-                            start=start, extent=-fill_sweep,
-                            outline=self._get_color(), width=arc_w, style="arc")
+        # Fill arc (only when value is set)
+        if self.current_value is not None:
+            pct = (self.current_value - self.min_val) / max(self.max_val - self.min_val, 1)
+            fill_sweep = sweep * pct
+            if fill_sweep > 0:
+                self.create_arc(cx - r, cx - r, cx + r, cx + r,
+                                start=start, extent=-fill_sweep,
+                                outline=self._get_color(), width=arc_w, style="arc")
 
         # Value text
-        val_text = f"{int(self.current_value)}"
+        val_text = f"{int(self.current_value)}" if self.current_value is not None else "--"
         self.create_text(cx, cx - 4, text=val_text,
                          font=FONTS["mono_large"], fill=COLORS["text_primary"])
 
@@ -193,23 +200,184 @@ class GaugeWidget(ctk.CTkCanvas):
                          font=FONTS["small"], fill=COLORS["text_secondary"])
 
 
+# ── Line Graph Widget ─────────────────────────────────────────
+class GraphWidget(ctk.CTkCanvas):
+    """Polished line graph with gradient fill, threshold colors, and current value badge."""
+
+    def __init__(self, parent, label="", unit="", min_val=0, max_val=100,
+                 color=None, width=280, height=90, max_samples=60,
+                 warning_threshold=None, danger_threshold=None):
+        super().__init__(parent, width=width, height=height,
+                         bg=COLORS["bg_card"], highlightthickness=0)
+        self.label = label
+        self.unit = unit
+        self.min_val = min_val
+        self.max_val = max_val
+        self.base_color = color or COLORS["success"]
+        self.warning_threshold = warning_threshold
+        self.danger_threshold = danger_threshold
+        self.w = width
+        self.h = height
+        self.max_samples = max_samples
+        from collections import deque
+        self.data = deque(maxlen=max_samples)
+        self._draw()
+
+    def add_value(self, value):
+        """Append a value and redraw."""
+        self.data.append(value)
+        self.delete("all")
+        self._draw()
+
+    def reset(self):
+        """Clear all data."""
+        self.data.clear()
+        self.delete("all")
+        self._draw()
+
+    def _get_color(self, value=None):
+        """Get color based on current value and thresholds."""
+        if value is None:
+            return self.base_color
+        if self.danger_threshold is not None and value >= self.danger_threshold:
+            return COLORS["danger"]
+        if self.warning_threshold is not None and value >= self.warning_threshold:
+            return COLORS["warning"]
+        return self.base_color
+
+    def _hex_to_rgb(self, hex_color):
+        h = hex_color.lstrip('#')
+        return tuple(int(h[i:i+2], 16) for i in (0, 2, 4))
+
+    def _rgb_to_hex(self, r, g, b):
+        return f"#{int(r):02x}{int(g):02x}{int(b):02x}"
+
+    def _draw(self):
+        w, h = self.w, self.h
+        pad_l, pad_r, pad_t, pad_b = 36, 8, 20, 16
+        gw = w - pad_l - pad_r
+        gh = h - pad_t - pad_b
+        bottom_y = pad_t + gh
+
+        # Background rounded rect
+        self.create_rectangle(0, 0, w, h, fill=COLORS["bg_card"], outline="")
+
+        # Current value for color
+        cur_val = self.data[-1] if self.data else None
+        line_color = self._get_color(cur_val)
+
+        # Label (left) + current value badge (right)
+        self.create_text(pad_l, 10, text=self.label, anchor="w",
+                         font=FONTS["small_bold"], fill=COLORS["text_secondary"])
+        if cur_val is not None:
+            val_text = f"{cur_val:.0f} {self.unit}"
+            self.create_text(w - pad_r, 10, text=val_text, anchor="e",
+                             font=FONTS["small_bold"], fill=line_color)
+        else:
+            self.create_text(w - pad_r, 10, text=f"-- {self.unit}", anchor="e",
+                             font=FONTS["small"], fill=COLORS["text_muted"])
+
+        # Grid lines (4 horizontal)
+        val_range = max(self.max_val - self.min_val, 1)
+        for i in range(4):
+            y = pad_t + int(gh * i / 3)
+            self.create_line(pad_l, y, pad_l + gw, y,
+                             fill=COLORS["border"], dash=(1, 3))
+            val = self.max_val - (self.max_val - self.min_val) * i / 3
+            self.create_text(pad_l - 4, y, text=f"{int(val)}", anchor="e",
+                             font=("Helvetica", 7), fill=COLORS["text_muted"])
+
+        # Bottom axis
+        self.create_line(pad_l, bottom_y, pad_l + gw, bottom_y,
+                         fill=COLORS["border"])
+        # Left axis
+        self.create_line(pad_l, pad_t, pad_l, bottom_y,
+                         fill=COLORS["border"])
+
+        if len(self.data) < 2:
+            # Empty state
+            self.create_text(pad_l + gw // 2, pad_t + gh // 2, text="--",
+                             font=FONTS["mono"], fill=COLORS["text_muted"])
+            return
+
+        # Compute points
+        points = []
+        for i, val in enumerate(self.data):
+            x = pad_l + int(gw * i / (self.max_samples - 1))
+            clamped = max(self.min_val, min(self.max_val, val))
+            y = pad_t + gh - int(gh * (clamped - self.min_val) / val_range)
+            points.append((x, y))
+
+        # Gradient fill under curve (multiple horizontal strips)
+        line_rgb = self._hex_to_rgb(line_color)
+        bg_rgb = self._hex_to_rgb(COLORS["bg_card"])
+        strips = 8
+        for s in range(strips):
+            alpha = 0.25 * (1 - s / strips)  # Fade from 25% opacity to 0%
+            strip_color = self._rgb_to_hex(
+                bg_rgb[0] + (line_rgb[0] - bg_rgb[0]) * alpha,
+                bg_rgb[1] + (line_rgb[1] - bg_rgb[1]) * alpha,
+                bg_rgb[2] + (line_rgb[2] - bg_rgb[2]) * alpha,
+            )
+            strip_top = pad_t + int(gh * s / strips)
+            strip_bot = pad_t + int(gh * (s + 1) / strips)
+
+            # Build polygon for this strip (clipped to curve)
+            poly = []
+            for x, y in points:
+                cy = max(strip_top, min(strip_bot, y))
+                poly.append(x)
+                poly.append(cy)
+            # Close polygon at bottom of strip
+            poly.append(points[-1][0])
+            poly.append(strip_bot)
+            poly.append(points[0][0])
+            poly.append(strip_bot)
+
+            if len(poly) >= 6:
+                self.create_polygon(*poly, fill=strip_color, outline="")
+
+        # Draw main line
+        flat_pts = []
+        for x, y in points:
+            flat_pts.extend([x, y])
+        self.create_line(*flat_pts, fill=line_color, width=2, smooth=True)
+
+        # Current value dot
+        last_x, last_y = points[-1]
+        dot_r = 4
+        self.create_oval(last_x - dot_r, last_y - dot_r,
+                         last_x + dot_r, last_y + dot_r,
+                         fill=line_color, outline=COLORS["bg_card"], width=2)
+
+        # Min/Max labels at bottom
+        if len(self.data) > 5:
+            min_v = min(self.data)
+            max_v = max(self.data)
+            self.create_text(pad_l, h - 3, text=f"min:{min_v:.0f}", anchor="w",
+                             font=("Helvetica", 7), fill=COLORS["text_muted"])
+            self.create_text(pad_l + gw, h - 3, text=f"max:{max_v:.0f}", anchor="e",
+                             font=("Helvetica", 7), fill=COLORS["text_muted"])
+
+
 # ── Data Card ──────────────────────────────────────────────────
 class DataCard(ctk.CTkFrame):
     """Minimal data card with colored left accent bar."""
 
     def __init__(self, parent, label="", unit="", accent_color=None, **kwargs):
         super().__init__(parent, fg_color=COLORS["bg_card"],
-                         corner_radius=10, **kwargs)
+                         corner_radius=8, height=56, **kwargs)
+        self.pack_propagate(False)
         self.accent_color = accent_color or COLORS["accent"]
 
         # Left accent bar
         accent_bar = ctk.CTkFrame(self, fg_color=self.accent_color,
                                    width=3, corner_radius=2)
-        accent_bar.pack(side="left", fill="y", padx=(0, 0), pady=8)
+        accent_bar.pack(side="left", fill="y", padx=(0, 0), pady=6)
 
         # Content
         content = ctk.CTkFrame(self, fg_color="transparent")
-        content.pack(side="left", fill="both", expand=True, padx=12, pady=8)
+        content.pack(side="left", fill="both", expand=True, padx=10, pady=6)
 
         # Label
         ctk.CTkLabel(content, text=label, font=FONTS["small"],
@@ -217,7 +385,7 @@ class DataCard(ctk.CTkFrame):
 
         # Value row
         val_frame = ctk.CTkFrame(content, fg_color="transparent")
-        val_frame.pack(anchor="w", pady=(2, 0))
+        val_frame.pack(anchor="w", pady=(1, 0))
 
         self.value_label = ctk.CTkLabel(val_frame, text="--",
                                          font=FONTS["mono"],

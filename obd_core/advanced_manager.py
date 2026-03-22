@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 
 
 class AdvancedManager:
-    """Executes advanced diagnostic operations via UDS.
+    """Execute advanced diagnostic operations via UDS.
 
     Unlike the normal UDS client which blocks services 0x2E/0x2F/0x31/0x27,
     this manager can send those commands — but ONLY for operations that are
@@ -194,15 +194,11 @@ class AdvancedManager:
                 logger.info("Security already unlocked (zero seed)")
                 return {"success": True, "message": "Already unlocked"}
 
-            # Non-zero seed: we need the manufacturer-specific key algorithm
-            # Try sending key = seed (works on some development ECUs)
-            key_cmd = f"2702{seed}"
-            key_response = self._send_raw(key_cmd)
-            if key_response and self._is_positive(key_response.replace(" ", "").replace("\n", ""), 0x67):
-                logger.info("Security unlocked with basic key")
-                return {"success": True, "message": "Unlocked"}
-
-            return {"success": False, "message": f"Seed: {seed} — key algorithm required"}
+            # Non-zero seed: manufacturer-specific key algorithm required.
+            # We do NOT attempt blind key guesses - wrong keys increment
+            # the ECU's failure counter and can trigger a lockout delay.
+            logger.info(f"Security seed received: {seed} — proprietary key required")
+            return {"success": False, "message": f"Seed: {seed} — manufacturer key algorithm required"}
 
         return {"success": False, "message": "Unexpected response"}
 
@@ -292,7 +288,7 @@ class AdvancedManager:
             f"Command executed. Response: {clean}", lang), clean)
 
     def _execute_routine(self, service: int, rid: int, op: dict, params: dict, lang: str) -> dict:
-        """Execute a routine command (Service 0x31 — StartRoutine)."""
+        """Execute a routine command (Service 0x31 - StartRoutine)."""
         # 31 01 [RID_high] [RID_low] [optional_data]
         cmd = f"3101{rid:04X}"
 

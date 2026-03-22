@@ -33,14 +33,14 @@ class ECUInfoFrame(ctk.CTkFrame):
             self, text=t("ecu_title"), font=FONTS["heading"],
             text_color=COLORS["text_primary"]
         )
-        self.title_label.pack(pady=12, padx=16, anchor="w")
+        self.title_label.pack(pady=(0, 4), padx=16, anchor="w")
 
         # Help description
-        ctk.CTkLabel(self, text=t("ecu_help"), font=FONTS["small"], text_color=COLORS["text_muted"]).pack(anchor="w", padx=16, pady=(0, 8))
+        ctk.CTkLabel(self, text=t("ecu_help"), font=FONTS["small"], text_color=COLORS["text_muted"]).pack(anchor="w", padx=16, pady=(0, 12))
 
         # Control panel
         control_frame = ctk.CTkFrame(self, fg_color="transparent")
-        control_frame.pack(pady=8, padx=16, fill="x")
+        control_frame.pack(pady=(0, 12), padx=16, fill="x")
 
         # Scan button
         self.scan_btn = ctk.CTkButton(
@@ -250,8 +250,7 @@ class ECUInfoFrame(ctk.CTkFrame):
         self.status_label.configure(text=message)
 
     def _on_lang_change(self, lang=None):
-        """Update text on language change."""
-        self.title_label.configure(text=t("ecu_title"))
-        self.scan_btn.configure(text=t("ecu_scan"))
-        detected = getattr(self.app, 'detected_make', '')
-        self.vehicle_label.configure(text=f"{t('ecu_profile')}: {detected}" if detected else t("ecu_profile"))
+        """Rebuild UI on language change."""
+        for widget in self.winfo_children():
+            widget.destroy()
+        self._setup_ui()

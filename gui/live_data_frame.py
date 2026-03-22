@@ -1,10 +1,13 @@
 """Real-time PID monitoring frame."""
 
+import csv
 import customtkinter as ctk
 import threading
+from datetime import datetime
+
 from gui.theme import COLORS, FONTS, _bind_scroll_recursive
 from obd_core.pid_definitions import STANDARD_PIDS
-from config import LIVE_DATA_REFRESH_MS
+from config import LIVE_DATA_REFRESH_MS, CSV_DIR
 from i18n import t, on_lang_change
 
 
@@ -30,6 +33,10 @@ class LiveDataFrame(ctk.CTkFrame):
         self._update_running = False
         self.title_label = None
         self.update_id = None
+        self._csv_recording = False
+        self._csv_file = None
+        self._csv_writer = None
+        self._csv_lock = threading.Lock()
 
         self._setup_ui()
         on_lang_change(self._on_lang_change)
@@ -196,41 +203,47 @@ class LiveDataFrame(ctk.CTkFrame):
             row_frame, text=f"0x{pid_code:02X}", font=FONTS["mono"],
             text_color=COLORS["highlight"], width=60, anchor="w"
         )
-        pid_label.pack(side="left", padx=8, pady=8)
+        pid_label.pack(side="left", padx=6, pady=8)
 
         name_label = ctk.CTkLabel(
             row_frame, text=pid_def.name, font=FONTS["body"],
-            text_color=COLORS["text_primary"], width=150, anchor="w"
+            text_color=COLORS["text_primary"], width=170, anchor="w"
         )
-        name_label.pack(side="left", padx=8)
+        name_label.pack(side="left", padx=6)
 
         value_label = ctk.CTkLabel(
             row_frame, text="--", font=FONTS["body_bold"],
-            text_color=COLORS["highlight"], width=100, anchor="w"
+            text_color=COLORS["highlight"], width=80, anchor="e"
         )
-        value_label.pack(side="left", padx=8)
+        value_label.pack(side="left", padx=6)
 
         unit_label = ctk.CTkLabel(
             row_frame, text=pid_def.unit, font=FONTS["small"],
-            text_color=COLORS["text_secondary"], width=60, anchor="w"
+            text_color=COLORS["text_secondary"], width=50, anchor="w"
         )
-        unit_label.pack(side="left", padx=8)
+        unit_label.pack(side="left", padx=6)
 
         min_label = ctk.CTkLabel(
             row_frame, text="--", font=FONTS["small"],
-            text_color=COLORS["text_muted"], width=100, anchor="w"
+            text_color=COLORS["text_muted"], width=80, anchor="e"
         )
-        min_label.pack(side="left", padx=8)
+        min_label.pack(side="left", padx=6)
 
         max_label = ctk.CTkLabel(
             row_frame, text="--", font=FONTS["small"],
-            text_color=COLORS["text_muted"], width=100, anchor="w"
+            text_color=COLORS["text_muted"], width=80, anchor="e"
         )
-        max_label.pack(side="left", padx=8)
+        max_label.pack(side="left", padx=6)
+
+        trend_label = ctk.CTkLabel(
+            row_frame, text="—", font=("", 16),
+            text_color=COLORS["text_muted"], width=60, anchor="center"
+        )
+        trend_label.pack(side="left", padx=6)
 
         progress_bar = ctk.CTkProgressBar(row_frame, width=150)
         progress_bar.set(0.0)
-        progress_bar.pack(side="left", padx=8, pady=8)
+        progress_bar.pack(side="left", padx=6, pady=8)
 
         self.pid_rows[pid_code] = {
             "frame": row_frame,
@@ -238,7 +251,9 @@ class LiveDataFrame(ctk.CTkFrame):
             "unit_label": unit_label,
             "min_label": min_label,
             "max_label": max_label,
-            "progress_bar": progress_bar
+            "trend_label": trend_label,
+            "progress_bar": progress_bar,
+            "prev_value": None,
         }
 
     def _update_pid_row(self, pid_code, value, unit):
@@ -259,6 +274,18 @@ class LiveDataFrame(ctk.CTkFrame):
         row = self.pid_rows[pid_code]
         row["value_label"].configure(text=f"{value:.1f}")
         row["unit_label"].configure(text=unit)
+
+        prev = row.get("prev_value")
+        if prev is not None:
+            diff = value - prev
+            threshold = (pid_def.max_val - pid_def.min_val) * 0.005
+            if diff > threshold:
+                row["trend_label"].configure(text="▲", text_color=COLORS.get("success", "#2ecc71"))
+            elif diff < -threshold:
+                row["trend_label"].configure(text="▼", text_color=COLORS.get("danger", "#e74c3c"))
+            else:
+                row["trend_label"].configure(text="—", text_color=COLORS["text_muted"])
+        row["prev_value"] = value
 
         if pid_code in self.min_max_data:
             data = self.min_max_data[pid_code]
@@ -287,6 +314,7 @@ class LiveDataFrame(ctk.CTkFrame):
         """
         for pid_code, value, unit in updates:
             self._update_pid_row(pid_code, value, unit)
+        self._write_csv_row(updates)
         self._update_status()
 
     def _update_status(self):
@@ -340,12 +368,12 @@ class LiveDataFrame(ctk.CTkFrame):
             self, text=t("live_title"), font=FONTS["heading"],
             text_color=COLORS["text_primary"]
         )
-        self.title_label.pack(anchor="w", padx=16, pady=(16, 8))
+        self.title_label.pack(anchor="w", padx=16, pady=(0, 4))
 
-        ctk.CTkLabel(self, text=t("live_help"), font=FONTS["small"], text_color=COLORS["text_muted"]).pack(anchor="w", padx=16, pady=(0, 8))
+        ctk.CTkLabel(self, text=t("live_help"), font=FONTS["small"], text_color=COLORS["text_muted"]).pack(anchor="w", padx=16, pady=(0, 12))
 
         control_bar = ctk.CTkFrame(self, fg_color="transparent")
-        control_bar.pack(anchor="w", padx=16, pady=8, fill="x")
+        control_bar.pack(anchor="w", padx=16, pady=(0, 12), fill="x")
 
         self.start_stop_btn = ctk.CTkButton(
             control_bar, text=t("live_start"), fg_color=COLORS["success"],
@@ -370,6 +398,19 @@ class LiveDataFrame(ctk.CTkFrame):
             command=self.toggle_pid_selection
         ).pack(side="left", padx=4)
 
+        self.csv_btn = ctk.CTkButton(
+            control_bar, text=t("csv_record"), width=120,
+            fg_color=COLORS["accent"], hover_color=COLORS["accent_hover"],
+            command=self._toggle_csv,
+        )
+        self.csv_btn.pack(side="left", padx=4)
+
+        self.csv_status_label = ctk.CTkLabel(
+            control_bar, text="", font=FONTS["small"],
+            text_color=COLORS["text_muted"],
+        )
+        self.csv_status_label.pack(side="left", padx=4)
+
         self.pid_selection_frame = ctk.CTkFrame(self, fg_color=COLORS["bg_card"])
         self.pid_selection_frame.pack(padx=16, pady=8, fill="x")
         self.pid_selection_frame.pack_forget()
@@ -382,15 +423,23 @@ class LiveDataFrame(ctk.CTkFrame):
         header_frame = ctk.CTkFrame(self, fg_color="transparent")
         header_frame.pack(anchor="w", padx=16, pady=8, fill="x")
 
-        header_texts = [t("live_pid"), t("live_name"), t("live_value"), t("live_unit"), t("live_min"), t("live_max"), t("live_trend")]
-        header_widths = [60, 150, 100, 60, 100, 100, 150]
+        header_defs = [
+            (t("live_pid"),   60,  "w"),
+            (t("live_name"),  170, "w"),
+            (t("live_value"), 80,  "e"),
+            (t("live_unit"),  50,  "w"),
+            (t("live_min"),   80,  "e"),
+            (t("live_max"),   80,  "e"),
+            (t("live_trend"), 60,  "center"),
+            (t("live_level"), 150, "w"),
+        ]
 
-        for text, width in zip(header_texts, header_widths):
+        for text, width, anchor in header_defs:
             label = ctk.CTkLabel(
                 header_frame, text=text, font=FONTS["body_bold"],
-                text_color=COLORS["text_secondary"], width=width, anchor="w"
+                text_color=COLORS["text_secondary"], width=width, anchor=anchor
             )
-            label.pack(side="left", padx=4)
+            label.pack(side="left", padx=6)
 
         self.table_frame = ctk.CTkScrollableFrame(self, fg_color="transparent")
         self.table_frame.pack(fill="both", expand=True, padx=16, pady=8)
@@ -402,11 +451,63 @@ class LiveDataFrame(ctk.CTkFrame):
         )
         self.status_label.pack(anchor="w", padx=16, pady=8)
 
+    def _toggle_csv(self):
+        """Toggle CSV recording."""
+        if self._csv_recording:
+            self._stop_csv()
+        else:
+            self._start_csv()
+
+    def _start_csv(self):
+        """Start CSV recording."""
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        filepath = CSV_DIR / f"live_data_{timestamp}.csv"
+        self._csv_file = open(filepath, "w", newline="", encoding="utf-8")
+        self._csv_writer = csv.writer(self._csv_file)
+        header = ["timestamp"]
+        for pid_code in self.selected_pids:
+            pid_def = STANDARD_PIDS.get(pid_code)
+            name = pid_def.name if pid_def else f"PID_{pid_code:02X}"
+            header.append(name)
+        self._csv_writer.writerow(header)
+        self._csv_recording = True
+        self._csv_filepath = filepath
+        self.csv_btn.configure(text=t("csv_stop"), fg_color=COLORS["danger"])
+        self.csv_status_label.configure(text=t("csv_recording"), text_color=COLORS["danger"])
+
+    def _stop_csv(self):
+        """Stop CSV recording."""
+        with self._csv_lock:
+            self._csv_recording = False
+            if self._csv_file:
+                self._csv_file.flush()
+                self._csv_file.close()
+                self._csv_file = None
+                self._csv_writer = None
+        self.csv_btn.configure(text=t("csv_record"), fg_color=COLORS["accent"])
+        filename = self._csv_filepath.name if hasattr(self, '_csv_filepath') else ""
+        self.csv_status_label.configure(text=t("csv_saved", file=filename), text_color=COLORS["success"])
+
+    def _write_csv_row(self, updates):
+        """Write a row of PID values to CSV if recording."""
+        with self._csv_lock:
+            if not self._csv_recording or not self._csv_writer:
+                return
+            row = [datetime.now().isoformat()]
+            val_map = {pid: val for pid, val, _ in updates}
+            for pid_code in self.selected_pids:
+                val = val_map.get(pid_code)
+                row.append(f"{val:.2f}" if val is not None else "")
+            self._csv_writer.writerow(row)
+            self._csv_file.flush()
+
     def _on_lang_change(self, lang=None):
         """Update text on language change."""
         was_monitoring = self.monitoring
         if was_monitoring:
             self.stop_monitoring()
+        if self._csv_recording:
+            self._stop_csv()
         for widget in self.winfo_children():
             widget.destroy()
         self._build_content()

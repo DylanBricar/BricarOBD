@@ -55,6 +55,10 @@ data/verified_uds_codes_github.py
 # Full zip is built from parts at first launch
 data/bricarobd_database.zip
 
+# Runtime user data
+data/settings.json
+data/recordings/
+
 # External databases
 databases/
 ecu/

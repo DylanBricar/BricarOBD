@@ -22,6 +22,36 @@ from typing import Optional
 
 logger = logging.getLogger(__name__)
 
+# Read-only UDS services (safe to send, never modify vehicle state)
+_READ_SERVICES = {"22", "21", "19", "3E", "10"}
+
+
+def _is_read_operation(op: dict) -> bool:
+    """Determine if an operation is read-only using multiple heuristics.
+
+    Checks (in order): explicit 'safe' field, 'type' field, 'command_type'
+    field, then the UDS service byte from 'sentbytes' or 'service'.
+    """
+    # Explicit safe flag (set by database builder)
+    if "safe" in op:
+        return bool(op["safe"])
+    # Type field from database (read/write/diag/other)
+    if op.get("type") == "read" or op.get("command_type") == "read":
+        return True
+    if op.get("type") == "write" or op.get("command_type") == "write":
+        return False
+    # Infer from UDS service byte
+    sentbytes = op.get("sentbytes", "")
+    if len(sentbytes) >= 2:
+        return sentbytes[:2].upper() in _READ_SERVICES
+    service = op.get("service", "")
+    if isinstance(service, int):
+        return f"{service:02X}" in _READ_SERVICES
+    if isinstance(service, str) and len(service) >= 2:
+        return service[:2].upper() in _READ_SERVICES
+    # Default: assume unsafe
+    return False
+
 
 def _find_db_path() -> Path:
     """Find the database zip in dev mode or PyInstaller bundle.
@@ -63,6 +93,7 @@ class BricarDatabase:
         self._metadata: dict = {}
         self._loaded = False
         self._index_by_manufacturer: dict[str, list[int]] = {}
+        self._vehicle_profiles: dict = {}
         self._zip: Optional[zipfile.ZipFile] = None
 
     def is_available(self) -> bool:
@@ -82,9 +113,11 @@ class BricarDatabase:
                 data = json.load(f)
             self._ops = data.get("operations", [])
             self._metadata = data.get("metadata", {})
+            self._vehicle_profiles = data.get("vehicle_profiles", {})
             self._build_index()
             self._loaded = True
-            logger.info(f"BricarOBD DB: {len(self._ops):,} operations loaded")
+            logger.info(f"BricarOBD DB: {len(self._ops):,} operations, "
+                         f"{len(self._vehicle_profiles)} vehicle profiles loaded")
             return True
         except Exception as e:
             logger.error(f"Failed to load database: {e}")
@@ -147,7 +180,7 @@ class BricarDatabase:
                 groups[ecu] = {"name": ecu, "total": 0, "reads": 0, "writes": 0,
                                "ecu_tx": op.get("ecu_tx", ""), "ecu_rx": op.get("ecu_rx", "")}
             groups[ecu]["total"] += 1
-            if op.get("safe"):
+            if _is_read_operation(op):
                 groups[ecu]["reads"] += 1
             else:
                 groups[ecu]["writes"] += 1
@@ -163,6 +196,45 @@ class BricarDatabase:
         if not self._loaded:
             self.load()
         return len(self._index_by_manufacturer.get(manufacturer, []))
+
+    def get_vehicle_profiles(self) -> dict:
+        """Get all vehicle ECU profiles.
+
+        Returns:
+            Dict mapping vehicle name to list of ECU entries,
+            each with name, name_fr, tx, rx.
+        """
+        if not self._loaded:
+            self.load()
+        return self._vehicle_profiles
+
+    def get_vehicle_ecus(self, vehicle_name: str) -> list[dict]:
+        """Get ECU addresses for a specific vehicle model.
+
+        Args:
+            vehicle_name: Vehicle model name (e.g., "HFE _ Kadjar")
+
+        Returns:
+            List of ECU dicts with name, tx, rx fields
+        """
+        if not self._loaded:
+            self.load()
+        return self._vehicle_profiles.get(vehicle_name, [])
+
+    def search_vehicle_profile(self, query: str) -> list[tuple[str, list[dict]]]:
+        """Search vehicle profiles by name.
+
+        Args:
+            query: Search term (e.g., "Kadjar", "Clio", "Leaf")
+
+        Returns:
+            List of (vehicle_name, ecus) tuples matching the query
+        """
+        if not self._loaded:
+            self.load()
+        query_lower = query.lower()
+        return [(name, ecus) for name, ecus in self._vehicle_profiles.items()
+                if query_lower in name.lower()]
 
     def load_ecu_definition(self, filename: str) -> Optional[dict]:
         """Load a full ECU definition file from the archive."""
