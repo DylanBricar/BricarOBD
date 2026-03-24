@@ -158,6 +158,37 @@ class ConnectionFrame(ctk.CTkFrame):
         )
         self.port_info_label.pack(anchor="w")
 
+        # Manual VIN input
+        vin_frame = ctk.CTkFrame(status_content, fg_color="transparent")
+        vin_frame.pack(fill="x", pady=(12, 0))
+
+        ctk.CTkLabel(
+            vin_frame, text=t("conn_vin_manual_label"), font=FONTS["small"],
+            text_color=COLORS["text_secondary"]
+        ).pack(side="left")
+
+        self.vin_entry = ctk.CTkEntry(
+            vin_frame, width=200, font=FONTS["mono"],
+            fg_color=COLORS["bg_input"], border_color=COLORS["input_border"],
+            border_width=1, text_color=COLORS["text_primary"],
+            placeholder_text="VF3XXXXXXXXXXXXXX"
+        )
+        self.vin_entry.pack(side="left", padx=(8, 8))
+
+        self.vin_apply_btn = ctk.CTkButton(
+            vin_frame, text=t("conn_vin_apply"), width=80,
+            font=FONTS["small"], fg_color=COLORS["accent"],
+            hover_color=COLORS["accent_hover"], corner_radius=6,
+            command=self._apply_manual_vin
+        )
+        self.vin_apply_btn.pack(side="left")
+
+        self.vin_status_label = ctk.CTkLabel(
+            vin_frame, text="", font=FONTS["small"],
+            text_color=COLORS["text_muted"]
+        )
+        self.vin_status_label.pack(side="left", padx=8)
+
         self.log_label = ctk.CTkLabel(
             self, text=t("conn_log"), font=FONTS["small_bold"],
             text_color=COLORS["text_secondary"],
@@ -291,14 +322,26 @@ class ConnectionFrame(ctk.CTkFrame):
                 try:
                     from obd_core.vin_decoder import decode_vin, get_profile_key_for_make
 
-                    # Step 1: VIN — skip Mode 09 queries as they crash some ELM327 clones.
-                    # VIN will be available if python-obd already read it during handshake.
+                    # Step 1: Try reading VIN (python-obd Mode 09 → UDS DID 0xF190 fallback)
                     self.after(0, self.log_message, t("conn_step_vin"))
                     make = "Unknown"
                     year = ""
                     self.app.detected_vehicle = None
                     self.app.detected_make = ""
-                    self.after(0, self.log_message, t("conn_step_vin_unavailable"))
+
+                    vin = ""
+                    if hasattr(self.app.connection, 'get_vin'):
+                        vin = self.app.connection.get_vin()
+
+                    if vin and len(vin) >= 3:
+                        vehicle = decode_vin(vin)
+                        make = vehicle.get("make", "Unknown")
+                        year = vehicle.get("model_year", "")
+                        self.app.detected_vehicle = vehicle
+                        self.app.detected_make = make
+                        self.after(0, self.log_message, t("conn_step_vin_result", vehicle=make, vin=vin[:11]))
+                    else:
+                        self.after(0, self.log_message, t("conn_step_vin_unavailable"))
 
                     # Step 2: Discover supported PIDs
                     self.after(0, self.log_message, t("conn_step_pids"))
@@ -400,6 +443,32 @@ class ConnectionFrame(ctk.CTkFrame):
         if year:
             vehicle_text += f" ({year})"
         self.app.update_status(True, self.app.connection.protocol_name, self.app.connection.port)
+
+    def _apply_manual_vin(self):
+        """Apply a manually entered VIN to detect vehicle make."""
+        import re
+        raw = self.vin_entry.get().strip().upper()
+        # Keep only valid VIN characters (A-Z 0-9, no I/O/Q), take first 17
+        cleaned = re.sub(r'[^A-HJ-NPR-Z0-9]', '', raw)
+        vin = cleaned[:17]
+        if len(vin) != 17:
+            self.vin_status_label.configure(
+                text=t("conn_vin_invalid"), text_color=COLORS["danger"]
+            )
+            return
+
+        from obd_core.vin_decoder import decode_vin
+        vehicle = decode_vin(vin)
+        make = vehicle.get("make", "Unknown")
+        country = vehicle.get("country", "Unknown")
+
+        self.app.detected_vehicle = vehicle
+        self.app.detected_make = make
+        self.vin_status_label.configure(
+            text=t("conn_vin_applied", make=make, country=country),
+            text_color=COLORS["success"]
+        )
+        self.log_message(t("conn_vin_applied", make=make, country=country))
 
     def _on_lang_change(self, lang=None):
         """Update all text when language changes.

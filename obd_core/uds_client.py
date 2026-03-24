@@ -47,7 +47,7 @@ class UDSClient:
         self.target_response_id = 0x7E8
 
     def set_target_ecu(self, request_id: int, response_id: int) -> bool:
-        """Set CAN header for specific ECU.
+        """Set CAN header and receive filter for specific ECU.
 
         Args:
             request_id: Request CAN ID (e.g., 0x7E0)
@@ -57,13 +57,21 @@ class UDSClient:
             True on success
         """
         try:
+            # Set send header
             cmd = f"AT SH {request_id:03X}"
             response = self.connection.send_command(cmd)
-            if "OK" in response:
-                self.target_request_id = request_id
-                self.target_response_id = response_id
-                logger.info(f"Set target ECU to {request_id:03X}/{response_id:03X}")
-                return True
+            if "OK" not in response:
+                return False
+
+            # Set receive filter so ELM327 listens for this ECU's responses
+            # Without this, non-standard CAN IDs (PSA, VAG extended) get no response
+            cra_cmd = f"AT CRA {response_id:03X}"
+            self.connection.send_command(cra_cmd)
+
+            self.target_request_id = request_id
+            self.target_response_id = response_id
+            logger.info(f"Set target ECU to {request_id:03X}/{response_id:03X}")
+            return True
         except Exception as e:
             logger.error(f"Error setting target ECU: {e}")
         return False
@@ -277,10 +285,10 @@ class UDSClient:
                     logger.info(f"Found responding ECU: {ecu.name} (0x{ecu.request_id:03X})")
 
         # Restore default ELM327 state so python-obd queries keep working.
-        # The AT SH commands above change CAN headers which breaks python-obd.
         try:
-            self.connection.send_command("AT D")   # Reset to defaults
-            self.connection.send_command("AT H0")  # Headers off
+            self.connection.send_command("AT D")    # Reset to defaults
+            self.connection.send_command("AT CRA")  # Clear receive filter (accept all)
+            self.connection.send_command("AT H0")   # Headers off
             logger.info("Restored default ELM327 headers after ECU scan")
         except Exception:
             pass
@@ -381,26 +389,53 @@ class UDSClient:
         if not response or "NO DATA" in response or "UNABLE" in response:
             return None
 
-        response_clean = response.replace(" ", "").replace("\n", "")
+        # Clean response: remove spaces, newlines, and echo
+        lines = [l.strip() for l in response.replace('\r', '\n').split('\n') if l.strip()]
+        # Filter out lines that look like echo (start with our request) or are empty
+        clean_lines = []
+        for line in lines:
+            stripped = line.replace(" ", "")
+            if stripped and "NODATA" not in stripped and "UNABLE" not in stripped:
+                clean_lines.append(stripped)
 
-        if response_clean.startswith("7F"):
-            try:
-                # 7F <rejected_SID> <NRC> - NRC is the 3rd byte (positions 4-5)
-                rejected_sid = int(response_clean[2:4], 16)
-                nrc = int(response_clean[4:6], 16)
-                description = self._parse_negative_response(nrc)
-                logger.error(f"Negative response for SID 0x{rejected_sid:02X}: {description} (NRC 0x{nrc:02X})")
-            except (ValueError, IndexError):
-                logger.error(f"Malformed negative response: {response_clean}")
+        if not clean_lines:
             return None
 
-        if response_clean.startswith(f"{expected_sid:02X}"):
-            try:
-                data_hex = response_clean[2:]
-                if data_hex:
-                    return bytes.fromhex(data_hex)
-            except ValueError:
-                pass
+        # Try each response line
+        expected_hex = f"{expected_sid:02X}"
+        for line in clean_lines:
+            # Check for negative response
+            if line.startswith("7F"):
+                try:
+                    rejected_sid = int(line[2:4], 16)
+                    nrc = int(line[4:6], 16)
+                    description = self._parse_negative_response(nrc)
+                    logger.error(f"Negative response for SID 0x{rejected_sid:02X}: {description} (NRC 0x{nrc:02X})")
+                except (ValueError, IndexError):
+                    logger.error(f"Malformed negative response: {line}")
+                return None
+
+            # Direct match (no headers)
+            if line.startswith(expected_hex):
+                try:
+                    data_hex = line[2:]
+                    if data_hex:
+                        return bytes.fromhex(data_hex)
+                except ValueError:
+                    pass
+
+            # With CAN headers: look for SID after header bytes
+            # CAN header formats: "7E8 06 59..." -> cleaned "7E80659..."
+            # Try to find the expected SID in the line
+            idx = line.find(expected_hex)
+            if idx > 0:
+                # Validate: the SID should be preceded by a length byte or header
+                try:
+                    data_hex = line[idx + 2:]
+                    if data_hex:
+                        return bytes.fromhex(data_hex)
+                except ValueError:
+                    pass
 
         return None
 

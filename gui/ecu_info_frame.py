@@ -86,13 +86,32 @@ class ECUInfoFrame(ctk.CTkFrame):
 
         def _scan():
             try:
-                # Use detected make for manufacturer-specific ECU scanning
                 make = getattr(self.app, 'detected_make', '') or ''
                 if make and make != 'Unknown':
                     self.after(0, self._update_status, f"Scan {make}...")
 
-                # Scan with manufacturer-specific addresses
-                ecus = self.app.uds_client.scan_ecus(make=make) if self.app.uds_client else []
+                conn = getattr(self.app, 'connection', None)
+
+                if conn and hasattr(conn, 'use_custom_connection') and self.app.uds_client:
+                    def _do_scan(custom_conn):
+                        # Ensure echo off + warm up CAN bus
+                        custom_conn.send_command("ATE0")
+                        custom_conn.send_command("0100", timeout=3)
+                        ecus = self.app.uds_client.scan_ecus(make=make)
+                        # Read info for each discovered ECU
+                        ecu_infos = {}
+                        for ecu in ecus:
+                            self.app.uds_client.set_target_ecu(ecu["request_id"], ecu["response_id"])
+                            info = self.app.uds_client.read_ecu_info()
+                            ecu_infos[ecu["request_id"]] = info
+                        return {"ecus": ecus, "infos": ecu_infos}
+
+                    result = conn.use_custom_connection(_do_scan)
+                    ecus = result.get("ecus", []) if result else []
+                    ecu_infos = result.get("infos", {}) if result else {}
+                else:
+                    ecus = self.app.uds_client.scan_ecus(make=make) if self.app.uds_client else []
+                    ecu_infos = {}
 
                 # Also use pre-discovered ECUs from connection if available
                 pre_discovered = getattr(self.app, 'discovered_ecus', [])
@@ -101,6 +120,7 @@ class ECUInfoFrame(ctk.CTkFrame):
 
                 self.discovered_ecus = ecus
                 self.after(0, self.populate_results, ecus)
+                self.after(0, self._show_ecu_infos, ecu_infos)
                 self.after(0, self._update_status, t("ecu_found", count=len(ecus)))
             except Exception as e:
                 self.after(0, self._update_status, f"{t('ecu_scan_failed')}: {str(e)}")
@@ -127,10 +147,6 @@ class ECUInfoFrame(ctk.CTkFrame):
 
         for ecu in ecu_list:
             self._create_ecu_card(ecu)
-
-        # Auto-trigger info read for each discovered ECU
-        for ecu in ecu_list:
-            self.read_ecu_info(ecu.get("request_id"), ecu.get("response_id"))
 
     def _create_ecu_card(self, ecu):
         """Create a single ECU info card.
@@ -191,6 +207,11 @@ class ECUInfoFrame(ctk.CTkFrame):
 
         thread = Thread(target=_read, daemon=True)
         thread.start()
+
+    def _show_ecu_infos(self, ecu_infos):
+        """Display pre-fetched ECU infos."""
+        for request_id, info in ecu_infos.items():
+            self._display_ecu_info(request_id, info)
 
     def _display_ecu_info(self, request_id, info):
         """Display ECU information in the card details.

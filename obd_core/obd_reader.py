@@ -12,6 +12,9 @@ logger = logging.getLogger(__name__)
 class OBDReader:
     """Reads OBD-II data from vehicle through ELM327 adapter."""
 
+    # After this many consecutive null responses, stop querying a PID
+    _NULL_THRESHOLD = 3
+
     def __init__(self, connection: ELM327Connection):
         """Initialize OBD reader with connection reference.
 
@@ -20,6 +23,8 @@ class OBDReader:
         """
         self.connection = connection
         self._supported_pids = []
+        self._null_counts: Dict[int, int] = {}  # PID → consecutive null count
+        self._blacklisted_pids: set = set()  # PIDs that always return null
 
     def _parse_obd_response(self, response: str, expected_mode_response: str) -> List[str]:
         """Parse OBD response, handling multi-line/multi-ECU replies.
@@ -121,6 +126,8 @@ class OBDReader:
     def reset_pid_cache(self):
         """Reset the supported PID cache (e.g., after reconnection)."""
         self._supported_pids = []
+        self._null_counts.clear()
+        self._blacklisted_pids.clear()
 
     def read_pid(self, pid: int) -> Tuple[Optional[float], str]:
         """Send Mode 01 command and read a single PID.
@@ -141,16 +148,36 @@ class OBDReader:
         if self._supported_pids and pid not in self._supported_pids:
             return None, ""
 
+        # Skip PIDs that consistently return null (avoid bus spam)
+        if pid in self._blacklisted_pids:
+            return None, ""
+
         # Try python-obd's query first (HybridConnection)
         if hasattr(self.connection, 'query_pid'):
+            # If python-obd is disconnected (custom connection active), skip entirely
+            # — don't count stale cache misses toward the blacklist
+            if hasattr(self.connection, '_obd_conn') and self.connection._obd_conn is None:
+                return None, ""
+
             value, unit = self.connection.query_pid(pid)
             if value is not None:
                 logger.debug(f"PID 0x{pid:02X} via python-obd: {value} {unit}")
+                # Reset null counter on success
+                self._null_counts.pop(pid, None)
                 return value, unit
             else:
-                logger.debug(f"PID 0x{pid:02X} via python-obd: null response")
+                # Track consecutive null responses
+                count = self._null_counts.get(pid, 0) + 1
+                self._null_counts[pid] = count
+                if count >= self._NULL_THRESHOLD:
+                    self._blacklisted_pids.add(pid)
+                    logger.info(f"PID 0x{pid:02X} blacklisted after {count} null responses")
+                else:
+                    logger.debug(f"PID 0x{pid:02X} via python-obd: null response ({count}/{self._NULL_THRESHOLD})")
+                # Don't attempt raw fallback when python-obd owns the connection
+                return None, ""
 
-        # Fallback to raw OBD query
+        # Fallback to raw OBD query (only when using custom connection)
         response = self.connection.send_obd("01", f"{pid:02X}")
         parsed = self._parse_obd_response(response, "41")
 

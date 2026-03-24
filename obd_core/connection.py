@@ -216,9 +216,12 @@ class ELM327Connection:
         else:
             cmd = mode
 
+        # DTC modes need longer timeout
+        timeout = 5 if mode in ("03", "07", "0A") else 2
+
         from utils.dev_console import log_obd_command
         log_obd_command("TX", cmd)
-        response = self.send_command(cmd, timeout=2)
+        response = self.send_command(cmd, timeout=timeout)
         log_obd_command("RX", cmd, response.strip()[:80] if response else "(no response)")
         return response
 

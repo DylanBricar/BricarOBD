@@ -133,64 +133,79 @@ class MonitorsFrame(ctk.CTkFrame):
         def task():
             results = []
             try:
-                # Try python-obd first
-                import obd
                 conn = getattr(self.app, 'connection', None)
                 obd_conn = getattr(conn, '_obd_conn', None) if conn else None
 
                 if obd_conn:
-                    for cmd in obd.commands[6]:
-                        if cmd and not cmd.name.startswith('MIDS'):
+                    # Pause async polling for synchronous Mode 06 queries
+                    import obd
+                    if hasattr(conn, '_pause_async'):
+                        conn._pause_async()
+                    try:
+                        for cmd in obd.commands[6]:
+                            if cmd and not cmd.name.startswith('MIDS'):
+                                try:
+                                    response = obd_conn.query(cmd)
+                                    if not response.is_null():
+                                        results.append({
+                                            "name": cmd.name.replace("MONITOR_", "").replace("_", " ").title(),
+                                            "desc": cmd.desc,
+                                            "value": str(response.value),
+                                            "passed": True
+                                        })
+                                except Exception:
+                                    pass
+                    finally:
+                        if hasattr(conn, '_resume_async'):
+                            conn._resume_async()
+
+                # Fallback: read Mode 06 via raw OBD commands using custom connection
+                if not results and conn and hasattr(conn, 'use_custom_connection'):
+                    def _read_mode06(custom_conn):
+                        custom_conn.send_command("0100", timeout=3)  # warm up
+                        raw_results = []
+                        for mid, (name, desc) in self.MONITOR_TESTS.items():
                             try:
-                                response = obd_conn.query(cmd)
-                                if not response.is_null():
-                                    results.append({
-                                        "name": cmd.name.replace("MONITOR_", "").replace("_", " ").title(),
-                                        "desc": cmd.desc,
-                                        "value": str(response.value),
-                                        "passed": True
-                                    })
+                                raw = custom_conn.send_obd("06", f"{mid:02X}")
+                                if raw and "46" in raw and "NO DATA" not in raw:
+                                    parts = raw.strip().split()
+                                    if len(parts) >= 7:
+                                        test_val = int(parts[3] + parts[4], 16)
+                                        min_val = int(parts[5], 16)
+                                        max_val = int(parts[6], 16)
+                                        passed = min_val <= test_val <= max_val if max_val > 0 else True
+                                        raw_results.append({
+                                            "name": name,
+                                            "desc": desc,
+                                            "value": f"{'PASS' if passed else 'FAIL'}  (val={test_val}, min={min_val}, max={max_val})",
+                                            "passed": passed,
+                                        })
                             except Exception:
                                 pass
-            except ImportError:
-                pass
+                        return raw_results
 
-            # Fallback: read Mode 06 via raw OBD commands
-            if not results and self.app.obd_reader:
-                for mid, (name, desc) in self.MONITOR_TESTS.items():
-                    try:
-                        raw = self.app.connection.send_obd("06", f"{mid:02X}")
-                        if raw and "46" in raw and "NO DATA" not in raw:
-                            parts = raw.strip().split()
-                            if len(parts) >= 7:
-                                test_val = int(parts[3] + parts[4], 16)
-                                min_val = int(parts[5], 16)
-                                max_val = int(parts[6], 16)
-                                passed = min_val <= test_val <= max_val if max_val > 0 else True
-                                results.append({
-                                    "name": name,
-                                    "desc": desc,
-                                    "value": f"{'PASS' if passed else 'FAIL'}  (val={test_val}, min={min_val}, max={max_val})",
-                                    "passed": passed,
-                                })
-                    except Exception:
-                        pass
+                    fallback = conn.use_custom_connection(_read_mode06)
+                    if fallback:
+                        results.extend(fallback)
 
                 # Also read monitor readiness from PID 0x01
-                try:
-                    val, _ = self.app.obd_reader.read_pid(0x01)
-                    if val is not None:
-                        status = int(val)
-                        mil_on = bool(status & 0x80)
-                        dtc_count = status & 0x7F
-                        results.insert(0, {
-                            "name": "MIL Status",
-                            "desc": "Malfunction Indicator Lamp",
-                            "value": f"{'ON' if mil_on else 'OFF'} — {dtc_count} DTC(s)",
-                            "passed": not mil_on,
-                        })
-                except Exception:
-                    pass
+                if self.app.obd_reader:
+                    try:
+                        val, _ = self.app.obd_reader.read_pid(0x01)
+                        if val is not None:
+                            status = int(val)
+                            mil_on = bool(status & 0x80)
+                            dtc_count = status & 0x7F
+                            results.insert(0, {
+                                "name": "MIL Status",
+                                "desc": "Malfunction Indicator Lamp",
+                                "value": f"{'ON' if mil_on else 'OFF'} — {dtc_count} DTC(s)",
+                                "passed": not mil_on,
+                            })
+                    except Exception:
+                        pass
+            except ImportError:
+                pass
 
             self.after(0, self._display_results, results, "monitors")
             self.after(0, lambda: self.read_btn.configure(state="normal"))
@@ -223,24 +238,30 @@ class MonitorsFrame(ctk.CTkFrame):
                 obd_conn = getattr(conn, '_obd_conn', None) if conn else None
 
                 if obd_conn:
-                    for cmd in obd.commands[9]:
-                        if cmd and cmd.name not in ('PIDS_9A', 'VIN_MESSAGE_COUNT',
-                                                     'CALIBRATION_ID_MESSAGE_COUNT',
-                                                     'CVN_MESSAGE_COUNT'):
-                            try:
-                                response = obd_conn.query(cmd)
-                                if not response.is_null():
-                                    # Don't duplicate VIN
-                                    if cmd.name == 'VIN' and any(r['name'] == 'VIN' for r in results):
-                                        continue
-                                    results.append({
-                                        "name": cmd.name.replace("_", " ").title(),
-                                        "desc": cmd.desc,
-                                        "value": str(response.value),
-                                        "passed": True
-                                    })
-                            except Exception:
-                                pass
+                    if hasattr(conn, '_pause_async'):
+                        conn._pause_async()
+                    try:
+                        for cmd in obd.commands[9]:
+                            if cmd and cmd.name not in ('PIDS_9A', 'VIN_MESSAGE_COUNT',
+                                                         'CALIBRATION_ID_MESSAGE_COUNT',
+                                                         'CVN_MESSAGE_COUNT'):
+                                try:
+                                    response = obd_conn.query(cmd)
+                                    if not response.is_null():
+                                        # Don't duplicate VIN
+                                        if cmd.name == 'VIN' and any(r['name'] == 'VIN' for r in results):
+                                            continue
+                                        results.append({
+                                            "name": cmd.name.replace("_", " ").title(),
+                                            "desc": cmd.desc,
+                                            "value": str(response.value),
+                                            "passed": True
+                                        })
+                                except Exception:
+                                    pass
+                    finally:
+                        if hasattr(conn, '_resume_async'):
+                            conn._resume_async()
 
                 # Add detected vehicle info
                 detected = getattr(self.app, 'detected_vehicle', None)

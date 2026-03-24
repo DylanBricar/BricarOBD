@@ -64,6 +64,12 @@ class DTCManager:
                 obd_results = []
                 uds_results = []
 
+                # Ensure echo is off (clone ELM327 may not honor it in fast reconnect)
+                custom_conn.send_command("ATE0")
+                # Warm up CAN bus after fast reconnect
+                warmup = custom_conn.send_command("0100", timeout=3)
+                logger.debug(f"CAN warm-up response: {warmup[:60] if warmup else '(empty)'}")
+
                 # 1. Read OBD DTCs (Mode 03) via raw serial
                 logger.info("Reading OBD DTCs (Mode 03)...")
                 response = custom_conn.send_obd("03")
@@ -78,7 +84,15 @@ class DTCManager:
                     dtc["status"] = "Pending"
                 obd_results.extend(pending)
 
-                # 3. Read DTCs from all ECUs directly (skip tester_present)
+                # 3. Read permanent DTCs (Mode 0A)
+                response = custom_conn.send_obd("0A")
+                permanent = self.obd_reader._parse_dtc_response(response, "0A")
+                logger.info(f"OBD Mode 0A: {len(permanent)} permanent DTCs")
+                for dtc in permanent:
+                    dtc["status"] = "Permanent"
+                obd_results.extend(permanent)
+
+                # 4. Read DTCs from all ECUs directly (skip tester_present)
                 # Enable headers so we can see which ECU responds
                 custom_conn.send_command("ATH1")
                 make = getattr(conn, '_detected_make', '')
@@ -92,8 +106,18 @@ class DTCManager:
 
                 for ecu in candidates:
                     if self.uds_client.set_target_ecu(ecu.request_id, ecu.response_id):
-                        # Try reading DTCs directly (Service 0x19 sub 0x02)
-                        ecu_dtcs = self.uds_client.read_dtc_info()
+                        # Open extended diagnostic session first
+                        self.uds_client.diagnostic_session_control(0x03)
+
+                        # Try reading DTCs with multiple sub-functions
+                        ecu_dtcs = self.uds_client.read_dtc_info(0x02, 0xFF)
+                        if not ecu_dtcs:
+                            # Try sub-function 0x02 with confirmed+testFailed mask
+                            ecu_dtcs = self.uds_client.read_dtc_info(0x02, 0x09)
+                        if not ecu_dtcs:
+                            # Try reportSupportedDTC (0x0A) - some ECUs only support this
+                            ecu_dtcs = self.uds_client.read_dtc_info(0x0A, 0xFF)
+
                         if ecu_dtcs:
                             for dtc in ecu_dtcs:
                                 dtc['ecu_name'] = ecu.name
@@ -101,7 +125,8 @@ class DTCManager:
                             logger.info(f"  {ecu.name}: {len(ecu_dtcs)} DTCs")
                         else:
                             logger.debug(f"  {ecu.name}: no DTCs or no response")
-                # Restore headers off
+                # Restore default state
+                custom_conn.send_command("AT CRA")  # Clear receive filter
                 custom_conn.send_command("ATH0")
 
                 return {"obd": obd_results, "uds": uds_results}

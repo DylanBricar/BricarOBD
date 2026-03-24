@@ -238,22 +238,66 @@ class HybridConnection:
         return []
 
     def get_vin(self) -> str:
-        """Read VIN via python-obd (Mode 09 — READ-ONLY, safe)."""
-        if not self._obd_conn:
+        """Read VIN via python-obd (Mode 09) or UDS DID 0xF190."""
+        # Try python-obd Mode 09 first
+        if self._obd_conn:
+            try:
+                response = self._obd_conn.query(obd.commands.VIN)
+                if not response.is_null():
+                    raw = response.value
+                    if isinstance(raw, (bytearray, bytes)):
+                        vin = raw.decode('ascii', errors='ignore').strip('\x00').strip()
+                    else:
+                        vin = str(raw).strip()
+                    if len(vin) == 17:
+                        logger.info(f"VIN from python-obd: {vin}")
+                        return vin
+            except Exception as e:
+                logger.debug(f"VIN query via python-obd failed: {e}")
+
+        # Fallback: try UDS DID 0xF190 via custom connection
+        # SAFE: Service 0x22 (ReadDataByIdentifier) is READ-ONLY.
+        # DID 0xF190 is the standard VIN identifier per ISO 14229.
+        def _read_vin_uds(custom_conn):
+            # Try on engine ECU (7E0) first
+            custom_conn.send_command("ATE0")  # force echo off
+            custom_conn.send_command("0100", timeout=3)  # warm up
+
+            # Try engine ECU (7E0/7E8) — standard OBD-II address
+            custom_conn.send_command("AT SH 7E0")
+            custom_conn.send_command("AT CRA 7E8")
+            vin = self._try_read_vin_did(custom_conn)
+            if vin:
+                return vin
+
+            # Try BSI (PSA-specific: 0x75D/0x65D)
+            custom_conn.send_command("AT SH 75D")
+            custom_conn.send_command("AT CRA 65D")
+            vin = self._try_read_vin_did(custom_conn)
+            if vin:
+                return vin
+
+            # Try PSA engine ECU (0x6A8/0x688)
+            custom_conn.send_command("AT SH 6A8")
+            custom_conn.send_command("AT CRA 688")
+            vin = self._try_read_vin_did(custom_conn)
+            if vin:
+                return vin
+
+            # Restore default state
+            custom_conn.send_command("AT D")
+            custom_conn.send_command("AT CRA")  # clear filter
+            custom_conn.send_command("AT H0")
             return ""
+
         try:
-            response = self._obd_conn.query(obd.commands.VIN)
-            if not response.is_null():
-                raw = response.value
-                # python-obd may return bytearray, string, or bytes
-                if isinstance(raw, (bytearray, bytes)):
-                    vin = raw.decode('ascii', errors='ignore').strip('\x00').strip()
-                else:
-                    vin = str(raw).strip()
-                logger.info(f"VIN from python-obd: {vin} (raw type: {type(raw).__name__})")
+            vin = self.use_custom_connection(_read_vin_uds)
+            if vin:
+                logger.info(f"VIN from UDS DID 0xF190: {vin}")
                 return vin
         except Exception as e:
-            logger.debug(f"VIN query failed: {e}")
+            logger.debug(f"VIN UDS fallback failed: {e}")
+
         return ""
 
     def get_supported_pids(self) -> List[int]:
@@ -269,6 +313,25 @@ class HybridConnection:
                 except (ValueError, IndexError):
                     pass
         return sorted(supported)
+
+    @staticmethod
+    def _try_read_vin_did(conn) -> str:
+        """Try reading VIN via UDS DID 0xF190 on the currently targeted ECU."""
+        response = conn.send_raw("22F190")
+        if not response or "NO DATA" in response:
+            return ""
+        clean = response.replace(" ", "").replace("\n", "").replace("\r", "")
+        idx = clean.find("62F190")
+        if idx < 0:
+            return ""
+        vin_hex = clean[idx + 6:][:34]  # 17 chars * 2 hex digits
+        try:
+            vin = bytes.fromhex(vin_hex).decode('ascii', errors='ignore').strip('\x00').strip()
+            if len(vin) >= 17:
+                return vin[:17]
+        except (ValueError, UnicodeDecodeError):
+            pass
+        return ""
 
     # ── UDS / Raw commands (via custom connection + SAFETY) ────
     # These ALWAYS go through our custom code which has SafetyGuard
