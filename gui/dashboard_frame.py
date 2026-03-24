@@ -308,6 +308,16 @@ class DashboardFrame(ctk.CTkFrame):
 
         try:
             rpm_val, _ = self.app.obd_reader.read_pid(0x0C)
+            speed_val_check, _ = self.app.obd_reader.read_pid(0x0D)
+            coolant_check, _ = self.app.obd_reader.read_pid(0x05)
+            load_check, _ = self.app.obd_reader.read_pid(0x04)
+            throttle_check, _ = self.app.obd_reader.read_pid(0x11)
+            if not hasattr(self, '_dash_log_count'):
+                self._dash_log_count = 0
+            if self._dash_log_count < 5:
+                self._dash_log_count += 1
+                logger.info(f"Dashboard read #{self._dash_log_count}: RPM={rpm_val} Speed={speed_val_check} Coolant={coolant_check} Load={load_check} Throttle={throttle_check}")
+
             if rpm_val is not None:
                 self.after(0, lambda v=rpm_val: (self.rpm_gauge.set_value(v), self.rpm_graph.add_value(v)))
 

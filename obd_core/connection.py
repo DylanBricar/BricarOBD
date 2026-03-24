@@ -58,13 +58,15 @@ class ELM327Connection:
             })
         return ports
 
-    def connect(self, port: str, baud_rate: int = 38400) -> bool:
+    def connect(self, port: str, baud_rate: int = 38400, protocol: str = None) -> bool:
         """
         Connect to ELM327 device.
 
         Args:
             port: Serial port name (e.g., 'COM3' or '/dev/ttyUSB0')
             baud_rate: Baud rate (default 38400)
+            protocol: Force protocol number (e.g., "6" for CAN 11/500).
+                      If set, skips ATZ reset (faster reconnect for clone ELM327).
 
         Returns:
             True if successful, False otherwise
@@ -78,21 +80,38 @@ class ELM327Connection:
 
                 time.sleep(0.5)
 
-                init_commands = [
-                    ("ATZ", "reset"),
-                    ("ATE0", "echo off"),
-                    ("ATL0", "linefeeds off"),
-                    ("ATS1", "spaces on"),
-                    ("ATH0", "headers off"),
-                    ("ATSP0", "protocol auto"),
-                ]
+                # Flush any garbage and wake up ELM327
+                self.serial_conn.reset_input_buffer()
+                self.serial_conn.reset_output_buffer()
+                self.serial_conn.write(b"\r\r")
+                time.sleep(0.5)
+                self.serial_conn.reset_input_buffer()
+
+                if protocol:
+                    # Fast reconnect: skip ATZ, just configure and force protocol
+                    init_commands = [
+                        ("ATE0", "echo off"),
+                        ("ATL0", "linefeeds off"),
+                        ("ATS1", "spaces on"),
+                        ("ATH0", "headers off"),
+                        (f"ATSP{protocol}", f"set protocol {protocol}"),
+                    ]
+                    logger.info(f"Fast reconnect with protocol {protocol}")
+                else:
+                    init_commands = [
+                        ("ATZ", "reset"),
+                        ("ATE0", "echo off"),
+                        ("ATL0", "linefeeds off"),
+                        ("ATS1", "spaces on"),
+                        ("ATH0", "headers off"),
+                        ("ATSP0", "protocol auto"),
+                    ]
 
                 for cmd, desc in init_commands:
                     response = self.send_command(cmd, timeout=3)
                     if cmd == "ATZ":
-                        # ATZ returns ELM version string, not "OK"
                         if "ELM" not in response.upper():
-                            logger.warning(f"ATZ did not return ELM version: {response}")
+                            logger.warning(f"ATZ unexpected: {response}")
                         time.sleep(1)  # Extra delay after reset for clone ELM327
                     elif "OK" not in response and response.strip():
                         logger.warning(f"Command {desc} ({cmd}) unexpected response: {response}")

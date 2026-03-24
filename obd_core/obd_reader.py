@@ -57,9 +57,12 @@ class OBDReader:
 
         for pid in pid_query_sequence:
             response = self.connection.send_obd("01", f"{pid:02X}")
+            logger.debug(f"PID 0x{pid:02X} raw response: {repr(response[:100]) if response else '(empty)'}")
             parsed = self._parse_obd_response(response, "41")
 
             if not parsed:
+                if pid == 0x00:
+                    logger.warning(f"0100 got no valid response: {repr(response[:100]) if response else '(empty)'}")
                 continue
 
             data_line = parsed[0]
@@ -84,12 +87,23 @@ class OBDReader:
         """Discover which PIDs are supported by the connected vehicle.
         Caches results for future queries.
 
+        Uses python-obd's discovery when available (HybridConnection),
+        falls back to raw OBD queries otherwise.
+
         Returns:
             List of supported PID codes
         """
         if not self._supported_pids:
+            # Try python-obd's pre-discovered PIDs first (HybridConnection)
+            if hasattr(self.connection, 'get_supported_pids'):
+                self._supported_pids = self.connection.get_supported_pids()
+                if self._supported_pids:
+                    logger.info(f"Got {len(self._supported_pids)} PIDs from python-obd")
+                    return self._supported_pids
+
+            # Fallback to raw OBD queries
             self._supported_pids = self.get_supported_pids()
-            logger.info(f"Discovered {len(self._supported_pids)} supported PIDs")
+            logger.info(f"Discovered {len(self._supported_pids)} supported PIDs (raw scan)")
         return self._supported_pids
 
     def is_pid_supported(self, pid: int) -> bool:
@@ -111,6 +125,9 @@ class OBDReader:
     def read_pid(self, pid: int) -> Tuple[Optional[float], str]:
         """Send Mode 01 command and read a single PID.
 
+        Uses python-obd query when available (HybridConnection),
+        falls back to raw OBD commands otherwise.
+
         Args:
             pid: PID code to read
 
@@ -124,6 +141,16 @@ class OBDReader:
         if self._supported_pids and pid not in self._supported_pids:
             return None, ""
 
+        # Try python-obd's query first (HybridConnection)
+        if hasattr(self.connection, 'query_pid'):
+            value, unit = self.connection.query_pid(pid)
+            if value is not None:
+                logger.debug(f"PID 0x{pid:02X} via python-obd: {value} {unit}")
+                return value, unit
+            else:
+                logger.debug(f"PID 0x{pid:02X} via python-obd: null response")
+
+        # Fallback to raw OBD query
         response = self.connection.send_obd("01", f"{pid:02X}")
         parsed = self._parse_obd_response(response, "41")
 
@@ -162,6 +189,13 @@ class OBDReader:
         Returns:
             List of {code, status, description} dicts
         """
+        # Try python-obd first (HybridConnection)
+        if hasattr(self.connection, 'get_dtcs'):
+            dtcs = self.connection.get_dtcs()
+            if dtcs:
+                return dtcs
+
+        # Fallback to raw query
         response = self.connection.send_obd("03")
         return self._parse_dtc_response(response, "03")
 
@@ -214,12 +248,27 @@ class OBDReader:
         """Read vehicle information from Mode 09.
 
         Requests VIN (0x02), Calibration ID (0x04), ECU name (0x0A).
+        Uses python-obd when available for VIN.
 
         Returns:
             Dictionary with {vin, calibration_id, ecu_name}
         """
         info = {}
+
+        # Try python-obd for VIN first (more reliable)
+        if hasattr(self.connection, 'get_vin'):
+            vin = self.connection.get_vin()
+            if vin:
+                info["vin"] = vin
+
+        # Skip raw Mode 09 queries when python-obd owns the serial port
+        # (raw commands corrupt python-obd's internal state)
+        if hasattr(self.connection, '_obd_conn') and self.connection._obd_conn is not None:
+            return info
+
         for info_type, info_key in [(0x02, "vin"), (0x04, "calibration_id"), (0x0A, "ecu_name")]:
+            if info_key in info:
+                continue  # Already got it from python-obd
             response = self.connection.send_obd("09", f"{info_type:02X}")
             parsed = self._parse_obd_response(response, "49")
 

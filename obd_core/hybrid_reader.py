@@ -44,36 +44,68 @@ class HybridConnection:
         self.state = ConnectionState.DISCONNECTED
         self.lock = threading.RLock()
 
+    # Protocols to try when auto-detect fails, ordered by popularity.
+    # CAN protocols first (most modern vehicles including PSA/Peugeot/Citroen).
+    _PROTOCOL_CYCLE = [
+        ("6", "ISO 15765-4 CAN 11-bit 500k"),
+        ("8", "ISO 15765-4 CAN 29-bit 250k"),
+        ("5", "ISO 15765-4 CAN 11-bit 500k (alt)"),
+        ("7", "ISO 15765-4 CAN 11-bit 250k"),
+        ("4", "ISO 14230-4 KWP (slow)"),
+        ("3", "ISO 9141-2"),
+        ("1", "SAE J1850 PWM"),
+        ("2", "SAE J1850 VPW"),
+        ("9", "ISO 15765-4 CAN 11-bit 500k (9)"),
+        ("A", "SAE J1939 CAN 29-bit 250k"),
+    ]
+
     def connect(self, port: str, baud_rate: int = 38400) -> bool:
         """Connect to vehicle via python-obd.
 
-        Falls back to custom ELM327Connection only if python-obd fails.
+        Falls back to custom ELM327Connection with protocol cycling if
+        python-obd auto-detect fails.
         """
         self.port = port
         self.baud_rate = baud_rate
         self.state = ConnectionState.CONNECTING
 
+        # --- Attempt 1: python-obd Async (keeps ELM327 awake) ---
         try:
-            logger.info(f"Connecting via python-obd to {port}...")
-            self._obd_conn = obd.OBD(
+            logger.info(f"Connecting via python-obd (async) to {port}...")
+            self._obd_conn = obd.Async(
                 portstr=port,
                 baudrate=baud_rate,
                 fast=False,
                 timeout=10,
             )
 
-            if self._obd_conn.status() == obd.OBDStatus.CAR_CONNECTED:
+            status = self._obd_conn.status()
+            logger.info(f"python-obd status: {status}")
+
+            if status == obd.OBDStatus.CAR_CONNECTED:
                 self.protocol_name = str(self._obd_conn.protocol_name())
                 self.elm_version = self._obd_conn.port_name() or "ELM327"
                 self.state = ConnectionState.CONNECTED
-                logger.info(f"Connected via python-obd: {self.protocol_name}")
+                n_cmds = len(self._obd_conn.supported_commands)
+                logger.info(f"Connected via python-obd: {self.protocol_name} ({n_cmds} commands)")
+
+                # Watch key PIDs to keep ELM327 alive and cache values
+                for cmd in [obd.commands.RPM, obd.commands.SPEED,
+                            obd.commands.COOLANT_TEMP, obd.commands.ENGINE_LOAD,
+                            obd.commands.THROTTLE_POS, obd.commands.INTAKE_TEMP,
+                            obd.commands.TIMING_ADVANCE, obd.commands.FUEL_LEVEL,
+                            obd.commands.CONTROL_MODULE_VOLTAGE]:
+                    if cmd in self._obd_conn.supported_commands:
+                        self._obd_conn.watch(cmd)
+                self._obd_conn.start()
+                logger.info("Async polling started — ELM327 will stay awake")
                 return True
 
-            logger.warning(f"python-obd status: {self._obd_conn.status()}, trying custom...")
+            logger.warning(f"python-obd status: {self._obd_conn.status()}, trying custom with protocol cycling...")
             self._obd_conn.close()
             self._obd_conn = None
         except Exception as e:
-            logger.warning(f"python-obd failed: {e}, trying custom...")
+            logger.warning(f"python-obd failed: {e}, trying custom with protocol cycling...")
             if self._obd_conn:
                 try:
                     self._obd_conn.close()
@@ -81,16 +113,34 @@ class HybridConnection:
                     pass
             self._obd_conn = None
 
-        # Fallback to custom connection
+        # --- Attempt 2: custom connection + try each protocol ---
         from obd_core.connection import ELM327Connection
         self._custom_conn = ELM327Connection()
         success = self._custom_conn.connect(port, baud_rate)
-        if success:
-            self.protocol_name = self._custom_conn.protocol_name
-            self.elm_version = self._custom_conn.elm_version
-            self.state = ConnectionState.CONNECTED
-        else:
+        if not success:
             self.state = ConnectionState.ERROR
+            return False
+
+        self.elm_version = self._custom_conn.elm_version
+
+        # Try each protocol and send 0100 to see if an ECU answers
+        for proto_num, proto_name in self._PROTOCOL_CYCLE:
+            logger.info(f"Trying protocol {proto_num}: {proto_name}...")
+            self._custom_conn.send_command(f"ATSP{proto_num}", timeout=2)
+            import time
+            time.sleep(0.3)
+            response = self._custom_conn.send_command("0100", timeout=5)
+            if response and "41 00" in response and "NO DATA" not in response and "ERROR" not in response:
+                self.protocol_name = proto_name
+                self.state = ConnectionState.CONNECTED
+                logger.info(f"ECU responded on protocol {proto_num}: {proto_name}")
+                return True
+            logger.debug(f"Protocol {proto_num} no response: {response[:60] if response else '(empty)'}")
+
+        # No protocol worked — still report connected (ELM327 is reachable)
+        logger.warning("No ECU response on any protocol — check ignition and OBD port")
+        self.protocol_name = self._custom_conn.protocol_name or "No ECU response"
+        self.state = ConnectionState.CONNECTED
         return success
 
     def connect_with_retry(self, port: str, baud_rate: int = 38400, max_retries: int = 3) -> bool:
@@ -107,6 +157,9 @@ class HybridConnection:
         """Disconnect from vehicle."""
         if self._obd_conn:
             try:
+                # Stop async polling if running
+                if hasattr(self._obd_conn, 'stop'):
+                    self._obd_conn.stop()
                 self._obd_conn.close()
             except Exception:
                 pass
@@ -142,6 +195,7 @@ class HybridConnection:
         try:
             response = self._obd_conn.query(cmd)
             if response.is_null():
+                logger.debug(f"PID 0x{pid:02X} query returned null (cmd={cmd})")
                 return None, ""
 
             value = response.value
@@ -149,14 +203,28 @@ class HybridConnection:
                 return float(value.magnitude), str(value.units)
             return float(value), ""
         except Exception as e:
-            logger.debug(f"PID 0x{pid:02X} query failed: {e}")
+            logger.warning(f"PID 0x{pid:02X} query failed: {e}")
             return None, ""
+
+    def _pause_async(self):
+        """Pause the async polling loop to allow synchronous queries."""
+        if hasattr(self._obd_conn, 'stop') and hasattr(self._obd_conn, 'running') and self._obd_conn.running:
+            self._obd_conn.stop()
+            self._was_async = True
+        else:
+            self._was_async = False
+
+    def _resume_async(self):
+        """Resume the async polling loop after a synchronous query."""
+        if getattr(self, '_was_async', False) and hasattr(self._obd_conn, 'start'):
+            self._obd_conn.start()
 
     def get_dtcs(self) -> List[Dict]:
         """Read DTCs via python-obd (Mode 03 — READ-ONLY, safe)."""
         if not self._obd_conn:
             return []
         try:
+            self._pause_async()
             response = self._obd_conn.query(obd.commands.GET_DTC)
             if not response.is_null():
                 return [
@@ -165,6 +233,8 @@ class HybridConnection:
                 ]
         except Exception as e:
             logger.debug(f"DTC query failed: {e}")
+        finally:
+            self._resume_async()
         return []
 
     def get_vin(self) -> str:
@@ -174,7 +244,14 @@ class HybridConnection:
         try:
             response = self._obd_conn.query(obd.commands.VIN)
             if not response.is_null():
-                return str(response.value)
+                raw = response.value
+                # python-obd may return bytearray, string, or bytes
+                if isinstance(raw, (bytearray, bytes)):
+                    vin = raw.decode('ascii', errors='ignore').strip('\x00').strip()
+                else:
+                    vin = str(raw).strip()
+                logger.info(f"VIN from python-obd: {vin} (raw type: {type(raw).__name__})")
+                return vin
         except Exception as e:
             logger.debug(f"VIN query failed: {e}")
         return ""
@@ -247,27 +324,109 @@ class HybridConnection:
             return conn._read_until_prompt(timeout)
         return ""
 
+    def use_custom_connection(self, callback):
+        """Temporarily switch to custom connection for UDS operations.
+
+        Disconnects python-obd, runs the callback with direct serial access,
+        then reconnects python-obd. This is the safe way to do UDS scans.
+
+        Args:
+            callback: Function to run with custom connection active.
+                      Receives (custom_connection) as argument.
+
+        Returns:
+            Result of the callback, or None on error.
+        """
+        if not self._obd_conn:
+            # Already using custom connection
+            if self._custom_conn:
+                return callback(self._custom_conn)
+            return None
+
+        port = self.port
+        baud = self.baud_rate
+
+        # Step 1: Close python-obd (stop async loop first)
+        logger.info("Switching to custom connection for UDS operations...")
+        try:
+            if hasattr(self._obd_conn, 'stop'):
+                self._obd_conn.stop()
+            self._obd_conn.close()
+        except Exception:
+            pass
+        self._obd_conn = None
+
+        # Step 2: Open custom connection with known protocol (skip ATZ reset)
+        # Extract protocol number from protocol_name for fast reconnect
+        proto_num = None
+        if "CAN 11/500" in self.protocol_name or "11-bit 500k" in self.protocol_name:
+            proto_num = "6"
+        elif "CAN 29/500" in self.protocol_name or "29-bit 500k" in self.protocol_name:
+            proto_num = "8"
+        elif "CAN 11/250" in self.protocol_name or "11-bit 250k" in self.protocol_name:
+            proto_num = "7"
+
+        import time
+        time.sleep(0.5)  # Let ELM327 settle after python-obd close
+
+        from obd_core.connection import ELM327Connection
+        self._custom_conn = ELM327Connection()
+        if not self._custom_conn.connect(port, baud, protocol=proto_num):
+            logger.error("Failed to open custom connection")
+            self._custom_conn = None
+            self._reconnect_python_obd(port, baud)
+            return None
+
+        # Step 3: Run callback
+        try:
+            result = callback(self._custom_conn)
+        except Exception as e:
+            logger.error(f"UDS callback failed: {e}")
+            result = None
+
+        # Step 4: Close custom, reconnect python-obd
+        self._custom_conn.disconnect()
+        self._custom_conn = None
+        self._reconnect_python_obd(port, baud)
+
+        return result
+
+    def _reconnect_python_obd(self, port, baud):
+        """Reconnect python-obd (Async) after a UDS session."""
+        import time
+        time.sleep(0.5)
+        try:
+            self._obd_conn = obd.Async(
+                portstr=port, baudrate=baud, fast=False, timeout=10,
+            )
+            if self._obd_conn.status() == obd.OBDStatus.CAR_CONNECTED:
+                self.protocol_name = str(self._obd_conn.protocol_name())
+                self.state = ConnectionState.CONNECTED
+                # Re-watch PIDs and start async
+                for cmd in [obd.commands.RPM, obd.commands.SPEED,
+                            obd.commands.COOLANT_TEMP, obd.commands.ENGINE_LOAD,
+                            obd.commands.THROTTLE_POS, obd.commands.INTAKE_TEMP]:
+                    if cmd in self._obd_conn.supported_commands:
+                        self._obd_conn.watch(cmd)
+                self._obd_conn.start()
+                logger.info(f"Reconnected python-obd (async): {self.protocol_name}")
+            else:
+                logger.warning(f"python-obd reconnect status: {self._obd_conn.status()}")
+        except Exception as e:
+            logger.error(f"Failed to reconnect python-obd: {e}")
+
     def _get_raw_conn(self):
-        """Get the underlying serial connection for UDS operations."""
+        """Get the underlying serial connection for UDS operations.
+
+        Returns None when python-obd is the active connection to prevent
+        raw serial commands from corrupting python-obd's internal state.
+        Use use_custom_connection() for UDS operations instead.
+        """
         if self._custom_conn:
             return self._custom_conn
         if self._obd_conn:
-            # Create custom conn sharing the serial interface
-            # python-obd exposes the port via ._ELM327__port
-            try:
-                from obd_core.connection import ELM327Connection
-                self._custom_conn = ELM327Connection()
-                # Reuse python-obd's serial port
-                if hasattr(self._obd_conn, 'interface') and hasattr(self._obd_conn.interface, '_ELM327__port'):
-                    self._custom_conn.serial_conn = self._obd_conn.interface._ELM327__port
-                    self._custom_conn.state = ConnectionState.CONNECTED
-                    self._custom_conn.port = self.port
-                    logger.info("Sharing python-obd serial port for UDS")
-                else:
-                    logger.warning("Cannot share port — UDS operations may fail")
-                return self._custom_conn
-            except Exception as e:
-                logger.error(f"Failed to create UDS connection: {e}")
+            logger.debug("Raw serial access blocked — use use_custom_connection()")
+            return None
         return None
 
     @staticmethod

@@ -108,10 +108,17 @@ class UDSClient:
         """
         data = "3E00"
         response = self._send_uds(data)
-        result = self._parse_response(response, 0x7E)
-        success = result is not None
-        self.safety.log_operation("TesterPresent", 0x3E, data, "OK" if success else "FAILED")
-        return success
+        # Check for positive response: 7E in response (with or without headers)
+        if response:
+            clean = response.replace(" ", "").replace("\n", "").replace("\r", "")
+            # Positive response is 7E00 somewhere in the response
+            if "7E" in clean and "NO DATA" not in response and "ERROR" not in response:
+                self.safety.log_operation("TesterPresent", 0x3E, data, "OK")
+                logger.debug(f"TesterPresent OK: {response.strip()[:60]}")
+                return True
+        self.safety.log_operation("TesterPresent", 0x3E, data, f"FAILED: {response.strip()[:40] if response else 'empty'}")
+        logger.debug(f"TesterPresent FAILED: {response.strip()[:60] if response else 'empty'}")
+        return False
 
     def read_dtc_info(self, sub_function: int = 0x02, status_mask: int = 0xFF) -> List[Dict]:
         """Read DTC information (Service 0x19).
@@ -269,6 +276,15 @@ class UDSClient:
                     })
                     logger.info(f"Found responding ECU: {ecu.name} (0x{ecu.request_id:03X})")
 
+        # Restore default ELM327 state so python-obd queries keep working.
+        # The AT SH commands above change CAN headers which breaks python-obd.
+        try:
+            self.connection.send_command("AT D")   # Reset to defaults
+            self.connection.send_command("AT H0")  # Headers off
+            logger.info("Restored default ELM327 headers after ECU scan")
+        except Exception:
+            pass
+
         return responding_ecus
 
     def read_extended_data(self, make: str = "") -> Dict:
@@ -327,6 +343,7 @@ class UDSClient:
             return ""
 
         response = self.connection.send_raw(data_hex)
+        logger.debug(f"UDS TX: {data_hex} → RX: {response.strip()[:80] if response else '(empty)'}")
 
         # Handle Response Pending (NRC 0x78) - re-read only, do NOT re-send
         max_pending_retries = 10

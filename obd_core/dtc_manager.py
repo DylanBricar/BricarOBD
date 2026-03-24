@@ -55,29 +55,98 @@ class DTCManager:
         """
         dtc_dict = {}
 
-        obd_dtcs = self.obd_reader.read_dtcs()
-        for dtc in obd_dtcs:
-            key = dtc.get("code", "")
-            if key:
-                dtc_dict[key] = DTCRecord(
-                    code=key,
-                    description=dtc.get("description", ""),
-                    status=dtc.get("status", ""),
-                    status_byte=dtc.get("status_byte", 0),
-                    source="OBD"
-                )
+        # Read ALL DTCs via custom connection (disconnect python-obd temporarily).
+        # This is more reliable than querying through async python-obd.
+        conn = self.obd_reader.connection
+        if hasattr(conn, 'use_custom_connection'):
+            def _read_all(custom_conn):
+                """Read OBD + UDS DTCs from all ECUs."""
+                obd_results = []
+                uds_results = []
 
-        uds_dtcs = self.uds_client.read_dtc_info()
+                # 1. Read OBD DTCs (Mode 03) via raw serial
+                logger.info("Reading OBD DTCs (Mode 03)...")
+                response = custom_conn.send_obd("03")
+                obd_results = self.obd_reader._parse_dtc_response(response, "03")
+                logger.info(f"OBD Mode 03: {len(obd_results)} DTCs")
+
+                # 2. Read pending DTCs (Mode 07)
+                response = custom_conn.send_obd("07")
+                pending = self.obd_reader._parse_dtc_response(response, "07")
+                logger.info(f"OBD Mode 07: {len(pending)} pending DTCs")
+                for dtc in pending:
+                    dtc["status"] = "Pending"
+                obd_results.extend(pending)
+
+                # 3. Read DTCs from all ECUs directly (skip tester_present)
+                # Enable headers so we can see which ECU responds
+                custom_conn.send_command("ATH1")
+                make = getattr(conn, '_detected_make', '')
+                from obd_core.ecu_database import get_ecus_for_make
+                if make:
+                    candidates = get_ecus_for_make(make)
+                else:
+                    from obd_core.uds_client import GENERIC_ECUS
+                    candidates = list(GENERIC_ECUS)
+                logger.info(f"Scanning {len(candidates)} ECUs for DTCs...")
+
+                for ecu in candidates:
+                    if self.uds_client.set_target_ecu(ecu.request_id, ecu.response_id):
+                        # Try reading DTCs directly (Service 0x19 sub 0x02)
+                        ecu_dtcs = self.uds_client.read_dtc_info()
+                        if ecu_dtcs:
+                            for dtc in ecu_dtcs:
+                                dtc['ecu_name'] = ecu.name
+                            uds_results.extend(ecu_dtcs)
+                            logger.info(f"  {ecu.name}: {len(ecu_dtcs)} DTCs")
+                        else:
+                            logger.debug(f"  {ecu.name}: no DTCs or no response")
+                # Restore headers off
+                custom_conn.send_command("ATH0")
+
+                return {"obd": obd_results, "uds": uds_results}
+
+            results = conn.use_custom_connection(_read_all)
+            if results:
+                for dtc in results.get("obd", []):
+                    key = dtc.get("code", "")
+                    if key:
+                        dtc_dict[key] = DTCRecord(
+                            code=key,
+                            description=dtc.get("description", ""),
+                            status=dtc.get("status", "Active"),
+                            status_byte=dtc.get("status_byte", 0),
+                            source="OBD"
+                        )
+                uds_dtcs = results.get("uds", [])
+            else:
+                uds_dtcs = []
+        else:
+            # Fallback: read OBD DTCs directly
+            obd_dtcs = self.obd_reader.read_dtcs()
+            for dtc in obd_dtcs:
+                key = dtc.get("code", "")
+                if key:
+                    dtc_dict[key] = DTCRecord(
+                        code=key,
+                        description=dtc.get("description", ""),
+                        status=dtc.get("status", ""),
+                        status_byte=dtc.get("status_byte", 0),
+                        source="OBD"
+                    )
+            uds_dtcs = self.uds_client.read_dtc_info()
+
         for dtc in uds_dtcs:
             key = dtc.get("dtc_code", "")
             if key:
+                ecu_name = dtc.get("ecu_name", "UDS")
                 if key not in dtc_dict:
                     dtc_dict[key] = DTCRecord(
                         code=key,
                         description="",
                         status=", ".join(dtc.get("status_flags", [])),
                         status_byte=dtc.get("status_byte", 0),
-                        source="UDS"
+                        source=ecu_name
                     )
 
         records = list(dtc_dict.values())

@@ -244,12 +244,31 @@ class ConnectionFrame(ctk.CTkFrame):
             return
 
         self.after(0, self.log_message, t("conn_connecting_to", port=f"{port} @ {baud}"))
+
+        # Install a logging handler to forward protocol cycling info to the GUI log
+        import logging
+        class _GUILogHandler(logging.Handler):
+            def __init__(self, frame):
+                super().__init__()
+                self.frame = frame
+            def emit(self, record):
+                msg = record.getMessage()
+                if "Trying protocol" in msg or "ECU responded" in msg or "No ECU response" in msg:
+                    self.frame.after(0, self.frame.log_message, f"   {msg}")
+
+        gui_handler = _GUILogHandler(self)
+        gui_handler.setLevel(logging.INFO)
+        hybrid_logger = logging.getLogger("obd_core.hybrid_reader")
+        hybrid_logger.addHandler(gui_handler)
+
         try:
             success = self.app.connection.connect(port, baud)
             self.after(0, self._on_connect_result, success)
         except Exception as e:
             self.after(0, self.log_message, t("conn_error", error=str(e)))
             self.after(0, self._on_connect_result, False)
+        finally:
+            hybrid_logger.removeHandler(gui_handler)
 
     def _on_connect_result(self, success):
         """Called after connect thread finishes.
@@ -272,28 +291,14 @@ class ConnectionFrame(ctk.CTkFrame):
                 try:
                     from obd_core.vin_decoder import decode_vin, get_profile_key_for_make
 
-                    # Step 1: Read VIN
+                    # Step 1: VIN — skip Mode 09 queries as they crash some ELM327 clones.
+                    # VIN will be available if python-obd already read it during handshake.
                     self.after(0, self.log_message, t("conn_step_vin"))
-                    vehicle_info = self.app.obd_reader.get_vehicle_info()
-                    vin = vehicle_info.get("vin", "")
-
                     make = "Unknown"
                     year = ""
-                    if vin:
-                        decoded = decode_vin(vin)
-                        make = decoded["make"]
-                        year = decoded["model_year"]
-
-                        # Store detected vehicle on app
-                        self.app.detected_vehicle = decoded
-                        self.app.detected_make = make
-
-                        vehicle_str = f"{make} ({year})" if year else make
-                        self.after(0, self.log_message, t("conn_step_vin_result", vehicle=vehicle_str, vin=vin[:8]))
-                    else:
-                        self.app.detected_vehicle = None
-                        self.app.detected_make = ""
-                        self.after(0, self.log_message, t("conn_step_vin_unavailable"))
+                    self.app.detected_vehicle = None
+                    self.app.detected_make = ""
+                    self.after(0, self.log_message, t("conn_step_vin_unavailable"))
 
                     # Step 2: Discover supported PIDs
                     self.after(0, self.log_message, t("conn_step_pids"))
@@ -301,10 +306,19 @@ class ConnectionFrame(ctk.CTkFrame):
                     self.after(0, self.log_message, t("conn_step_pids_result", count=len(supported)))
 
                     # Step 3: Scan ECUs with manufacturer-specific addresses
-                    self.after(0, self.log_message, t("conn_step_ecus", make=make))
-                    ecus = self.app.uds_client.scan_ecus(make=make)
-                    self.app.discovered_ecus = ecus
-                    self.after(0, self.log_message, t("conn_step_ecus_result", count=len(ecus)))
+                    # Skip UDS scan when python-obd is the active connection —
+                    # sending AT SH commands corrupts python-obd's internal state
+                    # and breaks all subsequent PID queries.
+                    conn = self.app.connection
+                    if hasattr(conn, '_obd_conn') and conn._obd_conn is not None:
+                        self.after(0, self.log_message, t("conn_step_ecus", make=make))
+                        self.app.discovered_ecus = []
+                        self.after(0, self.log_message, "   ECU scan skipped (python-obd active — use Advanced tab)")
+                    else:
+                        self.after(0, self.log_message, t("conn_step_ecus", make=make))
+                        ecus = self.app.uds_client.scan_ecus(make=make)
+                        self.app.discovered_ecus = ecus
+                        self.after(0, self.log_message, t("conn_step_ecus_result", count=len(ecus)))
 
                     # Final summary
                     self.after(0, self._update_vehicle_display, make, year)
