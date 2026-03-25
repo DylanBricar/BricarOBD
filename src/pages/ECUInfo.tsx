@@ -122,7 +122,11 @@ export default function ECUInfo({ ecus, isScanning = false, onScan }: ECUInfoPro
                         <p className="text-xs text-obd-text truncate">{val}</p>
                       </div>
                       {didResults[did] && (
-                        <p className="text-[10px] font-mono text-obd-success mt-0.5 truncate">{didResults[did]}</p>
+                        <p className={cn("text-[10px] font-mono mt-0.5 truncate", didResults[did].startsWith("Error") ? "text-obd-danger" : "text-obd-success")}>
+                          {didResults[did].startsWith("[DEMO]")
+                            ? t("common.success")
+                            : didResults[did]}
+                        </p>
                       )}
                       <button
                         onClick={async () => {
