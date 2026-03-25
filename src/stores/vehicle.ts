@@ -23,6 +23,7 @@ export interface DtcCode {
   causes?: string[];
   quickCheck?: string;
   difficulty?: number;
+  ecuContext?: string;
 }
 
 export interface DtcHistoryEntry extends DtcCode {
@@ -235,7 +236,7 @@ export function useVehicleData() {
   const [ecus, setEcus] = useState<EcuInfo[]>([]);
   const [monitors, setMonitors] = useState<MonitorStatus[]>([]);
   const [mode06Results, setMode06Results] = useState<Mode06Result[]>([]);
-  const [freezeFrame, setFreezeFrame] = useState<FreezeFrameData | null>(null);
+  const [freezeFrame, setFreezeFrame] = useState<FreezeFrameData[]>([]);
   const [isLoadingMode06, setIsLoadingMode06] = useState(false);
   const [isLoadingFreezeFrame, setIsLoadingFreezeFrame] = useState(false);
   const [isPolling, setIsPolling] = useState(false);
@@ -337,7 +338,7 @@ export function useVehicleData() {
     if (isLoadingFreezeFrame) return;
     setIsLoadingFreezeFrame(true);
     try {
-      const data = await invoke<FreezeFrameData | null>("get_freeze_frame", { lang: i18n.language });
+      const data = await invoke<FreezeFrameData[]>("get_freeze_frame", { lang: i18n.language });
       setFreezeFrame(data);
     } catch (e) {
       devInfo("ui", "Freeze frame error: " + String(e));
@@ -360,7 +361,7 @@ export function useVehicleData() {
     setEcus([]);
     setMonitors([]);
     setMode06Results([]);
-    setFreezeFrame(null);
+    setFreezeFrame([]);
     try { localStorage.removeItem("bricarobd_dtc_history"); } catch {}
   }, []);
 

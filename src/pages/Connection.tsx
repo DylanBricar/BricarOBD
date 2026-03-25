@@ -15,6 +15,7 @@ import {
   Smartphone,
   X,
   AlertCircle,
+  AlertTriangle,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/useToast";
@@ -408,6 +409,16 @@ export default function Connection({
               </div>
             </button>
           </div>
+
+          {/* VIN not detected alert */}
+          {status === "connected" && vehicle && !vehicle.vin && (
+            <div className="flex items-start gap-3 p-3 rounded-lg bg-obd-warning/10 border border-obd-warning/30">
+              <AlertTriangle className="w-4 h-4 text-obd-warning mt-0.5 flex-shrink-0" />
+              <p className="text-xs text-obd-warning leading-relaxed">
+                {t("connection.vinNotDetected")}
+              </p>
+            </div>
+          )}
 
           {/* Manual VIN */}
           <div className="space-y-1.5 pt-2 border-t border-obd-border/30">

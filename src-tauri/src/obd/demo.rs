@@ -100,6 +100,7 @@ impl DemoConnection {
                 causes,
                 quick_check,
                 difficulty,
+                ecu_context: Some("Engine (ECM)".to_string()),
             }
         }).collect()
     }

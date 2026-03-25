@@ -72,6 +72,7 @@ pub fn parse_dtc_response(response: &str, status: DtcStatus, source: &str, lang:
                 causes,
                 quick_check,
                 difficulty,
+                ecu_context: None,
             });
         }
     }

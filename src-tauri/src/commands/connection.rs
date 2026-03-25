@@ -95,10 +95,11 @@ pub async fn connect_obd(port: String, baud_rate: u32) -> Result<VehicleInfo, St
 
                     crate::obd::dev_log::log_info("connection", &format!("VIN decoded: {}, Make: {}, Year: {}", vin_info.vin, vin_info.make, vin_info.year));
 
+                    let model = super::database::find_vehicle_model_sync(&vin_info.make);
                     let info = VehicleInfo {
                         vin: vin_info.vin,
                         make: vin_info.make,
-                        model: String::new(),
+                        model: model.unwrap_or_default(),
                         year: vin_info.year,
                         protocol: conn.protocol.clone(),
                         elm_version: conn.elm_version.clone(),
@@ -331,10 +332,11 @@ pub async fn connect_wifi(host: String, port: u16) -> Result<VehicleInfo, String
         let vin = parse_vin_response(&vin_response);
         let vin_info = crate::obd::vin::decode_vin(&vin);
 
+        let model = super::database::find_vehicle_model_sync(&vin_info.make);
         let info = VehicleInfo {
             vin: vin_info.vin,
             make: vin_info.make,
-            model: String::new(),
+            model: model.unwrap_or_default(),
             year: vin_info.year,
             protocol: conn.protocol.clone(),
             elm_version: conn.elm_version.clone(),
@@ -442,10 +444,11 @@ pub fn set_manual_vin(vin: String) -> Result<VehicleInfo, String> {
         vin_info.vin, vin_info.make, vin_info.country, vin_info.year
     ));
 
+    let model = super::database::find_vehicle_model_sync(&vin_info.make);
     Ok(VehicleInfo {
         vin: vin_info.vin,
         make: vin_info.make,
-        model: String::new(),
+        model: model.unwrap_or_default(),
         year: vin_info.year,
         protocol,
         elm_version,

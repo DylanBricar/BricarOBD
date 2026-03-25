@@ -95,6 +95,7 @@ pub fn run() {
             database::get_sessions_cmd,
             database::delete_session_cmd,
             database::save_session_cmd,
+            database::find_vehicle_model,
             // Settings + File export
             settings::get_settings,
             settings::save_settings,

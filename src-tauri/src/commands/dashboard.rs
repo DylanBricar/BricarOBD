@@ -8,6 +8,95 @@ use crate::commands::connection::{is_demo, with_real_connection};
 use std::collections::{HashMap, VecDeque};
 use std::sync::Mutex;
 
+/// Decode DID value with heuristic formula based on the parameter name.
+/// Order matters: more specific terms are checked first to avoid false positives
+/// (e.g., "Battery Current" must match current before battery/voltage).
+fn decode_did_value(bytes: &[u8], name: &str) -> (f64, String) {
+    let raw = if bytes.len() >= 2 {
+        (bytes[0] as f64) * 256.0 + (bytes[1] as f64)
+    } else if bytes.len() == 1 {
+        bytes[0] as f64
+    } else {
+        return (0.0, String::new());
+    };
+
+    let name_lower = name.to_lowercase();
+
+    // === Most specific terms first ===
+
+    // RPM (check before generic terms)
+    if name_lower.contains("rpm") || name_lower.contains("régime") || name_lower.contains("regime") {
+        return (raw / 4.0, "RPM".into());
+    }
+
+    // Speed (check before distance/km)
+    if name_lower.contains("speed") || name_lower.contains("vitesse") || name_lower.contains("km/h") {
+        return (raw, "km/h".into());
+    }
+
+    // Temperature (check before voltage — "temp" is unambiguous)
+    if name_lower.contains("temp") || name_lower.contains("température") || name_lower.contains("°c") {
+        if raw > 1000.0 {
+            return (raw / 10.0 - 40.0, "°C".into());
+        }
+        return (raw - 40.0, "°C".into());
+    }
+
+    // Current/Amperage (check BEFORE voltage — "Battery Current" must match here, not voltage)
+    if name_lower.contains("current") || name_lower.contains("courant") || name_lower.contains("ampère") || name_lower.contains("ampere") {
+        return (raw / 1000.0, "A".into());
+    }
+
+    // Pressure (check BEFORE percentage — "Charge Pressure" must match here, not %)
+    if name_lower.contains("press") || name_lower.contains("pression") || name_lower.contains("bar") {
+        if name_lower.contains("bar") {
+            return (raw / 1000.0, "bar".into());
+        }
+        return (raw, "kPa".into());
+    }
+
+    // Voltage (check after current and pressure)
+    if name_lower.contains("volt") || name_lower.contains("tension") || name_lower.contains("battery") || name_lower.contains("batterie") {
+        if raw > 1000.0 {
+            return (raw / 1000.0, "V".into());
+        }
+        return (raw / 100.0, "V".into());
+    }
+
+    // Percentage (check last among common types — "charge", "load" are ambiguous)
+    if name_lower.contains("%") || name_lower.contains("percent") || name_lower.contains("taux")
+        || name_lower.contains("throttle") || name_lower.contains("papillon")
+        || name_lower.contains("fuel level") || name_lower.contains("niveau") {
+        if bytes.len() == 1 {
+            return (raw * 100.0 / 255.0, "%".into());
+        }
+        return (raw * 100.0 / 65535.0, "%".into());
+    }
+    // "load" and "charge" only if no other category matched
+    if name_lower.contains("load") || name_lower.contains("charge") {
+        if bytes.len() == 1 {
+            return (raw * 100.0 / 255.0, "%".into());
+        }
+        return (raw * 100.0 / 65535.0, "%".into());
+    }
+
+    // Time (seconds or ms)
+    if name_lower.contains("time") || name_lower.contains("temps") || name_lower.contains("durée") || name_lower.contains("duration") {
+        if raw > 60000.0 {
+            return (raw / 1000.0, "s".into());
+        }
+        return (raw, "ms".into());
+    }
+
+    // Distance (km)
+    if name_lower.contains("distance") || name_lower.contains("km") || name_lower.contains("mile") {
+        return (raw, "km".into());
+    }
+
+    // Default: raw value, no unit
+    (raw, String::new())
+}
+
 static DEMO: Mutex<Option<DemoConnection>> = Mutex::new(None);
 
 // History buffer for real mode PIDs — VecDeque for O(1) pop_front
@@ -20,6 +109,10 @@ const MAX_PID_FAILURES: u32 = 3; // Skip PID after 3 consecutive failures
 // Discovered PIDs/DIDs — populated once by discover_vehicle_params, then used for polling
 static DISCOVERED_PIDS: Mutex<Option<Vec<u8>>> = Mutex::new(None);
 static DISCOVERED_DIDS: Mutex<Option<Vec<(String, String)>>> = Mutex::new(None); // (hex_id, name)
+
+// Cache for DID info from SQLite DB — populated once per session, avoids per-poll DB queries
+// Key: DID hex string (e.g. "2282"), Value: (name_en, name_fr, ecu_name)
+static DID_INFO_CACHE: Mutex<Option<HashMap<String, (String, String, String)>>> = Mutex::new(None);
 
 /// Step 1: Lock PID_FAIL_COUNT briefly, clone snapshot, return
 fn snapshot_fail_counts() -> HashMap<u16, u32> {
@@ -254,20 +347,48 @@ pub fn get_pid_data_extended(manufacturer: String) -> Vec<PidValue> {
         }
     }
 
-    // Step 4: Decode values + update history (short lock)
+    // Step 4: Build DID info cache (populated once, reused across poll cycles)
+    let lang = super::connection::get_lang();
+    {
+        let mut cache_guard = DID_INFO_CACHE.lock().unwrap_or_else(|e| e.into_inner());
+        if cache_guard.is_none() {
+            let mut cache = HashMap::new();
+            for (did_id, _did_name, _) in &did_results {
+                let did_hex = format!("{:04X}", did_id);
+                if let Some(info) = super::database::get_did_info_sync(&did_hex, &manufacturer) {
+                    cache.insert(did_hex, info);
+                }
+            }
+            dev_log::log_info("dashboard", &format!("DID info cache populated: {} entries from DB", cache.len()));
+            *cache_guard = Some(cache);
+        }
+    }
+
+    // Step 5: Decode values + update history (short lock, no DB queries)
+    let did_cache = {
+        let cache_guard = DID_INFO_CACHE.lock().unwrap_or_else(|e| e.into_inner());
+        cache_guard.clone().unwrap_or_default()
+    };
     let mut success_count = 0;
     {
         let mut history_guard = PID_HISTORY.lock().unwrap_or_else(|e| e.into_inner());
         let history = history_guard.get_or_insert_with(HashMap::new);
 
         for (did_id, did_name, response_bytes) in &did_results {
-            let value = if response_bytes.len() >= 2 {
-                (response_bytes[0] as f64) * 256.0 + (response_bytes[1] as f64)
-            } else if response_bytes.len() == 1 {
-                response_bytes[0] as f64
+            // Look up from cache (no DB query in hot loop)
+            let did_hex = format!("{:04X}", did_id);
+            let db_info = did_cache.get(&did_hex);
+
+            // Choose best name: DB name (localized) > ecu_profiles name > fallback
+            let display_name = if let Some((name_en, name_fr, _ecu)) = db_info {
+                let name = if lang == "fr" && !name_fr.is_empty() { name_fr } else { name_en };
+                if !name.is_empty() { name.clone() } else { did_name.clone() }
             } else {
-                continue;
+                did_name.clone()
             };
+
+            // Decode value with heuristic based on name
+            let (value, unit) = decode_did_value(&response_bytes, &display_name);
 
             let hist = history.entry(*did_id).or_insert_with(VecDeque::new);
             hist.push_back(value);
@@ -278,9 +399,9 @@ pub fn get_pid_data_extended(manufacturer: String) -> Vec<PidValue> {
 
             results.push(PidValue {
                 pid: *did_id,
-                name: did_name.clone(),
+                name: display_name,
                 value,
-                unit: String::new(),
+                unit,
                 min,
                 max,
                 history: hist.iter().cloned().collect(),
@@ -418,6 +539,9 @@ pub fn clear_pid_history() {
 
     let mut dids_guard = DISCOVERED_DIDS.lock().unwrap_or_else(|e| e.into_inner());
     *dids_guard = None;
+
+    let mut cache_guard = DID_INFO_CACHE.lock().unwrap_or_else(|e| e.into_inner());
+    *cache_guard = None;
 
     dev_log::log_info("connection", "PID history and discovery data cleared");
 }

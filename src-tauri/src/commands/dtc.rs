@@ -95,6 +95,21 @@ pub fn read_all_dtcs(lang: Option<String>) -> Vec<DtcCode> {
     let mut seen = std::collections::HashSet::new();
     all_dtcs.retain(|d| seen.insert(format!("{}:{:?}", d.code, d.status)));
 
+    // ====== Enrich DTCs with ECU context ======
+    for dtc in &mut all_dtcs {
+        if dtc.ecu_context.is_none() {
+            dtc.ecu_context = match dtc.source.as_str() {
+                s if s.contains("7E0") => Some("Engine (ECM)".to_string()),
+                s if s.contains("7E1") => Some("Transmission (TCM)".to_string()),
+                s if s.contains("7E2") => Some("ABS / ESP".to_string()),
+                s if s.contains("7E3") => Some("Airbag (SRS)".to_string()),
+                s if s.contains("7E4") => Some("Climate / HVAC".to_string()),
+                s if s.contains("75D") => Some("BSI / BCM".to_string()),
+                _ => None,
+            };
+        }
+    }
+
     dev_log::log_info("dtc", &format!("DTC scan complete: {} unique DTCs found", all_dtcs.len()));
     tracing::info!("Read {} DTCs from vehicle", all_dtcs.len());
     all_dtcs
@@ -196,6 +211,7 @@ fn parse_uds_dtc_response(response: &str, ecu_addr: &str, lang: &str) -> Vec<Dtc
                 causes,
                 quick_check,
                 difficulty,
+                ecu_context: None,
             });
         }
     }

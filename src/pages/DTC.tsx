@@ -48,7 +48,7 @@ interface DTCProps {
   mode06Results?: Mode06Result[];
   isLoadingMode06?: boolean;
   onLoadMode06?: () => void;
-  freezeFrame?: FreezeFrameData | null;
+  freezeFrame?: FreezeFrameData[];
   isLoadingFreezeFrame?: boolean;
   onLoadFreezeFrame?: () => void;
 }
@@ -64,7 +64,7 @@ export default function DTC({
   mode06Results = [],
   isLoadingMode06 = false,
   onLoadMode06 = () => {},
-  freezeFrame = null,
+  freezeFrame = [],
   isLoadingFreezeFrame = false,
   onLoadFreezeFrame = () => {},
 }: DTCProps) {
@@ -342,6 +342,13 @@ export default function DTC({
               </h4>
               <p className="text-sm text-obd-text">{selectedData.source}</p>
             </div>
+
+            {selectedData.ecuContext && (
+              <div className="space-y-1">
+                <h4 className="text-xs font-medium text-white/40 mb-1">{t("dtc.ecu")}</h4>
+                <p className="text-sm text-obd-accent">{selectedData.ecuContext}</p>
+              </div>
+            )}
 
             {selectedData.causes && selectedData.causes.length > 0 && (
               <div>

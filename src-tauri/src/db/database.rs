@@ -315,4 +315,76 @@ impl Database {
             .map_err(|e| format!("Failed to delete session: {}", e))?;
         Ok(())
     }
+
+    /// Find the best matching vehicle profile name for a given make
+    pub fn find_vehicle_model(&self, make: &str) -> Option<String> {
+        if make.is_empty() {
+            return None;
+        }
+        let pattern = format!("%{}%", make);
+        self.conn
+            .query_row(
+                "SELECT DISTINCT v.name FROM vehicles v WHERE v.name LIKE ?1 LIMIT 1",
+                params![pattern],
+                |row| row.get(0),
+            )
+            .ok()
+    }
+
+    /// Look up DID info from the database for a specific vehicle
+    /// Returns (name_en, name_fr, ecu_name) if found
+    pub fn get_did_info(&self, did: &str, vehicle: &str) -> Option<(String, String, String)> {
+        if did.is_empty() || vehicle.is_empty() {
+            return None;
+        }
+        let veh_pattern = format!("%{}%", vehicle);
+        self.conn
+            .query_row(
+                "SELECT n.name, o.name_fr, e.name
+                 FROM operations o
+                 LEFT JOIN names n ON o.name_id = n.id
+                 LEFT JOIN ecu_names e ON o.ecu_name_id = e.id
+                 JOIN vehicles v ON o.vehicle_id = v.id AND v.name LIKE ?2
+                 WHERE o.service = '22' AND o.did = ?1 AND o.op_type = 'read'
+                 LIMIT 1",
+                params![did, veh_pattern],
+                |row| Ok((
+                    row.get::<_, String>(0).unwrap_or_default(),
+                    row.get::<_, String>(1).unwrap_or_default(),
+                    row.get::<_, String>(2).unwrap_or_default(),
+                )),
+            )
+            .ok()
+    }
+
+    /// Search for DTC-related info from the operations database
+    /// Looks for operations with service 19 (ReadDTCInformation) that might provide context
+    pub fn search_dtc_context(&self, vehicle: &str) -> Vec<(String, String, String)> {
+        if vehicle.is_empty() {
+            return Vec::new();
+        }
+        let veh_pattern = format!("%{}%", vehicle);
+        let mut stmt = match self.conn.prepare(
+            "SELECT DISTINCT n.name, o.name_fr, e.name
+             FROM operations o
+             LEFT JOIN names n ON o.name_id = n.id
+             LEFT JOIN ecu_names e ON o.ecu_name_id = e.id
+             JOIN vehicles v ON o.vehicle_id = v.id AND v.name LIKE ?1
+             WHERE o.service = '19'
+             LIMIT 50"
+        ) {
+            Ok(s) => s,
+            Err(_) => return Vec::new(),
+        };
+
+        stmt.query_map(params![veh_pattern], |row| {
+            Ok((
+                row.get::<_, String>(0).unwrap_or_default(),
+                row.get::<_, String>(1).unwrap_or_default(),
+                row.get::<_, String>(2).unwrap_or_default(),
+            ))
+        })
+        .map(|rows| rows.filter_map(|r| r.ok()).collect())
+        .unwrap_or_default()
+    }
 }

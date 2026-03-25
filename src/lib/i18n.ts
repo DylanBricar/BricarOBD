@@ -85,6 +85,7 @@ const resources = {
       "connection.wifiPortInvalid": "Port invalide (1-65535)",
       "connection.vinLength": "{{current}}/17 caractères",
       "connection.vinInvalidChars": "VIN invalide : I, O, Q non autorisés",
+      "connection.vinNotDetected": "VIN non détecté automatiquement. Saisissez-le manuellement ci-dessous pour activer la découverte des paramètres constructeur.",
 
       // Dashboard
       "dashboard.title": "Tableau de bord",
@@ -145,6 +146,7 @@ const resources = {
       "dtc.description": "Description",
       "dtc.status": "Statut",
       "dtc.source": "Source",
+      "dtc.ecu": "ECU",
       "dtc.active": "Actif",
       "dtc.pending": "En attente",
       "dtc.permanent": "Permanent",
@@ -197,6 +199,8 @@ const resources = {
       "freezeFrame.parameter": "Paramètre",
       "freezeFrame.value": "Valeur",
       "freezeFrame.subtitle": "Données moteur au moment du défaut",
+      "freezeFrame.frame": "Capture {{n}}",
+      "freezeFrame.noFrameData": "Aucune donnée disponible pour cette capture",
 
       // ECU Info
       "ecu.title": "Informations ECU",
@@ -444,6 +448,7 @@ const resources = {
       "connection.wifiPortInvalid": "Invalid port (1-65535)",
       "connection.vinLength": "{{current}}/17 characters",
       "connection.vinInvalidChars": "Invalid VIN: I, O, Q not allowed",
+      "connection.vinNotDetected": "VIN not detected automatically. Enter it manually below to enable manufacturer parameter discovery.",
 
       "dashboard.title": "Dashboard",
       "dashboard.rpm": "RPM",
@@ -501,6 +506,7 @@ const resources = {
       "dtc.description": "Description",
       "dtc.status": "Status",
       "dtc.source": "Source",
+      "dtc.ecu": "ECU",
       "dtc.active": "Active",
       "dtc.pending": "Pending",
       "dtc.permanent": "Permanent",
@@ -553,6 +559,8 @@ const resources = {
       "freezeFrame.parameter": "Parameter",
       "freezeFrame.value": "Value",
       "freezeFrame.subtitle": "Engine data at fault moment",
+      "freezeFrame.frame": "Frame {{n}}",
+      "freezeFrame.noFrameData": "No data available for this frame",
 
       "ecu.title": "ECU Information",
       "ecu.name": "Name",

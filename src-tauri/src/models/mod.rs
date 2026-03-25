@@ -53,6 +53,8 @@ pub struct DtcCode {
     pub quick_check: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub difficulty: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub ecu_context: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
