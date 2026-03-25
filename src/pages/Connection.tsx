@@ -115,9 +115,13 @@ export default function Connection({
   const handleScanWifi = async () => {
     setIsScanning(true);
     try {
-      const adapters = await invoke<string[]>("scan_wifi");
+      const adapters = await invoke<any[]>("scan_wifi");
       setWifiAdapters(adapters);
-      showToast(`${t("connection.found")} ${adapters.length} adapter(s)`);
+      if (adapters.length > 0) {
+        showToast(t("connection.wifiFound", { count: adapters.length }));
+      } else {
+        showToast(t("connection.wifiNone"), "error");
+      }
     } catch (e) {
       showToast(`${t("common.error")}: ${e}`, "error");
     }

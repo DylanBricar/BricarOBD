@@ -90,10 +90,13 @@ export default function DTC({ dtcs, dtcHistory, vehicle, onReadAll, onClearAll, 
     d.description.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  // Filter history (also by search)
+  // Filter history — only show codes NOT currently active/pending/permanent
+  const activeCodes = new Set(dtcs.map((d) => d.code));
   const uniqueHistory = Array.from(
     new Map(dtcHistory.map((h) => [h.code, h])).values()
-  ).sort((a, b) => b.seenAt - a.seenAt);
+  )
+    .filter((h) => !activeCodes.has(h.code)) // Exclude codes still active
+    .sort((a, b) => b.seenAt - a.seenAt);
 
   const filteredHistory = searchQuery
     ? uniqueHistory.filter((h) =>
@@ -102,9 +105,10 @@ export default function DTC({ dtcs, dtcHistory, vehicle, onReadAll, onClearAll, 
       )
     : uniqueHistory;
 
-  // Selected from current or history
-  const selectedData = filteredDtcs.find((d) => d.code === selectedDtc)
-    || dtcHistory.find((h) => h.code === selectedDtc);
+  // Selected — use prefix to distinguish active vs history
+  const selectedData = selectedDtc?.startsWith("hist-")
+    ? dtcHistory.find((h) => h.code === selectedDtc.replace("hist-", ""))
+    : filteredDtcs.find((d) => d.code === selectedDtc);
 
   const openExternal = (url: string) => {
     const a = document.createElement("a");
@@ -235,10 +239,10 @@ export default function DTC({ dtcs, dtcHistory, vehicle, onReadAll, onClearAll, 
                   {filteredHistory.map((h) => (
                     <button
                       key={`hist-${h.code}`}
-                      onClick={() => setSelectedDtc(h.code === selectedDtc ? null : h.code)}
+                      onClick={() => setSelectedDtc(`hist-${h.code}` === selectedDtc ? null : `hist-${h.code}`)}
                       className={cn(
                         "data-row w-full text-left group opacity-70",
-                        selectedDtc === h.code && "bg-obd-warning/5 opacity-100"
+                        selectedDtc === `hist-${h.code}` && "bg-obd-warning/5 opacity-100"
                       )}
                     >
                       <div className="flex items-center gap-3 flex-1">
@@ -253,7 +257,7 @@ export default function DTC({ dtcs, dtcHistory, vehicle, onReadAll, onClearAll, 
                           <p className="text-xs text-obd-text-muted truncate mt-0.5">{h.description}</p>
                         </div>
                         <span className="text-[10px] text-obd-text-muted">
-                          {new Date(h.seenAt).toLocaleDateString(i18n.language === "fr" ? "fr-FR" : "en-US")}
+                          {new Date(h.seenAt).toLocaleString(i18n.language === "fr" ? "fr-FR" : "en-US", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" })}
                         </span>
                         <ChevronRight size={14} className="text-obd-text-muted" />
                       </div>
