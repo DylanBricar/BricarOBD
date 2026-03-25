@@ -45,7 +45,14 @@ pub struct DtcCode {
     pub description: String,
     pub status: DtcStatus,
     pub source: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub repair_tips: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub causes: Option<Vec<String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub quick_check: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub difficulty: Option<u32>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -142,4 +149,27 @@ pub enum RiskLevel {
     Caution,
     Dangerous,
     Blocked,
+}
+
+/// Mode 06 Test Result
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Mode06Result {
+    pub tid: u8,
+    pub mid: u8,
+    pub name: String,
+    pub unit: String,
+    pub test_value: f64,
+    pub min_limit: f64,
+    pub max_limit: f64,
+    pub passed: bool,
+}
+
+/// Mode 02 Freeze Frame Data
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FreezeFrameData {
+    pub dtc_code: String,
+    pub frame_number: u8,
+    pub pids: Vec<PidValue>,
 }

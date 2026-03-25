@@ -5,6 +5,8 @@ import { invoke } from "@tauri-apps/api/core";
 import LiveChart from "@/components/charts/LiveChart";
 import type { PidValue } from "@/stores/vehicle";
 import { cn } from "@/lib/utils";
+import { useToast } from "@/hooks/useToast";
+import { Toast } from "@/components/Toast";
 
 interface LiveDataProps {
   pidData: Map<number, PidValue>;
@@ -71,6 +73,7 @@ export default function LiveData({ pidData, isPolling, onStartPolling, onStopPol
   const recordBufferRef = useRef<Array<{ timestamp: Date; snapshot: Record<number, number> }>>([]);
   const recordingStartRef = useRef<Date | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const fileReaderRef = useRef<FileReader | null>(null);
 
   // Reset selectedPids when data transitions from empty to populated (reconnect)
   const prevSizeRef = useRef(0);
@@ -80,6 +83,15 @@ export default function LiveData({ pidData, isPolling, onStartPolling, onStopPol
     }
     prevSizeRef.current = pidData.size;
   }, [pidData.size]);
+
+  // Cleanup FileReader on unmount
+  useEffect(() => {
+    return () => {
+      if (fileReaderRef.current) {
+        fileReaderRef.current.abort();
+      }
+    };
+  }, []);
 
   // Recording timer with cleanup
   useEffect(() => {
@@ -119,12 +131,7 @@ export default function LiveData({ pidData, isPolling, onStartPolling, onStopPol
     setIsRecording(true);
   };
 
-  const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
-
-  const showToast = (message: string, type: "success" | "error" = "success") => {
-    setToast({ message, type });
-    setTimeout(() => setToast(null), 5000);
-  };
+  const { toast, showToast, dismissToast } = useToast();
 
   const handleStopRecording = async () => {
     setIsRecording(false);
@@ -162,10 +169,12 @@ export default function LiveData({ pidData, isPolling, onStartPolling, onStopPol
     const file = event.target.files?.[0];
     if (!file) return;
     const reader = new FileReader();
+    fileReaderRef.current = reader;
     reader.onload = (e) => {
       const content = e.target?.result as string;
       const lines = content.split("\n").filter(Boolean);
       showToast(t("liveData.importSuccess", { count: lines.length - 1, file: file.name }));
+      fileReaderRef.current = null;
     };
     reader.readAsText(file);
     event.target.value = "";
@@ -290,7 +299,7 @@ export default function LiveData({ pidData, isPolling, onStartPolling, onStopPol
           <button
             onClick={() => fileInputRef.current?.click()}
             className="h-[34px] px-3 rounded-lg text-xs font-medium flex items-center gap-1.5 border bg-obd-border/20 text-obd-text-muted border-obd-border/30 hover:bg-obd-border/40"
-            title="Import CSV"
+            aria-label={t("liveData.import")}
           >
             <Upload size={14} />
           </button>
@@ -459,19 +468,7 @@ export default function LiveData({ pidData, isPolling, onStartPolling, onStopPol
       </div>
 
       {/* Toast notification */}
-      {toast && (
-        <div className={cn(
-          "fixed bottom-4 right-4 max-w-md px-4 py-3 rounded-lg shadow-lg flex items-start gap-3 animate-slide-in z-50",
-          toast.type === "success"
-            ? "bg-obd-success/90 text-white"
-            : "bg-obd-danger/90 text-white"
-        )}>
-          <p className="text-xs flex-1 leading-relaxed break-all">{toast.message}</p>
-          <button onClick={() => setToast(null)} className="flex-shrink-0 hover:opacity-70">
-            <X size={14} />
-          </button>
-        </div>
-      )}
+      {toast && <Toast message={toast.message} type={toast.type} onDismiss={dismissToast} />}
     </div>
   );
 }

@@ -26,7 +26,11 @@ pub fn save_csv_file(filename: String, content: String) -> Result<String, String
         .collect();
     if safe_name.is_empty() || safe_name.contains("..") {
         dev_log::log_warn("settings", "Invalid filename: sanitization failed");
-        return Err("Invalid filename".to_string());
+        return Err(crate::commands::connection::err_msg("Nom de fichier invalide", "Invalid filename"));
+    }
+    if !safe_name.ends_with(".csv") {
+        dev_log::log_warn("settings", &format!("Rejected non-CSV filename: {}", safe_name));
+        return Err(crate::commands::connection::err_msg("Le fichier doit se terminer par .csv", "Filename must end with .csv"));
     }
 
     // Save to Desktop
@@ -35,6 +39,18 @@ pub fn save_csv_file(filename: String, content: String) -> Result<String, String
     std::fs::create_dir_all(&dir).map_err(|e| format!("Cannot create dir: {}", e))?;
 
     let path = dir.join(&safe_name);
+
+    // Defense in depth: verify resolved path stays inside exports dir
+    let canonical_dir = dir.canonicalize().map_err(|e| format!("Cannot resolve dir: {}", e))?;
+    // For new files, canonicalize the parent and check
+    if let Some(parent) = path.parent() {
+        let canonical_parent = parent.canonicalize().map_err(|e| format!("Cannot resolve path: {}", e))?;
+        if !canonical_parent.starts_with(&canonical_dir) {
+            dev_log::log_warn("settings", &format!("Path traversal blocked: {}", path.display()));
+            return Err(crate::commands::connection::err_msg("Traversée de chemin bloquée", "Path traversal blocked"));
+        }
+    }
+
     // Write with BOM for Excel compatibility
     let bom_content = format!("\u{FEFF}{}", content);
     std::fs::write(&path, bom_content).map_err(|e| format!("Cannot write file: {}", e))?;
@@ -52,9 +68,10 @@ pub fn read_csv_file(path: String) -> Result<String, String> {
     let canonical = file_path.canonicalize().map_err(|e| format!("Invalid path: {}", e))?;
     let desktop = dirs_next().ok_or("Cannot find directory")?;
     let allowed_dir = desktop.join("BricarOBD_Exports");
+    let allowed_dir = allowed_dir.canonicalize().map_err(|e| format!("Cannot resolve exports dir: {}", e))?;
     if !canonical.starts_with(&allowed_dir) {
         dev_log::log_warn("settings", &format!("Access denied for path outside exports directory: {}", path));
-        return Err("Access denied: path outside exports directory".to_string());
+        return Err(crate::commands::connection::err_msg("Accès refusé : chemin en dehors du répertoire d'exports", "Access denied: path outside exports directory"));
     }
     dev_log::log_info("settings", &format!("CSV file access allowed: {}", canonical.to_string_lossy()));
     std::fs::read_to_string(&canonical).map_err(|e| format!("Cannot read file: {}", e))
@@ -144,6 +161,8 @@ pub fn clear_dev_logs() {
 /// Add a frontend log entry to the dev console
 #[command]
 pub fn add_dev_log(level: String, source: String, message: String) {
+    let source: String = source.chars().take(64).collect();
+    let message: String = message.chars().take(512).collect();
     match level.to_lowercase().as_str() {
         "debug" => dev_log::log_debug(&source, &message),
         "warn" => dev_log::log_warn(&source, &message),

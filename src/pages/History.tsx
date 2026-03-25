@@ -1,8 +1,10 @@
 import { useState, useEffect } from "react";
 import { useTranslation } from "react-i18next";
-import { Clock, Download, Trash2, FileText, Calendar, X, Upload } from "lucide-react";
+import { Clock, Download, Trash2, FileText, Calendar, AlertTriangle } from "lucide-react";
 import { invoke } from "@tauri-apps/api/core";
 import { cn } from "@/lib/utils";
+import { useToast } from "@/hooks/useToast";
+import { Toast } from "@/components/Toast";
 
 interface Session {
   id: string;
@@ -13,17 +15,27 @@ interface Session {
   dtcCodes?: string[];
 }
 
+interface SessionData {
+  id: number;
+  timestamp: string;
+  make: string;
+  model: string;
+  dtc_count: number;
+  notes: string;
+}
+
 export default function History() {
   const { t } = useTranslation();
   const [sessions, setSessions] = useState<Session[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
+  const { toast, showToast, dismissToast } = useToast();
   const [isLoading, setIsLoading] = useState(true);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState<string | null>(null);
 
   // Load sessions from database on mount
   useEffect(() => {
     setIsLoading(true);
-    invoke<any[]>("get_sessions_cmd")
+    invoke<SessionData[]>("get_sessions_cmd")
       .then((data) => {
         const mapped = data.map((s) => ({
           id: s.id.toString(),
@@ -38,11 +50,6 @@ export default function History() {
       .catch(() => setSessions([]))
       .finally(() => setIsLoading(false));
   }, []);
-
-  const showToast = (message: string, type: "success" | "error" = "success") => {
-    setToast({ message, type });
-    setTimeout(() => setToast(null), 5000);
-  };
 
   const selected = sessions.find((s) => s.id === selectedId);
 
@@ -99,7 +106,7 @@ export default function History() {
           </div>
           <div>
             <h2 className="text-lg font-semibold">{t("history.title")}</h2>
-            <p className="text-xs text-obd-text-muted">{sessions.length} session{sessions.length !== 1 ? "s" : ""}</p>
+            <p className="text-xs text-obd-text-muted">{t("history.sessionCount", { count: sessions.length })}</p>
           </div>
         </div>
         <button
@@ -118,7 +125,7 @@ export default function History() {
           {isLoading ? (
             <div className="flex-1 flex flex-col items-center justify-center text-obd-text-muted">
               <Clock size={48} strokeWidth={1} className="mb-3 opacity-20" />
-              <p className="text-sm">Loading...</p>
+              <p className="text-sm">{t("common.loading")}</p>
             </div>
           ) : sessions.length === 0 ? (
             <div className="flex-1 flex flex-col items-center justify-center text-obd-text-muted">
@@ -204,7 +211,7 @@ export default function History() {
                 {t("history.export")}
               </button>
               <button
-                onClick={() => handleDelete(selected.id)}
+                onClick={() => setShowDeleteConfirm(selected.id)}
                 className="btn-danger w-full flex items-center justify-center gap-1.5 text-xs"
               >
                 <Trash2 size={14} />
@@ -215,18 +222,34 @@ export default function History() {
         )}
       </div>
 
-      {/* Toast */}
-      {toast && (
-        <div className={cn(
-          "fixed bottom-4 right-4 max-w-md px-4 py-3 rounded-lg shadow-lg flex items-start gap-3 animate-slide-in z-50",
-          toast.type === "success" ? "bg-obd-success/90 text-white" : "bg-obd-danger/90 text-white"
-        )}>
-          <p className="text-xs flex-1 leading-relaxed break-all">{toast.message}</p>
-          <button onClick={() => setToast(null)} className="flex-shrink-0 hover:opacity-70">
-            <X size={14} />
-          </button>
+      {/* Delete Confirm Dialog */}
+      {showDeleteConfirm && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50">
+          <div className="glass-card p-6 max-w-md w-full mx-4 space-y-4">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-full bg-obd-danger/20 flex items-center justify-center">
+                <AlertTriangle className="text-obd-danger" size={20} />
+              </div>
+              <h3 className="text-lg font-semibold">{t("history.confirmDelete")}</h3>
+            </div>
+            <p className="text-sm text-obd-text-secondary">{t("history.confirmDeleteMsg")}</p>
+            <div className="flex gap-3 justify-end">
+              <button onClick={() => setShowDeleteConfirm(null)} className="btn-ghost">
+                {t("common.cancel")}
+              </button>
+              <button
+                onClick={() => { handleDelete(showDeleteConfirm); setShowDeleteConfirm(null); }}
+                className="btn-danger"
+              >
+                {t("common.confirm")}
+              </button>
+            </div>
+          </div>
         </div>
       )}
+
+      {/* Toast */}
+      {toast && <Toast message={toast.message} type={toast.type} onDismiss={dismissToast} />}
     </div>
   );
 }

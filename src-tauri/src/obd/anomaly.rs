@@ -2,10 +2,11 @@ use crate::models::PidValue;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct Anomaly {
     pub pid_name: String,
     pub level: AnomalyLevel,
-    pub message: String,
+    pub message_key: String,
     pub value: f64,
     pub threshold: f64,
 }
@@ -17,7 +18,7 @@ pub enum AnomalyLevel {
     Critical,
 }
 
-/// Check PID values for anomalies
+/// Check PID values for anomalies — returns i18n keys for messages
 pub fn check_anomalies(pids: &[PidValue]) -> Vec<Anomaly> {
     let mut anomalies = Vec::new();
 
@@ -29,7 +30,7 @@ pub fn check_anomalies(pids: &[PidValue]) -> Vec<Anomaly> {
                     anomalies.push(Anomaly {
                         pid_name: pid.name.clone(),
                         level: AnomalyLevel::Critical,
-                        message: format!("Surchauffe moteur critique: {:.0}°C", pid.value),
+                        message_key: "anomaly.coolant.critical".to_string(),
                         value: pid.value,
                         threshold: 110.0,
                     });
@@ -37,7 +38,7 @@ pub fn check_anomalies(pids: &[PidValue]) -> Vec<Anomaly> {
                     anomalies.push(Anomaly {
                         pid_name: pid.name.clone(),
                         level: AnomalyLevel::Warning,
-                        message: format!("Température élevée: {:.0}°C", pid.value),
+                        message_key: "anomaly.coolant.warning".to_string(),
                         value: pid.value,
                         threshold: 100.0,
                     });
@@ -49,7 +50,7 @@ pub fn check_anomalies(pids: &[PidValue]) -> Vec<Anomaly> {
                     anomalies.push(Anomaly {
                         pid_name: pid.name.clone(),
                         level: AnomalyLevel::Critical,
-                        message: format!("Batterie faible: {:.1}V", pid.value),
+                        message_key: "anomaly.battery.low".to_string(),
                         value: pid.value,
                         threshold: 11.5,
                     });
@@ -57,7 +58,7 @@ pub fn check_anomalies(pids: &[PidValue]) -> Vec<Anomaly> {
                     anomalies.push(Anomaly {
                         pid_name: pid.name.clone(),
                         level: AnomalyLevel::Warning,
-                        message: format!("Tension excessive: {:.1}V", pid.value),
+                        message_key: "anomaly.battery.high".to_string(),
                         value: pid.value,
                         threshold: 15.5,
                     });
@@ -69,7 +70,7 @@ pub fn check_anomalies(pids: &[PidValue]) -> Vec<Anomaly> {
                     anomalies.push(Anomaly {
                         pid_name: pid.name.clone(),
                         level: AnomalyLevel::Critical,
-                        message: format!("RPM critique: {:.0}", pid.value),
+                        message_key: "anomaly.rpm.critical".to_string(),
                         value: pid.value,
                         threshold: 7500.0,
                     });
@@ -77,7 +78,7 @@ pub fn check_anomalies(pids: &[PidValue]) -> Vec<Anomaly> {
                     anomalies.push(Anomaly {
                         pid_name: pid.name.clone(),
                         level: AnomalyLevel::Warning,
-                        message: format!("RPM élevé: {:.0}", pid.value),
+                        message_key: "anomaly.rpm.warning".to_string(),
                         value: pid.value,
                         threshold: 6500.0,
                     });
@@ -89,7 +90,7 @@ pub fn check_anomalies(pids: &[PidValue]) -> Vec<Anomaly> {
                     anomalies.push(Anomaly {
                         pid_name: pid.name.clone(),
                         level: AnomalyLevel::Critical,
-                        message: format!("Huile surchauffée: {:.0}°C", pid.value),
+                        message_key: "anomaly.oil.critical".to_string(),
                         value: pid.value,
                         threshold: 150.0,
                     });
@@ -97,7 +98,7 @@ pub fn check_anomalies(pids: &[PidValue]) -> Vec<Anomaly> {
                     anomalies.push(Anomaly {
                         pid_name: pid.name.clone(),
                         level: AnomalyLevel::Warning,
-                        message: format!("Huile chaude: {:.0}°C", pid.value),
+                        message_key: "anomaly.oil.warning".to_string(),
                         value: pid.value,
                         threshold: 130.0,
                     });

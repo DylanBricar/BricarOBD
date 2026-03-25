@@ -89,10 +89,10 @@ const chartUnits: Record<number, string> = {
 };
 
 const chartColors: Record<number, string> = {
-  0x0c: "#06B6D4",
-  0x0d: "#22D3EE",
-  0x05: "#F59E0B",
-  0x04: "#10B981",
+  0x0c: "var(--obd-chart-cyan)",
+  0x0d: "var(--obd-chart-cyan-light)",
+  0x05: "var(--obd-chart-amber)",
+  0x04: "var(--obd-chart-green)",
 };
 
 export default function Dashboard({ pidData }: DashboardProps) {
@@ -195,7 +195,7 @@ export default function Dashboard({ pidData }: DashboardProps) {
                 data={pidValue.history ?? []}
                 label={t(chartLabels[pidCode] ?? "")}
                 unit={chartUnits[pidCode] ?? ""}
-                color={chartColors[pidCode] ?? "#06B6D4"}
+                color={chartColors[pidCode] ?? "var(--obd-chart-cyan)"}
                 height={100}
               />
             );

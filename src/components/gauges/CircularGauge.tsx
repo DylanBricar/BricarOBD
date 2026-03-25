@@ -58,14 +58,14 @@ export default function CircularGauge({
       ? `M ${start.x} ${start.y} A ${radius} ${radius} 0 ${valueLargeArc} 1 ${valueEnd.x} ${valueEnd.y}`
       : "";
 
-    let col = "#06B6D4"; // cyan
-    let glow = "#06B6D440";
+    let col = "var(--obd-chart-cyan)"; // cyan
+    let glow = "var(--obd-glow-cyan)";
     if (dangerThreshold && normalizedValue >= dangerThreshold) {
-      col = "#EF4444";
-      glow = "#EF444460";
+      col = "var(--obd-chart-red)";
+      glow = "var(--obd-glow-red)";
     } else if (warningThreshold && normalizedValue >= warningThreshold) {
-      col = "#F59E0B";
-      glow = "#F59E0B50";
+      col = "var(--obd-chart-amber)";
+      glow = "var(--obd-glow-amber)";
     }
 
     return { arcPath: bgPath, valuePath: valPath, color: col, glowColor: glow };
@@ -79,8 +79,8 @@ export default function CircularGauge({
         {/* Background gradient */}
         <defs>
           <linearGradient id={`gauge-bg-${label}`} x1="0%" y1="0%" x2="100%" y2="100%">
-            <stop offset="0%" stopColor="#1E293B" stopOpacity="0.3" />
-            <stop offset="100%" stopColor="#0F172A" stopOpacity="0.5" />
+            <stop offset="0%" stopColor="var(--obd-gauge-grad-start)" stopOpacity="0.3" />
+            <stop offset="100%" stopColor="var(--obd-gauge-grad-end)" stopOpacity="0.5" />
           </linearGradient>
           <filter id={`glow-${label}`}>
             <feGaussianBlur stdDeviation="3" result="coloredBlur" />
@@ -97,7 +97,7 @@ export default function CircularGauge({
           cy={size / 2}
           r={size / 2 - 8}
           fill="none"
-          stroke="#1E293B"
+          stroke="var(--obd-gauge-grad-start)"
           strokeWidth="1"
           opacity="0.5"
         />
@@ -106,7 +106,7 @@ export default function CircularGauge({
         <path
           d={arcPath}
           fill="none"
-          stroke="#1E293B"
+          stroke="var(--obd-gauge-grad-start)"
           strokeWidth="8"
           strokeLinecap="round"
         />

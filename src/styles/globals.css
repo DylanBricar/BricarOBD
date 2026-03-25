@@ -3,6 +3,29 @@
 @tailwind utilities;
 
 @layer base {
+  :root {
+    /* Chart and gauge colors */
+    --obd-chart-cyan: #06B6D4;
+    --obd-chart-cyan-light: #22D3EE;
+    --obd-chart-amber: #F59E0B;
+    --obd-chart-green: #10B981;
+    --obd-chart-red: #EF4444;
+
+    /* Chart tooltip/background colors */
+    --obd-chart-tooltip-bg: #111827;
+    --obd-chart-tooltip-border: #1E293B;
+    --obd-chart-text: #F1F5F9;
+
+    /* Gauge gradient colors */
+    --obd-gauge-grad-start: #1E293B;
+    --obd-gauge-grad-end: #0F172A;
+
+    /* Glow effect colors */
+    --obd-glow-cyan: #06B6D440;
+    --obd-glow-red: #EF444460;
+    --obd-glow-amber: #F59E0B50;
+  }
+
   * {
     @apply border-obd-border;
   }

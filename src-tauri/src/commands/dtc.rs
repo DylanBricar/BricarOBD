@@ -2,119 +2,239 @@ use tauri::command;
 use crate::models::{DtcCode, DtcStatus};
 use crate::obd::demo::DemoConnection;
 use crate::obd::dtc;
+use crate::obd::dev_log;
 use crate::commands::connection::{is_demo, with_real_connection};
 
-/// Read all DTCs — Mode 03 (active), Mode 07 (pending), Mode 0A (permanent)
+/// Read all DTCs — Mode 03 (active), Mode 07 (pending), Mode 0A (permanent) + UDS 0x19
 #[command]
 pub fn read_all_dtcs(lang: Option<String>) -> Vec<DtcCode> {
-    let _lang = lang.unwrap_or_else(|| "fr".to_string());
+    let lang = lang.as_deref().unwrap_or("en");
     if is_demo() {
-        crate::obd::dev_log::log_info("dtc", "Demo mode: returning simulated DTCs");
-        return DemoConnection::get_dtcs();
+        dev_log::log_info("dtc", "Demo mode: returning simulated DTCs");
+        return DemoConnection::get_dtcs(lang);
     }
 
-    crate::obd::dev_log::log_info("dtc", "Real mode: starting DTC scan");
+    dev_log::log_info("dtc", "Real mode: starting DTC scan");
 
-    // Real vehicle: scan all 3 OBD modes
     let mut all_dtcs: Vec<DtcCode> = Vec::new();
 
-    // Mode 03 — Confirmed/Active DTCs
-    if let Ok(response) = with_real_connection(|conn| conn.send_command("03")) {
-        let parsed = dtc::parse_dtc_response(&response, DtcStatus::Active, "OBD Mode 03");
-        crate::obd::dev_log::log_info("dtc", &format!("Mode 03 (Active): found {} DTCs", parsed.len()));
-        all_dtcs.extend(parsed);
+    // ====== OBD-II Standard Modes ======
+
+    // Mode 03 — Confirmed/Active DTCs (with retry)
+    match read_dtc_mode_with_retry("03", DtcStatus::Active, "OBD Mode 03", lang) {
+        Ok(dtcs) => {
+            dev_log::log_info("dtc", &format!("Mode 03 (Active): {} DTCs", dtcs.len()));
+            all_dtcs.extend(dtcs);
+        }
+        Err(e) => dev_log::log_warn("dtc", &format!("Mode 03 failed: {}", e)),
     }
 
     // Mode 07 — Pending DTCs
-    if let Ok(response) = with_real_connection(|conn| conn.send_command("07")) {
-        let parsed = dtc::parse_dtc_response(&response, DtcStatus::Pending, "OBD Mode 07");
-        crate::obd::dev_log::log_info("dtc", &format!("Mode 07 (Pending): found {} DTCs", parsed.len()));
-        all_dtcs.extend(parsed);
+    match read_dtc_mode_with_retry("07", DtcStatus::Pending, "OBD Mode 07", lang) {
+        Ok(dtcs) => {
+            dev_log::log_info("dtc", &format!("Mode 07 (Pending): {} DTCs", dtcs.len()));
+            all_dtcs.extend(dtcs);
+        }
+        Err(e) => dev_log::log_warn("dtc", &format!("Mode 07 failed: {}", e)),
     }
 
-    // Mode 0A — Permanent DTCs
-    if let Ok(response) = with_real_connection(|conn| conn.send_command("0A")) {
-        let parsed = dtc::parse_dtc_response(&response, DtcStatus::Permanent, "OBD Mode 0A");
-        crate::obd::dev_log::log_info("dtc", &format!("Mode 0A (Permanent): found {} DTCs", parsed.len()));
-        all_dtcs.extend(parsed);
+    // Mode 0A — Permanent DTCs (not all vehicles support this)
+    match read_dtc_mode_with_retry("0A", DtcStatus::Permanent, "OBD Mode 0A", lang) {
+        Ok(dtcs) => {
+            dev_log::log_info("dtc", &format!("Mode 0A (Permanent): {} DTCs", dtcs.len()));
+            all_dtcs.extend(dtcs);
+        }
+        Err(e) => dev_log::log_debug("dtc", &format!("Mode 0A not supported: {}", e)),
     }
 
-    // UDS 0x19 02 FF — Read DTC by status mask (all DTCs)
-    // Try on standard addresses
-    for addr in ["7E0", "7E1", "7E2", "7E3"] {
-        crate::obd::dev_log::log_debug("dtc", &format!("Probing UDS DTC scan at address: {}", addr));
-        if let Ok(_) = with_real_connection(|conn| {
-            conn.send_command(&format!("ATSH{}", addr))
-        }) {
-            if let Ok(response) = with_real_connection(|conn| conn.send_command("1902FF")) {
-                if response.contains("59 02") {
-                    // Parse UDS DTC response
-                    let bytes: Vec<u8> = response
-                        .split_whitespace()
-                        .filter_map(|s| u8::from_str_radix(s, 16).ok())
-                        .collect();
-                    // Skip service ID (59) and subfunction (02)
-                    if bytes.len() > 3 {
-                        let mut uds_count = 0;
-                        for chunk in bytes[3..].chunks(4) {
-                            if chunk.len() >= 3 {
-                                let code = dtc::decode_dtc_bytes(chunk[0], chunk[1]);
-                                let description = dtc::get_dtc_description(&code);
-                                let repair_tips = dtc::get_dtc_repair_tips(&code);
-                                all_dtcs.push(DtcCode {
-                                    code,
-                                    description,
-                                    status: DtcStatus::Active,
-                                    source: format!("UDS 0x19 ({})", addr),
-                                    repair_tips,
-                                });
-                                uds_count += 1;
-                            }
-                        }
-                        crate::obd::dev_log::log_info("dtc", &format!("UDS 0x19 at {}: found {} DTCs", addr, uds_count));
+    // ====== UDS 0x19 — Read DTC by Status Mask ======
+    // Try on standard + extended ECU addresses
+    let uds_addresses = ["7E0", "7E1", "7E2", "7E3", "7E4", "75D"];
+
+    for addr in uds_addresses {
+        dev_log::log_debug("dtc", &format!("Probing UDS DTC at {}", addr));
+
+        // Set header to target specific ECU
+        if with_real_connection(|conn| {
+            conn.set_ecu_header(addr)
+        }).is_err() {
+            continue;
+        }
+
+        // UDS 0x19 02 FF — Read all DTCs by status mask (all statuses)
+        if let Ok(response) = with_real_connection(|conn| conn.send_command_timeout("1902FF", 5000)) {
+            if response.contains("59 02") || response.contains("5902") {
+                let uds_dtcs = parse_uds_dtc_response(&response, addr, lang);
+                if !uds_dtcs.is_empty() {
+                    dev_log::log_info("dtc", &format!("UDS 0x19 at {}: {} DTCs", addr, uds_dtcs.len()));
+                    all_dtcs.extend(uds_dtcs);
+                }
+            }
+        }
+
+        // Also try 0x19 0F FF (mirror memory DTCs) — some ECUs store extra codes here
+        if let Ok(response) = with_real_connection(|conn| conn.send_command_timeout("190FFF", 3000)) {
+            if response.contains("59 0F") || response.contains("590F") {
+                let mirror_dtcs = parse_uds_dtc_response(&response, addr, lang);
+                if !mirror_dtcs.is_empty() {
+                    dev_log::log_info("dtc", &format!("UDS 0x19 0F at {}: {} mirror DTCs", addr, mirror_dtcs.len()));
+                    for mut d in mirror_dtcs {
+                        d.status = DtcStatus::Pending; // Mirror = historical
+                        d.source = format!("UDS 0x19 0F ({})", addr);
+                        all_dtcs.push(d);
                     }
                 }
             }
-            // Reset headers
-            let _ = with_real_connection(|conn| conn.send_command("ATH0"));
         }
     }
 
-    // Deduplicate by code (keep first occurrence)
-    let mut seen = std::collections::HashSet::new();
-    all_dtcs.retain(|d| seen.insert(d.code.clone()));
+    // Reset headers to broadcast
+    let _ = with_real_connection(|conn| conn.reset_headers());
 
-    crate::obd::dev_log::log_info("dtc", &format!("DTC scan complete: total {} DTCs found", all_dtcs.len()));
+    // ====== Deduplicate ======
+    let mut seen = std::collections::HashSet::new();
+    all_dtcs.retain(|d| seen.insert(format!("{}:{:?}", d.code, d.status)));
+
+    dev_log::log_info("dtc", &format!("DTC scan complete: {} unique DTCs found", all_dtcs.len()));
     tracing::info!("Read {} DTCs from vehicle", all_dtcs.len());
     all_dtcs
+}
+
+/// Read DTCs from a specific OBD mode with retry logic
+fn read_dtc_mode_with_retry(mode: &str, status: DtcStatus, source: &str, lang: &str) -> Result<Vec<DtcCode>, String> {
+    for attempt in 0..2 {
+        let response = match with_real_connection(|conn| conn.send_command_timeout(mode, 5000)) {
+            Ok(r) => r,
+            Err(e) => {
+                if attempt == 0 {
+                    dev_log::log_debug("dtc", &format!("Mode {} attempt 1 failed: {}, retrying...", mode, e));
+                    // Send TesterPresent to wake up ECU before retry
+                    let _ = with_real_connection(|conn| { conn.tester_present(); Ok(()) });
+                    std::thread::sleep(std::time::Duration::from_millis(200));
+                    continue;
+                }
+                return Err(e);
+            }
+        };
+
+        // Handle NO DATA gracefully
+        if response.contains("NO DATA") || response.is_empty() {
+            return Ok(Vec::new()); // No DTCs — not an error
+        }
+
+        let dtcs = dtc::parse_dtc_response(&response, status.clone(), source, lang);
+        return Ok(dtcs);
+    }
+    Err(format!("Mode {} failed after 2 attempts", mode))
+}
+
+/// Parse UDS 0x19 response into DTCs
+fn parse_uds_dtc_response(response: &str, ecu_addr: &str, lang: &str) -> Vec<DtcCode> {
+    let mut dtcs = Vec::new();
+
+    // Parse all hex bytes from the response
+    let bytes: Vec<u8> = response
+        .replace("\n", " ")
+        .split_whitespace()
+        .filter_map(|s| u8::from_str_radix(s, 16).ok())
+        .collect();
+
+    // Find the start of DTC data (after 59 02 XX or 59 0F XX)
+    let data_start = if bytes.len() > 3 && bytes[0] == 0x59 {
+        3 // Skip Service ID (59), SubFunction (02/0F), StatusMask
+    } else if let Some(pos) = bytes.windows(2).position(|w| w[0] == 0x59) {
+        pos + 3
+    } else {
+        return dtcs;
+    };
+
+    if data_start >= bytes.len() {
+        return dtcs;
+    }
+
+    // UDS DTCs: 3 bytes DTC + 1 byte status
+    for chunk in bytes[data_start..].chunks(4) {
+        if chunk.len() >= 3 {
+            // First 2 bytes = standard DTC encoding
+            let code = dtc::decode_dtc_bytes(chunk[0], chunk[1]);
+
+            // Third byte sometimes contains sub-code (manufacturer specific)
+            // Only use if it adds value
+            let full_code = if chunk.len() >= 3 && chunk[2] != 0x00 {
+                format!("{}-{:02X}", code, chunk[2])
+            } else {
+                code.clone()
+            };
+
+            // Get description for the base code
+            let description = dtc::get_dtc_description(&code, lang);
+            let repair_tips = dtc::get_dtc_repair_tips(&code, lang);
+            let (causes, quick_check, difficulty) = dtc::get_dtc_repair_data(&code, lang);
+
+            // Determine status from the 4th byte (if present)
+            let status = if chunk.len() >= 4 {
+                let status_byte = chunk[3];
+                if status_byte & 0x01 != 0 {
+                    DtcStatus::Active   // testFailed
+                } else if status_byte & 0x04 != 0 {
+                    DtcStatus::Pending  // pendingDTC
+                } else if status_byte & 0x08 != 0 {
+                    DtcStatus::Active   // confirmedDTC
+                } else {
+                    DtcStatus::Pending  // Other status
+                }
+            } else {
+                DtcStatus::Active
+            };
+
+            dtcs.push(DtcCode {
+                code: if full_code.ends_with("-00") { code } else { full_code },
+                description,
+                status,
+                source: format!("UDS 0x19 ({})", ecu_addr),
+                repair_tips,
+                causes,
+                quick_check,
+                difficulty,
+            });
+        }
+    }
+
+    dtcs
 }
 
 /// Clear all DTCs — sends OBD Mode 04 (with safety check)
 #[command]
 pub fn clear_dtcs() -> Result<String, String> {
-    // Safety guard — Mode 04 is classified as Caution
     let risk = crate::obd::safety::SafetyGuard::check_command("04");
-    crate::obd::dev_log::log_info("dtc", &format!("Clear DTCs safety check: {:?}", risk));
+    dev_log::log_info("dtc", &format!("Clear DTCs safety check: {:?}", risk));
     if risk == crate::models::RiskLevel::Blocked {
-        crate::obd::dev_log::log_warn("dtc", "Clear DTCs blocked by safety guard");
-        return Err("BLOCKED".to_string());
+        dev_log::log_warn("dtc", "Clear DTCs blocked by safety guard");
+        return Err(crate::commands::connection::err_msg("BLOQUÉ — commande bloquée par la sécurité", "BLOCKED — command blocked by safety system"));
     }
 
     if is_demo() {
-        crate::obd::dev_log::log_info("dtc", "Demo mode: DTCs clear simulated");
+        dev_log::log_info("dtc", "Demo mode: DTCs clear simulated");
         return Ok("OK".to_string());
     }
 
-    // Send Mode 04 (Clear DTCs and stored values)
     with_real_connection(|conn| {
-        crate::obd::dev_log::log_info("dtc", "Sending Mode 04 (Clear DTCs)");
-        let response = conn.send_command("04")?;
+        dev_log::log_info("dtc", "Sending Mode 04 (Clear DTCs)");
+
+        // Send TesterPresent first to ensure ECU is awake
+        conn.tester_present();
+
+        let response = conn.send_command_timeout("04", 5000)?;
         if response.contains("44") {
-            crate::obd::dev_log::log_info("dtc", "Mode 04 response received, DTCs cleared successfully");
+            dev_log::log_info("dtc", "DTCs cleared successfully");
             tracing::info!("DTCs cleared successfully");
             Ok("OK".to_string())
+        } else if response.is_empty() || response.contains("NO DATA") {
+            // Some vehicles don't respond to Mode 04 but still clear
+            dev_log::log_warn("dtc", "No response to Mode 04 — DTCs may have been cleared");
+            Ok("OK".to_string())
         } else {
-            crate::obd::dev_log::log_error("dtc", &format!("Clear DTCs failed: {}", response));
+            dev_log::log_error("dtc", &format!("Clear DTCs failed: {}", response));
             Err(format!("Clear DTCs failed: {}", response))
         }
     })
@@ -123,18 +243,18 @@ pub fn clear_dtcs() -> Result<String, String> {
 /// Export DTCs to JSON or text
 #[command]
 pub fn export_dtcs(dtcs: Vec<DtcCode>, format: String) -> Result<String, String> {
-    crate::obd::dev_log::log_info("dtc", &format!("Exporting {} DTCs as {}", dtcs.len(), format));
+    dev_log::log_info("dtc", &format!("Exporting {} DTCs as {}", dtcs.len(), format));
     match format.as_str() {
         "json" => serde_json::to_string_pretty(&dtcs).map_err(|e| format!("Export failed: {}", e)),
         "text" => {
             Ok(dtcs.iter()
-                .map(|d| format!("{} - {} [{}]", d.code, d.description, d.source))
+                .map(|d| format!("{} - {} [{}] ({:?})", d.code, d.description, d.source, d.status))
                 .collect::<Vec<_>>()
                 .join("\n"))
         }
         _ => {
-            crate::obd::dev_log::log_warn("dtc", &format!("Unsupported export format: {}", format));
-            Err("Unsupported format".to_string())
+            dev_log::log_warn("dtc", &format!("Unsupported export format: {}", format));
+            Err(crate::commands::connection::err_msg("Format non supporté", "Unsupported format"))
         }
     }
 }

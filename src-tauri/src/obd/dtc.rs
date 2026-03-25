@@ -16,6 +16,11 @@ static DTC_DESCRIPTIONS: LazyLock<HashMap<String, String>> = LazyLock::new(|| {
         .unwrap_or_default()
 });
 
+static DTC_DESCRIPTIONS_FR: LazyLock<HashMap<String, String>> = LazyLock::new(|| {
+    serde_json::from_str(include_str!("../../data/dtc_descriptions_fr.json"))
+        .unwrap_or_default()
+});
+
 static DTC_REPAIR_TIPS: LazyLock<HashMap<String, RepairTips>> = LazyLock::new(|| {
     serde_json::from_str(include_str!("../../data/dtc_repair_tips.json"))
         .unwrap_or_default()
@@ -36,7 +41,7 @@ pub fn decode_dtc_bytes(b1: u8, b2: u8) -> String {
 }
 
 /// Parse DTC response from Mode 03/07/0A
-pub fn parse_dtc_response(response: &str, status: DtcStatus, source: &str) -> Vec<DtcCode> {
+pub fn parse_dtc_response(response: &str, status: DtcStatus, source: &str, lang: &str) -> Vec<DtcCode> {
     let mut dtcs = Vec::new();
 
     // Response format: "43 01 23 04 56 00 00"
@@ -54,8 +59,9 @@ pub fn parse_dtc_response(response: &str, status: DtcStatus, source: &str) -> Ve
     for chunk in data.chunks(2) {
         if chunk.len() == 2 && (chunk[0] != 0 || chunk[1] != 0) {
             let code = decode_dtc_bytes(chunk[0], chunk[1]);
-            let description = get_dtc_description(&code);
-            let repair_tips = get_dtc_repair_tips(&code);
+            let description = get_dtc_description(&code, lang);
+            let repair_tips = get_dtc_repair_tips(&code, lang);
+            let (causes, quick_check, difficulty) = get_dtc_repair_data(&code, lang);
 
             dtcs.push(DtcCode {
                 code,
@@ -63,6 +69,9 @@ pub fn parse_dtc_response(response: &str, status: DtcStatus, source: &str) -> Ve
                 status: status.clone(),
                 source: source.to_string(),
                 repair_tips,
+                causes,
+                quick_check,
+                difficulty,
             });
         }
     }
@@ -70,17 +79,22 @@ pub fn parse_dtc_response(response: &str, status: DtcStatus, source: &str) -> Ve
     dtcs
 }
 
-/// Get DTC description from embedded JSON database
-pub fn get_dtc_description(code: &str) -> String {
+/// Get DTC description from embedded JSON database (bilingual: FR file + EN fallback)
+pub fn get_dtc_description(code: &str, lang: &str) -> String {
+    if lang == "fr" {
+        if let Some(desc) = DTC_DESCRIPTIONS_FR.get(code) {
+            return desc.clone();
+        }
+    }
     DTC_DESCRIPTIONS
         .get(code)
         .cloned()
-        .unwrap_or_else(|| format!("Code {} - Description non disponible", code))
+        .unwrap_or_else(|| format!("Code {} — description non disponible", code))
 }
 
 /// Get repair tips for DTC from embedded JSON database (language-aware)
-pub fn get_dtc_repair_tips(code: &str) -> Option<String> {
-    get_dtc_repair_tips_lang(code, "fr")
+pub fn get_dtc_repair_tips(code: &str, lang: &str) -> Option<String> {
+    get_dtc_repair_tips_lang(code, lang)
 }
 
 /// Get repair tips in a specific language ("fr" or "en")
@@ -117,4 +131,187 @@ pub fn get_dtc_repair_tips_lang(code: &str, lang: &str) -> Option<String> {
 
         result.trim_end().to_string()
     })
+}
+
+/// Get structured repair data (causes, quick_check, difficulty)
+pub fn get_dtc_repair_data(code: &str, lang: &str) -> (Option<Vec<String>>, Option<String>, Option<u32>) {
+    if let Some(tips) = DTC_REPAIR_TIPS.get(code) {
+        let lang_key = if lang == "fr" { "fr" } else { "en" };
+        let causes = tips.causes.as_ref()
+            .and_then(|c| c.get(lang_key))
+            .cloned();
+        let quick_check = tips.quick_check.as_ref()
+            .and_then(|q| q.get(lang_key))
+            .cloned();
+        let difficulty = tips.difficulty;
+        (causes, quick_check, difficulty)
+    } else {
+        (None, None, None)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::models::DtcStatus;
+
+    #[test]
+    fn test_decode_dtc_bytes_powertrain() {
+        // P0001: Fuel Volume Regulator Control Circuit Open
+        // Prefix P = 0x0, digit1 = 0, digit2 = 0, rest = 0x01
+        let code = decode_dtc_bytes(0x00, 0x01);
+        assert_eq!(code, "P0001");
+
+        // P0200: Injector Circuit Malfunction
+        let code = decode_dtc_bytes(0x02, 0x00);
+        assert_eq!(code, "P0200");
+
+        // P0ABC
+        let code = decode_dtc_bytes(0x0A, 0xBC);
+        assert_eq!(code, "P0ABC");
+    }
+
+    #[test]
+    fn test_decode_dtc_bytes_chassis() {
+        // C-codes (Chassis) have prefix bit = 01
+        // C0001
+        let code = decode_dtc_bytes(0x40, 0x01);
+        assert_eq!(code, "C0001");
+
+        // C0234
+        let code = decode_dtc_bytes(0x42, 0x34);
+        assert_eq!(code, "C0234");
+    }
+
+    #[test]
+    fn test_decode_dtc_bytes_body() {
+        // B-codes (Body) have prefix bit = 10
+        // B0001
+        let code = decode_dtc_bytes(0x80, 0x01);
+        assert_eq!(code, "B0001");
+
+        // B0ABC
+        let code = decode_dtc_bytes(0x8A, 0xBC);
+        assert_eq!(code, "B0ABC");
+    }
+
+    #[test]
+    fn test_decode_dtc_bytes_network() {
+        // U-codes (Network) have prefix bits 7:6 = 11
+        // digit1 = bits 5:4 (gives 0-3)
+        // digit2 = bits 3:0 (gives 0-F as hex)
+        // "U0001" = (0xC0, 0x01) → U + 0 + 0 + 01 = U0001
+        let code = decode_dtc_bytes(0xC0, 0x01);
+        assert_eq!(code, "U0001");
+
+        // "U0ABC" = (0xC0 | 0x0A = 0xCA, 0xBC) → U + 0 + A + BC = U0ABC
+        let code = decode_dtc_bytes(0xCA, 0xBC);
+        assert_eq!(code, "U0ABC");
+    }
+
+    #[test]
+    fn test_parse_dtc_response_multiple_codes() {
+        // Typical Mode 03 response: "43 01 23 04 56 00 00"
+        // 43 = mode + 0x40, 01 23 = first DTC, 04 56 = second DTC, 00 00 = padding
+        let response = "43 01 23 04 56 00 00";
+        let dtcs = parse_dtc_response(response, DtcStatus::Active, "mode03", "en");
+
+        assert_eq!(dtcs.len(), 2);
+        assert_eq!(dtcs[0].code, "P0123");
+        assert_eq!(dtcs[0].source, "mode03");
+
+        assert_eq!(dtcs[1].code, "P0456");
+    }
+
+    #[test]
+    fn test_parse_dtc_response_single_code() {
+        let response = "43 01 23";
+        let dtcs = parse_dtc_response(response, DtcStatus::Active, "mode03", "en");
+
+        assert_eq!(dtcs.len(), 1);
+        assert_eq!(dtcs[0].code, "P0123");
+    }
+
+    #[test]
+    fn test_parse_dtc_response_no_codes() {
+        // Empty response or all zeros
+        let response = "43 00 00 00 00";
+        let dtcs = parse_dtc_response(response, DtcStatus::Active, "mode03", "en");
+
+        assert_eq!(dtcs.len(), 0);
+    }
+
+    #[test]
+    fn test_parse_dtc_response_no_data() {
+        // Response too short
+        let response = "43";
+        let dtcs = parse_dtc_response(response, DtcStatus::Active, "mode03", "en");
+
+        assert_eq!(dtcs.len(), 0);
+    }
+
+    #[test]
+    fn test_parse_dtc_response_empty() {
+        let response = "";
+        let dtcs = parse_dtc_response(response, DtcStatus::Active, "mode03", "en");
+
+        assert_eq!(dtcs.len(), 0);
+    }
+
+    #[test]
+    fn test_parse_dtc_response_pending() {
+        let response = "47 12 34 56 78";
+        let dtcs = parse_dtc_response(response, DtcStatus::Pending, "mode07", "en");
+
+        assert_eq!(dtcs.len(), 2);
+    }
+
+    #[test]
+    fn test_decode_dtc_bytes_all_prefixes() {
+        // Test each prefix combination
+        let p_code = decode_dtc_bytes(0x00, 0x01); // P-code
+        assert!(p_code.starts_with('P'));
+
+        let c_code = decode_dtc_bytes(0x40, 0x01); // C-code
+        assert!(c_code.starts_with('C'));
+
+        let b_code = decode_dtc_bytes(0x80, 0x01); // B-code
+        assert!(b_code.starts_with('B'));
+
+        let u_code = decode_dtc_bytes(0xC0, 0x01); // U-code
+        assert!(u_code.starts_with('U'));
+    }
+
+    #[test]
+    fn test_get_dtc_description() {
+        // Test that description lookup doesn't panic on missing codes
+        let desc = get_dtc_description("P0000", "en");
+        assert!(!desc.is_empty());
+
+        let unknown_desc = get_dtc_description("PXXXX", "en");
+        assert!(!unknown_desc.is_empty()); // Fallback message
+    }
+
+    #[test]
+    fn test_parse_dtc_response_mixed_codes() {
+        // Test with different DTC types (P, C, B, U codes)
+        let response = "43 00 01 40 02 80 03 C0 04";
+        let dtcs = parse_dtc_response(response, DtcStatus::Active, "mode03", "en");
+
+        assert_eq!(dtcs.len(), 4);
+        assert!(dtcs[0].code.starts_with('P'));
+        assert!(dtcs[1].code.starts_with('C'));
+        assert!(dtcs[2].code.starts_with('B'));
+        assert!(dtcs[3].code.starts_with('U'));
+    }
+
+    #[test]
+    fn test_parse_dtc_invalid_hex() {
+        // Response with invalid hex (should be filtered out)
+        let response = "43 ZZ ZZ";
+        let dtcs = parse_dtc_response(response, DtcStatus::Active, "mode03", "en");
+
+        // Should filter out invalid hex and return empty
+        assert_eq!(dtcs.len(), 0);
+    }
 }

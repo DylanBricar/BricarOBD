@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { useTranslation } from "react-i18next";
 import { Wrench, AlertTriangle, Send, Terminal, ChevronDown, AlertCircle, Zap, Settings, RefreshCw } from "lucide-react";
@@ -7,6 +7,7 @@ import { cn } from "@/lib/utils";
 interface AdvancedOperation {
   id: string;
   name_fr: string;
+  name_en: string;
   description: string;
   risk_level: "low" | "medium" | "high" | "critical";
   needs_value?: boolean;
@@ -28,13 +29,13 @@ const riskColors = {
 };
 
 export default function Advanced() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set(["entretien"]));
   const [operationValues, setOperationValues] = useState<Record<string, string>>({});
   const [responses, setResponses] = useState<{ cmd: string; res: string; time: string; isError: boolean }[]>([]);
   const [executingOp, setExecutingOp] = useState<string | null>(null);
 
-  const categories: OperationCategory[] = [
+  const categories = useMemo<OperationCategory[]>(() => [
     {
       id: "entretien",
       name: t("advanced.cat.entretien"),
@@ -43,6 +44,7 @@ export default function Advanced() {
         {
           id: "reset_service",
           name_fr: t("advanced.op.resetService"),
+          name_en: t("advanced.op.resetService"),
           description: t("advanced.op.resetServiceDesc"),
           risk_level: "medium",
           needs_value: false,
@@ -50,6 +52,7 @@ export default function Advanced() {
         {
           id: "set_service_threshold",
           name_fr: t("advanced.op.setServiceThreshold"),
+          name_en: t("advanced.op.setServiceThreshold"),
           description: t("advanced.op.setServiceThresholdDesc"),
           risk_level: "medium",
           needs_value: true,
@@ -65,6 +68,7 @@ export default function Advanced() {
         {
           id: "write_config",
           name_fr: t("advanced.op.writeConfig"),
+          name_en: t("advanced.op.writeConfig"),
           description: t("advanced.op.writeConfigDesc"),
           risk_level: "high",
           needs_value: true,
@@ -79,6 +83,7 @@ export default function Advanced() {
         {
           id: "force_regen",
           name_fr: t("advanced.op.forceRegen"),
+          name_en: t("advanced.op.forceRegen"),
           description: t("advanced.op.forceRegenDesc"),
           risk_level: "high",
         },
@@ -92,18 +97,20 @@ export default function Advanced() {
         {
           id: "test_injectors",
           name_fr: t("advanced.op.testInjectors"),
+          name_en: t("advanced.op.testInjectors"),
           description: t("advanced.op.testInjectorDesc"),
           risk_level: "high",
         },
         {
           id: "test_relays",
           name_fr: t("advanced.op.testRelays"),
+          name_en: t("advanced.op.testRelays"),
           description: t("advanced.op.testRelaysDesc"),
           risk_level: "medium",
         },
       ],
     },
-  ];
+  ], [t]);
 
   const toggleCategory = (categoryId: string) => {
     const newExpanded = new Set(expandedCategories);
@@ -118,13 +125,27 @@ export default function Advanced() {
   const executeOperation = async (op: AdvancedOperation) => {
     const now = new Date().toLocaleTimeString();
     const value = operationValues[op.id];
-    const cmd = `${op.name_fr}${value ? ` [${value}]` : ""}`;
+    const opName = i18n.language === "fr" ? op.name_fr : op.name_en;
+    const cmd = `${opName}${value ? ` [${value}]` : ""}`;
     setExecutingOp(op.id);
     try {
-      const result = await invoke<string>("send_raw_command", { ecuAddress: "0x7E0", command: op.id });
-      setResponses(prev => [{ cmd, res: result, time: now, isError: false }, ...prev]);
+      let result: string;
+      try {
+        result = await invoke<string>("send_raw_command", { ecuAddress: "0x7E0", command: op.id });
+      } catch (err) {
+        if (String(err) === "CONFIRM_REQUIRED") {
+          if (!window.confirm(t("advanced.confirmWrite", { command: cmd }))) {
+            setExecutingOp(null);
+            return;
+          }
+          result = await invoke<string>("send_raw_command", { ecuAddress: "0x7E0", command: op.id, confirmed: true });
+        } else {
+          throw err;
+        }
+      }
+      setResponses(prev => [{ cmd, res: result, time: now, isError: false }, ...prev].slice(0, 200));
     } catch (e) {
-      setResponses(prev => [{ cmd, res: `${t("common.error")}: ${e}`, time: now, isError: true }, ...prev]);
+      setResponses(prev => [{ cmd, res: `${t("common.error")}: ${e}`, time: now, isError: true }, ...prev].slice(0, 200));
     } finally {
       setExecutingOp(null);
     }
@@ -184,7 +205,7 @@ export default function Advanced() {
                       <div className="space-y-1.5">
                         <div className="flex items-start gap-2">
                           <div className="flex-1">
-                            <p className="text-sm font-medium text-obd-text">{op.name_fr}</p>
+                            <p className="text-sm font-medium text-obd-text">{i18n.language === "fr" ? op.name_fr : op.name_en}</p>
                             <p className="text-xs text-obd-text-muted mt-0.5">{op.description}</p>
                           </div>
                           <div className={cn("px-2 py-1 rounded-md text-[10px] font-semibold border", riskColors[op.risk_level])}>

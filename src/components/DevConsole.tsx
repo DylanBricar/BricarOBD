@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { X, Copy, Trash2, Pause, Play, Terminal, ChevronDown, ChevronUp, Maximize2, Minimize2 } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { cn } from "@/lib/utils";
 
 interface LogEntry {
@@ -22,6 +23,7 @@ const sourceColors: Record<string, string> = {
 };
 
 export default function DevConsole({ onClose }: { onClose: () => void }) {
+  const { t } = useTranslation();
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [paused, setPaused] = useState(false);
   const [filter, setFilter] = useState("");
@@ -113,25 +115,27 @@ export default function DevConsole({ onClose }: { onClose: () => void }) {
           <button onClick={() => setPaused(!paused)}
             className={cn("h-6 px-2 rounded text-[10px] font-mono flex items-center gap-1",
               paused ? "bg-[#1F6FEB] text-white" : "bg-[#21262D] text-[#C9D1D9] hover:bg-[#30363D]"
-            )}>
+            )}
+            aria-label={paused ? "Resume" : "Pause"}>
             {paused ? <Play size={10} /> : <Pause size={10} />}
           </button>
           <button onClick={() => setAutoScroll(!autoScroll)}
             className={cn("h-6 px-2 rounded text-[10px] font-mono flex items-center gap-1",
               autoScroll ? "bg-[#238636] text-white" : "bg-[#21262D] text-[#C9D1D9]"
-            )}>
+            )}
+            aria-label="Auto-scroll">
             <ChevronDown size={10} />
           </button>
-          <button onClick={handleCopy} className="h-6 px-2 rounded text-[10px] font-mono bg-[#238636] text-white hover:bg-[#2EA043] flex items-center gap-1">
+          <button onClick={handleCopy} className="h-6 px-2 rounded text-[10px] font-mono bg-[#238636] text-white hover:bg-[#2EA043] flex items-center gap-1" aria-label="Copy logs">
             <Copy size={10} />
           </button>
-          <button onClick={handleClear} className="h-6 px-2 rounded text-[10px] font-mono bg-[#DA3633] text-white hover:bg-[#F85149] flex items-center gap-1">
+          <button onClick={handleClear} className="h-6 px-2 rounded text-[10px] font-mono bg-[#DA3633] text-white hover:bg-[#F85149] flex items-center gap-1" aria-label="Clear logs">
             <Trash2 size={10} />
           </button>
-          <button onClick={() => setExpanded(!expanded)} className="h-6 px-2 rounded text-[10px] font-mono bg-[#21262D] text-[#8B949E] hover:bg-[#30363D] flex items-center">
+          <button onClick={() => setExpanded(!expanded)} className="h-6 px-2 rounded text-[10px] font-mono bg-[#21262D] text-[#8B949E] hover:bg-[#30363D] flex items-center" aria-label={t("common.toggle")}>
             {expanded ? <Minimize2 size={10} /> : <Maximize2 size={10} />}
           </button>
-          <button onClick={onClose} className="h-6 w-6 rounded flex items-center justify-center bg-[#21262D] text-[#8B949E] hover:bg-[#30363D] hover:text-white">
+          <button onClick={onClose} className="h-6 w-6 rounded flex items-center justify-center bg-[#21262D] text-[#8B949E] hover:bg-[#30363D] hover:text-white" aria-label={t("common.close")}>
             <X size={10} />
           </button>
         </div>

@@ -39,7 +39,19 @@ pub struct EcuMaps {
 }
 
 static ECU_DATABASE: LazyLock<EcuDatabaseRoot> = LazyLock::new(|| {
-    serde_json::from_str(ECU_DATABASE_JSON).expect("Failed to parse ECU database JSON")
+    serde_json::from_str(ECU_DATABASE_JSON).unwrap_or_else(|e| {
+        tracing::error!("Failed to parse ECU database JSON: {}", e);
+        EcuDatabaseRoot {
+            dids: HashMap::new(),
+            generic_ecus: Vec::new(),
+            manufacturer_ecus: HashMap::new(),
+            vehicle_profiles: HashMap::new(),
+            maps: EcuMaps {
+                manufacturer_ecu_map: HashMap::new(),
+                manufacturer_did_map: HashMap::new(),
+            },
+        }
+    })
 });
 
 pub fn get_generic_ecus() -> Vec<GenericEcu> {

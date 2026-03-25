@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import {
   AlertTriangle,
@@ -17,9 +17,13 @@ import {
   X,
 } from "lucide-react";
 import { invoke } from "@tauri-apps/api/core";
-import type { DtcCode, DtcHistoryEntry } from "@/stores/vehicle";
+import type { DtcCode, DtcHistoryEntry, Mode06Result, FreezeFrameData } from "@/stores/vehicle";
 import type { VehicleInfo } from "@/stores/connection";
 import { cn } from "@/lib/utils";
+import { useToast } from "@/hooks/useToast";
+import { Toast } from "@/components/Toast";
+import Mode06 from "./Mode06";
+import FreezeFrame from "./FreezeFrame";
 
 const statusIcon = {
   active: <ShieldAlert size={14} className="text-obd-danger" />,
@@ -41,19 +45,35 @@ interface DTCProps {
   onClearAll: () => void;
   isReading?: boolean;
   isClearing?: boolean;
+  mode06Results?: Mode06Result[];
+  isLoadingMode06?: boolean;
+  onLoadMode06?: () => void;
+  freezeFrame?: FreezeFrameData | null;
+  isLoadingFreezeFrame?: boolean;
+  onLoadFreezeFrame?: () => void;
 }
 
-export default function DTC({ dtcs, dtcHistory, vehicle, onReadAll, onClearAll, isReading = false, isClearing = false }: DTCProps) {
+export default function DTC({
+  dtcs,
+  dtcHistory,
+  vehicle,
+  onReadAll,
+  onClearAll,
+  isReading = false,
+  isClearing = false,
+  mode06Results = [],
+  isLoadingMode06 = false,
+  onLoadMode06 = () => {},
+  freezeFrame = null,
+  isLoadingFreezeFrame = false,
+  onLoadFreezeFrame = () => {},
+}: DTCProps) {
   const { t, i18n } = useTranslation();
+  const [activeTab, setActiveTab] = useState<"dtc" | "mode06" | "freeze">("dtc");
   const [selectedDtc, setSelectedDtc] = useState<string | null>(null);
   const [showConfirm, setShowConfirm] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
-  const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
-
-  const showToast = (message: string, type: "success" | "error" = "success") => {
-    setToast({ message, type });
-    setTimeout(() => setToast(null), 5000);
-  };
+  const { toast, showToast, dismissToast } = useToast();
 
   const handleExportDtcs = async () => {
     if (dtcs.length === 0 && dtcHistory.length === 0) {
@@ -155,7 +175,7 @@ export default function DTC({ dtcs, dtcHistory, vehicle, onReadAll, onClearAll, 
           <div>
             <h2 className="text-lg font-semibold">{t("dtc.title")}</h2>
             <p className="text-xs text-obd-text-muted">
-              {filteredDtcs.length} code{filteredDtcs.length !== 1 ? "s" : ""}
+              {t("dtc.codeCount", { count: filteredDtcs.length })}
               {filteredHistory.length > 0 && ` · ${filteredHistory.length} ${t("dtc.history").toLowerCase()}`}
             </p>
           </div>
@@ -180,19 +200,39 @@ export default function DTC({ dtcs, dtcHistory, vehicle, onReadAll, onClearAll, 
         </div>
       </div>
 
-      {/* Search */}
-      <div className="relative max-w-sm">
-        <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-obd-text-muted" />
-        <input
-          type="text"
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-          placeholder={t("dtc.search")}
-          className="input-field pl-9 w-full text-xs"
-        />
+      {/* Tab bar */}
+      <div className="flex gap-1 p-1 rounded-lg bg-white/5 w-fit">
+        {(["dtc", "mode06", "freeze"] as const).map(tab => (
+          <button
+            key={tab}
+            onClick={() => setActiveTab(tab)}
+            className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
+              activeTab === tab
+                ? "bg-obd-accent/20 text-obd-accent"
+                : "text-white/50 hover:text-white/80"
+            }`}
+          >
+            {tab === "dtc" ? t("dtc.title") : tab === "mode06" ? t("mode06.tabLabel") : t("freezeFrame.tabLabel")}
+          </button>
+        ))}
       </div>
 
-      {/* DTC List + Detail */}
+      {/* Search — only show for DTC tab */}
+      {activeTab === "dtc" && (
+        <div className="relative max-w-sm">
+          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-obd-text-muted" />
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder={t("dtc.search")}
+            className="input-field pl-9 w-full text-xs"
+          />
+        </div>
+      )}
+
+      {/* Tab content */}
+      {activeTab === "dtc" ? (
       <div className="flex flex-col md:flex-row gap-4 flex-1 min-h-0">
         <div className="flex-1 glass-card overflow-hidden flex flex-col">
           {filteredDtcs.length === 0 && filteredHistory.length === 0 ? (
@@ -277,6 +317,16 @@ export default function DTC({ dtcs, dtcHistory, vehicle, onReadAll, onClearAll, 
               <span className={cn("ml-2", statusBadge[selectedData.status])}>
                 {t(`dtc.${selectedData.status}`)}
               </span>
+              {selectedData.difficulty && (
+                <span className={`ml-2 px-2 py-0.5 rounded-full text-xs font-medium ${
+                  selectedData.difficulty === 1 ? "bg-obd-success/20 text-obd-success" :
+                  selectedData.difficulty === 2 ? "bg-yellow-500/20 text-yellow-400" :
+                  selectedData.difficulty === 3 ? "bg-orange-500/20 text-orange-400" :
+                  "bg-obd-danger/20 text-obd-danger"
+                }`}>
+                  {t(`dtc.difficulty${selectedData.difficulty}`)}
+                </span>
+              )}
             </div>
 
             <div className="space-y-1">
@@ -293,7 +343,38 @@ export default function DTC({ dtcs, dtcHistory, vehicle, onReadAll, onClearAll, 
               <p className="text-sm text-obd-text">{selectedData.source}</p>
             </div>
 
-            {selectedData.repairTips && (
+            {selectedData.causes && selectedData.causes.length > 0 && (
+              <div>
+                <h4 className="text-xs font-semibold text-obd-text-muted mb-2 flex items-center gap-1.5">
+                  <AlertTriangle className="w-3.5 h-3.5" />
+                  {t("dtc.causes")}
+                </h4>
+                <ul className="space-y-1">
+                  {selectedData.causes.map((cause, i) => (
+                    <li key={i} className="text-sm text-obd-text flex items-start gap-2">
+                      <span className="text-obd-accent mt-1">•</span>
+                      {cause}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            {selectedData.quickCheck && (
+              <div className="bg-obd-accent/10 border border-obd-accent/20 rounded-lg p-3">
+                <h4 className="text-xs font-semibold text-obd-accent mb-1 flex items-center gap-1.5">
+                  <Wrench className="w-3.5 h-3.5" />
+                  {t("dtc.quickCheck")}
+                </h4>
+                <p className="text-sm text-obd-text">{selectedData.quickCheck}</p>
+              </div>
+            )}
+
+            {!selectedData.causes && !selectedData.quickCheck && !selectedData.repairTips && (
+              <p className="text-sm text-obd-text-muted italic">{t("dtc.noTips")}</p>
+            )}
+
+            {selectedData.repairTips && !selectedData.quickCheck && (
               <div className="space-y-1">
                 <h4 className="text-xs font-semibold text-obd-text-secondary uppercase tracking-wider flex items-center gap-1.5">
                   <Wrench size={12} />
@@ -321,6 +402,11 @@ export default function DTC({ dtcs, dtcHistory, vehicle, onReadAll, onClearAll, 
           </div>
         )}
       </div>
+      ) : activeTab === "mode06" ? (
+        <Mode06 results={mode06Results} isLoading={isLoadingMode06} onLoad={onLoadMode06} />
+      ) : (
+        <FreezeFrame data={freezeFrame} isLoading={isLoadingFreezeFrame} onLoad={onLoadFreezeFrame} />
+      )}
 
       {/* Confirm Dialog */}
       {showConfirm && (
@@ -349,17 +435,7 @@ export default function DTC({ dtcs, dtcHistory, vehicle, onReadAll, onClearAll, 
       )}
 
       {/* Toast */}
-      {toast && (
-        <div className={cn(
-          "fixed bottom-4 right-4 max-w-md px-4 py-3 rounded-lg shadow-lg flex items-start gap-3 animate-slide-in z-50",
-          toast.type === "success" ? "bg-obd-success/90 text-white" : "bg-obd-danger/90 text-white"
-        )}>
-          <p className="text-xs flex-1 leading-relaxed break-all">{toast.message}</p>
-          <button onClick={() => setToast(null)} className="flex-shrink-0 hover:opacity-70">
-            <X size={14} />
-          </button>
-        </div>
-      )}
+      {toast && <Toast message={toast.message} type={toast.type} onDismiss={dismissToast} />}
     </div>
   );
 }

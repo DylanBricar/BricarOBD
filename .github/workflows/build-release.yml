@@ -9,7 +9,10 @@ permissions:
   contents: write
 
 jobs:
-  build:
+  # ═══════════════════════════════════════════
+  # Desktop builds (macOS, Windows, Linux)
+  # ═══════════════════════════════════════════
+  build-desktop:
     strategy:
       fail-fast: false
       matrix:
@@ -28,7 +31,7 @@ jobs:
             name: Linux (x64)
 
     runs-on: ${{ matrix.platform }}
-    name: Build — ${{ matrix.name }}
+    name: Desktop — ${{ matrix.name }}
 
     steps:
       - name: Checkout
@@ -37,7 +40,7 @@ jobs:
       - name: Download database from release assets
         run: |
           mkdir -p src-tauri/data
-          curl -L -o src-tauri/data/bricarobd.db "https://github.com/${{ github.repository }}/releases/download/db-v1/bricarobd.db" || echo "DB download failed — will try gh cli"
+          curl -L -o src-tauri/data/bricarobd.db "https://github.com/${{ github.repository }}/releases/download/db-v1/bricarobd.db" || echo "DB download failed"
         shell: bash
 
       - name: Fallback — download DB via gh cli
@@ -98,28 +101,192 @@ jobs:
 
             ### Professional OBD-II Diagnostic Tool
 
-            **v2.0 — Rust Edition:**
-            - Complete rewrite in Rust (Tauri 2.x) + React + TypeScript
-            - DDT2000 database: 3.17M operations, 90 vehicle profiles, 4866 ECUs
-            - 8,807 DTC codes with descriptions + 415 repair tips
-            - 70 standard OBD-II PIDs + 391 manufacturer DIDs (PSA, VAG, BMW, Mercedes, etc.)
-            - 9 OBD-II protocols (CAN, KWP2000, ISO 9141, J1850)
-            - Auto baud rate detection + 4 connection strategies (genuine + clone ELM327)
-            - Demo mode (Peugeot 207) for testing without adapter
-            - Bilingual FR/EN interface with glassmorphic automotive theme
-            - Built-in developer console (real-time TX/RX serial logs)
-            - SafetyGuard: 11 blocked UDS services by default
-            - CSV export for live data and DTC reports
+            **Platforms:** macOS (Apple Silicon + Intel) · Windows · Linux · Android · iOS
 
-            **Compatibility:**
-            - All OBD-II vehicles (1996+)
-            - ELM327 USB, Bluetooth, WiFi adapters (genuine + clones v1.5/v2.1)
-            - macOS (Apple Silicon + Intel), Windows, Linux
+            **What's included:**
+            - 3.17M operations database (PSA, VAG, BMW, Mercedes, Renault, Toyota, Honda, etc.)
+            - 8,807 DTC codes + 415 repair tips
+            - 70 OBD-II PIDs + 391 manufacturer DIDs
+            - 9 protocols · 4 init strategies · WiFi + USB adapters
+            - SafetyGuard (12 blocked services, default-deny)
+            - Bilingual FR/EN · Demo mode · Dev console · CSV export
 
-            **Install:**
+            **Desktop install:**
             - **macOS**: Download `.dmg`, drag to Applications
-            - **Windows**: Download `.msi` or `.exe`, install
+            - **Windows**: Download `.msi` or `.exe`
             - **Linux**: Download `.deb` or `.AppImage`
+
+            **Mobile:**
+            - **Android**: Download `.apk`, enable "Install from unknown sources"
+            - **iOS**: Install via TestFlight (link in description)
           releaseDraft: false
           prerelease: false
           args: --target ${{ matrix.target }}
+
+  # ═══════════════════════════════════════════
+  # Android build (.apk)
+  # ═══════════════════════════════════════════
+  build-android:
+    needs: [build-desktop]
+    runs-on: ubuntu-latest
+    name: Android — APK
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download database
+        run: |
+          mkdir -p src-tauri/data
+          curl -L -o src-tauri/data/bricarobd.db "https://github.com/${{ github.repository }}/releases/download/db-v1/bricarobd.db"
+
+      - name: Setup Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android NDK
+        run: sdkmanager "ndk;27.2.12479018"
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android,armv7-linux-androideabi,x86_64-linux-android,i686-linux-android
+
+      - name: Rust cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - name: Install frontend dependencies
+        run: pnpm install
+
+      - name: Init Tauri Android
+        run: cargo tauri android init
+        env:
+          NDK_HOME: ${{ env.ANDROID_HOME }}/ndk/27.2.12479018
+
+      - name: Build Android APK
+        run: cargo tauri android build
+        env:
+          NDK_HOME: ${{ env.ANDROID_HOME }}/ndk/27.2.12479018
+          ANDROID_KEY_STORE: ${{ secrets.ANDROID_KEY_STORE }}
+          ANDROID_KEY_STORE_PASSWORD: ${{ secrets.ANDROID_KEY_STORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+
+      - name: Upload APK to release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          files: |
+            src-tauri/gen/android/app/build/outputs/apk/universal/release/app-universal-release.apk
+            src-tauri/gen/android/app/build/outputs/apk/universal/debug/app-universal-debug.apk
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # ═══════════════════════════════════════════
+  # iOS build (.ipa) — for TestFlight / Ad-hoc
+  # ═══════════════════════════════════════════
+  build-ios:
+    needs: [build-desktop]
+    runs-on: macos-latest
+    name: iOS — IPA
+    # Only run if signing vars are configured
+    if: vars.APPLE_SIGNING_ENABLED == 'true'
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download database
+        run: |
+          mkdir -p src-tauri/data
+          curl -L -o src-tauri/data/bricarobd.db "https://github.com/${{ github.repository }}/releases/download/db-v1/bricarobd.db"
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-ios
+
+      - name: Rust cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - name: Install frontend dependencies
+        run: pnpm install
+
+      - name: Install Apple certificate
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
+          PROVISIONING_PROFILE: ${{ secrets.PROVISIONING_PROFILE }}
+        run: |
+          # Create temporary keychain
+          KEYCHAIN_PATH=$RUNNER_TEMP/app-signing.keychain-db
+          security create-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
+          security set-keychain-settings -lut 21600 $KEYCHAIN_PATH
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
+
+          # Import certificate
+          echo -n "$APPLE_CERTIFICATE" | base64 --decode -o $RUNNER_TEMP/certificate.p12
+          security import $RUNNER_TEMP/certificate.p12 -P "$APPLE_CERTIFICATE_PASSWORD" -A -t cert -f pkcs12 -k $KEYCHAIN_PATH
+          security set-key-partition-list -S apple-tool:,apple: -k "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
+          security list-keychains -d user -s $KEYCHAIN_PATH
+
+          # Install provisioning profile
+          mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
+          echo -n "$PROVISIONING_PROFILE" | base64 --decode -o ~/Library/MobileDevice/Provisioning\ Profiles/profile.mobileprovision
+
+      - name: Init Tauri iOS
+        run: cargo tauri ios init
+
+      - name: Build iOS
+        run: cargo tauri ios build
+        env:
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+
+      - name: Upload IPA to release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          files: |
+            src-tauri/gen/apple/build/**/*.ipa
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # Optional: Upload to TestFlight automatically
+      - name: Upload to TestFlight
+        if: vars.TESTFLIGHT_ENABLED == 'true'
+        run: |
+          xcrun altool --upload-app \
+            --type ios \
+            --file src-tauri/gen/apple/build/**/*.ipa \
+            --apiKey "${{ secrets.APPLE_API_KEY }}" \
+            --apiIssuer "${{ secrets.APPLE_API_ISSUER }}"

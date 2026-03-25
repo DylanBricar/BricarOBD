@@ -37,8 +37,13 @@ struct RawCategory {
 }
 
 static PARSED_OPS: LazyLock<RawAdvancedOps> = LazyLock::new(|| {
-    serde_json::from_str(ADVANCED_OPS_JSON)
-        .expect("Failed to parse advanced operations JSON")
+    serde_json::from_str(ADVANCED_OPS_JSON).unwrap_or_else(|e| {
+        tracing::error!("Failed to parse advanced operations JSON: {}", e);
+        RawAdvancedOps {
+            categories: HashMap::new(),
+            manufacturer_groups: HashMap::new(),
+        }
+    })
 });
 
 pub fn get_categories() -> Vec<Category> {

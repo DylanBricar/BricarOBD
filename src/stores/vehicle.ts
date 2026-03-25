@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from "react";
+import { useTranslation } from "react-i18next";
 import { invoke } from "@tauri-apps/api/core";
 import { devInfo, devDebug } from "@/lib/devlog";
 
@@ -19,6 +20,9 @@ export interface DtcCode {
   status: "active" | "pending" | "permanent";
   source: string;
   repairTips?: string;
+  causes?: string[];
+  quickCheck?: string;
+  difficulty?: number;
 }
 
 export interface DtcHistoryEntry extends DtcCode {
@@ -40,6 +44,31 @@ export interface MonitorStatus {
   specificationKey?: string;
 }
 
+export interface Mode06Result {
+  tid: number;
+  mid: number;
+  name: string;
+  unit: string;
+  testValue: number;
+  minLimit: number;
+  maxLimit: number;
+  passed: boolean;
+}
+
+export interface FreezeFrameData {
+  dtcCode: string;
+  frameNumber: number;
+  pids: PidValue[];
+}
+
+export interface VehicleOperation {
+  [key: string]: any;
+}
+
+export interface WriteOperation {
+  [key: string]: any;
+}
+
 // Demo data generator
 function generateDemoData(): Map<number, PidValue> {
   const now = Date.now();
@@ -56,24 +85,25 @@ function generateDemoData(): Map<number, PidValue> {
     pids.set(pid, { pid, name, value, unit, min, max, history, timestamp: now });
   };
 
+  // PID names use neutral/technical labels (backend provides localized names in real mode)
   addPid(0x0c, "RPM", baseRpm, "tr/min", 0, 8000);
-  addPid(0x0d, "Vitesse", baseSpeed, "km/h", 0, 250);
-  addPid(0x05, "Temp. liquide refroid.", baseCoolant, "°C", -40, 215);
-  addPid(0x04, "Charge moteur", baseLoad, "%", 0, 100);
-  addPid(0x0f, "Temp. admission", 32 + Math.random() * 3, "°C", -40, 215);
-  addPid(0x10, "Débit air (MAF)", 5.2 + Math.sin(now / 4000) * 2, "g/s", 0, 655);
-  addPid(0x11, "Position papillon", 15 + Math.sin(now / 2000) * 8, "%", 0, 100);
-  addPid(0x0b, "Pression admission", 95 + Math.sin(now / 3000) * 5, "kPa", 0, 255);
-  addPid(0x0e, "Avance allumage", 12 + Math.sin(now / 2500) * 4, "°", -64, 63.5);
-  addPid(0x2f, "Niveau carburant", 65 - (now % 100000) / 100000 * 2, "%", 0, 100);
-  addPid(0x42, "Tension batterie", 14.1 + Math.sin(now / 8000) * 0.3, "V", 0, 65.5);
-  addPid(0x46, "Temp. ambiante", 22 + Math.random() * 1, "°C", -40, 215);
-  addPid(0x33, "Pression atmos.", 101 + Math.random() * 0.5, "kPa", 0, 255);
-  addPid(0x06, "Correctif carburant CT", 2.3 + Math.random() * 1, "%", -100, 99.2);
-  addPid(0x07, "Correctif carburant LT", 4.1 + Math.random() * 0.5, "%", -100, 99.2);
-  addPid(0x03, "Statut carburant", 2, "", 0, 16);
-  addPid(0x1c, "Standard OBD", 6, "", 0, 255);
-  addPid(0x1f, "Durée moteur", Math.floor((now % 360000) / 1000), "s", 0, 65535);
+  addPid(0x0d, "Speed", baseSpeed, "km/h", 0, 250);
+  addPid(0x05, "Coolant Temp", baseCoolant, "°C", -40, 215);
+  addPid(0x04, "Engine Load", baseLoad, "%", 0, 100);
+  addPid(0x0f, "Intake Temp", 32 + Math.random() * 3, "°C", -40, 215);
+  addPid(0x10, "MAF Rate", 5.2 + Math.sin(now / 4000) * 2, "g/s", 0, 655);
+  addPid(0x11, "Throttle Pos", 15 + Math.sin(now / 2000) * 8, "%", 0, 100);
+  addPid(0x0b, "Intake Pressure", 95 + Math.sin(now / 3000) * 5, "kPa", 0, 255);
+  addPid(0x0e, "Timing Advance", 12 + Math.sin(now / 2500) * 4, "°", -64, 63.5);
+  addPid(0x2f, "Fuel Level", 65 - (now % 100000) / 100000 * 2, "%", 0, 100);
+  addPid(0x42, "Battery Voltage", 14.1 + Math.sin(now / 8000) * 0.3, "V", 0, 65.5);
+  addPid(0x46, "Ambient Temp", 22 + Math.random() * 1, "°C", -40, 215);
+  addPid(0x33, "Baro Pressure", 101 + Math.random() * 0.5, "kPa", 0, 255);
+  addPid(0x06, "STFT Bank 1", 2.3 + Math.random() * 1, "%", -100, 99.2);
+  addPid(0x07, "LTFT Bank 1", 4.1 + Math.random() * 0.5, "%", -100, 99.2);
+  addPid(0x03, "Fuel Status", 2, "", 0, 16);
+  addPid(0x1c, "OBD Standard", 6, "", 0, 255);
+  addPid(0x1f, "Run Time", Math.floor((now % 360000) / 1000), "s", 0, 65535);
 
   return pids;
 }
@@ -83,17 +113,35 @@ let demoDataCache = new Map<number, PidValue>();
 export const demoDtcs: DtcCode[] = [
   {
     code: "P0440",
-    description: "Système de contrôle des émissions par évaporation - Dysfonctionnement",
+    description: "Evaporative Emission Control System Malfunction",
     status: "active",
     source: "OBD Mode 03",
-    repairTips: "Vérifier le bouchon de réservoir, les durites EVAP et la valve de purge.",
+    repairTips: "Check fuel cap, EVAP hoses and purge valve.",
+    causes: [
+      "Loose or missing fuel filler cap",
+      "Damaged EVAP hoses or connections",
+      "Faulty purge valve",
+      "EVAP canister leak",
+      "Fuel pump seal leaking"
+    ],
+    quickCheck: "Start with the fuel cap. Many vehicles throw this code simply due to a loose cap. If tight, inspect hoses for cracks.",
+    difficulty: 2,
   },
   {
     code: "P0500",
-    description: "Capteur de vitesse du véhicule - Dysfonctionnement",
+    description: "Vehicle Speed Sensor Malfunction",
     status: "pending",
     source: "OBD Mode 07",
-    repairTips: "Inspecter le capteur VSS, le câblage et les connecteurs.",
+    repairTips: "Inspect VSS sensor, wiring and connectors.",
+    causes: [
+      "Defective vehicle speed sensor",
+      "Loose or corroded connectors",
+      "Broken wiring harness",
+      "Transmission issue",
+      "ABS sensor malfunction"
+    ],
+    quickCheck: "Check the VSS sensor located on the transmission. Verify wiring is secure and clean corrosion if needed.",
+    difficulty: 2,
   },
 ];
 
@@ -113,7 +161,7 @@ const demoMonitors: MonitorStatus[] = [
 
 const demoEcus: EcuInfo[] = [
   {
-    name: "Moteur (ECM)",
+    name: "Engine (ECM)",
     address: "0x7E0",
     protocol: "ISO 15765-4 CAN",
     dids: { "F190": "VF3LCBHZ6JS000000", "F191": "HW 2.3", "F194": "EP6DT", "F195": "1.6 THP 150", "F18C": "2018-03-15", "F187": "PSA 9807654321", "F189": "SW 4.1.2", "F17E": "ECM-PSA-2018" },
@@ -137,24 +185,43 @@ const demoEcus: EcuInfo[] = [
     dids: { "F190": "VF3LCBHZ6JS000000", "F191": "ACU4 v2", "F18C": "2018-04-01" },
   },
   {
-    name: "BSI (Boîtier Servitudes)",
+    name: "BSI (Body Systems Interface)",
     address: "0x75D",
     protocol: "ISO 15765-4 CAN",
     dids: { "F190": "VF3LCBHZ6JS000000", "F18C": "BSI 2010", "F191": "BSI HW 1.5", "F195": "BSI SW 6.2", "F187": "BSI-96xxxxx", "F17E": "PSA-BSI-2018" },
   },
   {
-    name: "Climatisation (HVAC)",
+    name: "HVAC",
     address: "0x7E6",
     protocol: "ISO 15765-4 CAN",
     dids: { "F190": "VF3LCBHZ6JS000000", "F195": "HVAC 1.0" },
   },
   {
-    name: "Tableau de bord",
+    name: "Instrument Cluster",
     address: "0x7E5",
     protocol: "ISO 15765-4 CAN",
     dids: { "F190": "VF3LCBHZ6JS000000", "F195": "CLUST 2.3", "F18C": "2018-03-01" },
   },
 ];
+
+// Shared real-mode poll function factory — avoids duplication between startRealPolling and changeRefreshRate
+function createRealPollFn(
+  manufacturer: string,
+  setPidData: React.Dispatch<React.SetStateAction<Map<number, PidValue>>>,
+) {
+  return async () => {
+    try {
+      const cmd = manufacturer ? "get_pid_data_extended" : "get_pid_data";
+      const args = manufacturer ? { manufacturer } : {};
+      const pids = await invoke<PidValue[]>(cmd, args);
+      const map = new Map<number, PidValue>();
+      for (const p of pids) map.set(p.pid, p);
+      setPidData(map);
+    } catch (e) {
+      devDebug("ui", `Poll error: ${String(e)}`);
+    }
+  };
+}
 
 export function useVehicleData() {
   const [pidData, setPidData] = useState<Map<number, PidValue>>(new Map());
@@ -167,10 +234,15 @@ export function useVehicleData() {
   });
   const [ecus, setEcus] = useState<EcuInfo[]>([]);
   const [monitors, setMonitors] = useState<MonitorStatus[]>([]);
+  const [mode06Results, setMode06Results] = useState<Mode06Result[]>([]);
+  const [freezeFrame, setFreezeFrame] = useState<FreezeFrameData | null>(null);
+  const [isLoadingMode06, setIsLoadingMode06] = useState(false);
+  const [isLoadingFreezeFrame, setIsLoadingFreezeFrame] = useState(false);
   const [isPolling, setIsPolling] = useState(false);
   const intervalRef = useRef<number | null>(null);
   const pollingModeRef = useRef<"demo" | "real">("demo");
   const manufacturerRef = useRef<string>("");
+  const { i18n } = useTranslation();
 
   const startDemoPolling = useCallback((intervalMs: number = 500) => {
     devInfo("ui", "Demo polling @ " + intervalMs + " ms");
@@ -216,7 +288,7 @@ export function useVehicleData() {
     }, intervalMs);
   }, []);
 
-  const startRealPolling = useCallback((intervalMs: number = 1000, manufacturer: string = "") => {
+  const startRealPolling = useCallback((intervalMs: number = 1000, manufacturer: string = "", skipEcuScan: boolean = false) => {
     devInfo("ui", "Real polling @ " + intervalMs + " ms for " + manufacturer);
     if (intervalRef.current) {
       clearInterval(intervalRef.current);
@@ -225,25 +297,17 @@ export function useVehicleData() {
     manufacturerRef.current = manufacturer;
     setIsPolling(true);
 
-    // Load ECUs and monitors from backend
-    invoke<EcuInfo[]>("scan_ecus").then(setEcus).catch(() => {});
-    invoke<MonitorStatus[]>("get_monitors").then(setMonitors).catch(() => {});
+    // Reset PID failure blacklist on new connection
+    invoke("reset_pid_blacklist").catch(() => {});
 
-    // Poll PIDs at interval via backend
-    const pollFn = async () => {
-      try {
-        const cmd = manufacturer ? "get_pid_data_extended" : "get_pid_data";
-        const args = manufacturer ? { manufacturer } : {};
-        const pids = await invoke<PidValue[]>(cmd, args);
-        const map = new Map<number, PidValue>();
-        for (const p of pids) {
-          map.set(p.pid, p);
-        }
-        setPidData(map);
-      } catch (e) {
-        devDebug("ui", "Poll error: " + String(e));
-      }
-    };
+    // Load ECUs and monitors from backend (skip on VIN update to avoid 60s rescan)
+    if (!skipEcuScan) {
+      invoke<EcuInfo[]>("scan_ecus").then(setEcus).catch(() => {});
+      invoke<MonitorStatus[]>("get_monitors").then(setMonitors).catch(() => {});
+    }
+
+    // Use shared poll function
+    const pollFn = createRealPollFn(manufacturer, setPidData);
 
     pollFn(); // First poll immediately
     intervalRef.current = window.setInterval(pollFn, intervalMs);
@@ -255,6 +319,32 @@ export function useVehicleData() {
       setMonitors(monitors);
     } catch {}
   }, []);
+
+  const loadMode06Results = useCallback(async () => {
+    if (isLoadingMode06) return;
+    setIsLoadingMode06(true);
+    try {
+      const results = await invoke<Mode06Result[]>("get_mode06_results", { lang: i18n.language });
+      setMode06Results(results);
+    } catch (e) {
+      devInfo("ui", "Mode 06 error: " + String(e));
+    } finally {
+      setIsLoadingMode06(false);
+    }
+  }, [isLoadingMode06, i18n.language]);
+
+  const loadFreezeFrame = useCallback(async () => {
+    if (isLoadingFreezeFrame) return;
+    setIsLoadingFreezeFrame(true);
+    try {
+      const data = await invoke<FreezeFrameData | null>("get_freeze_frame", { lang: i18n.language });
+      setFreezeFrame(data);
+    } catch (e) {
+      devInfo("ui", "Freeze frame error: " + String(e));
+    } finally {
+      setIsLoadingFreezeFrame(false);
+    }
+  }, [isLoadingFreezeFrame, i18n.language]);
 
   const stopPolling = useCallback(() => {
     devInfo("ui", "Polling stopped — clearing all vehicle data");
@@ -269,30 +359,20 @@ export function useVehicleData() {
     setDtcHistory([]);
     setEcus([]);
     setMonitors([]);
+    setMode06Results([]);
+    setFreezeFrame(null);
     try { localStorage.removeItem("bricarobd_dtc_history"); } catch {}
   }, []);
 
   const changeRefreshRate = useCallback((intervalMs: number) => {
     devInfo("ui", "Refresh rate: " + intervalMs + " ms");
-    if (isPolling && intervalRef.current) {
+    if (intervalRef.current) {
       clearInterval(intervalRef.current);
 
       if (pollingModeRef.current === "real") {
-        // Real mode: re-poll via backend
-        const mfr = manufacturerRef.current;
-        const pollFn = async () => {
-          try {
-            const cmd = mfr ? "get_pid_data_extended" : "get_pid_data";
-            const args = mfr ? { manufacturer: mfr } : {};
-            const pids = await invoke<PidValue[]>(cmd, args);
-            const map = new Map<number, PidValue>();
-            for (const p of pids) map.set(p.pid, p);
-            setPidData(map);
-          } catch {}
-        };
+        const pollFn = createRealPollFn(manufacturerRef.current, setPidData);
         intervalRef.current = window.setInterval(pollFn, intervalMs);
       } else {
-        // Demo mode: use JS generator
         intervalRef.current = window.setInterval(() => {
           const data = generateDemoData();
           demoDataCache = data;
@@ -300,7 +380,7 @@ export function useVehicleData() {
         }, intervalMs);
       }
     }
-  }, [isPolling]);
+  }, []);
 
   useEffect(() => {
     return () => {
@@ -318,7 +398,7 @@ export function useVehicleData() {
         const newEntries = newDtcs
           .filter((d) => !codes.has(d.code))
           .map((d) => ({ ...d, seenAt: now }));
-        const updated = [...prev, ...newEntries];
+        const updated = [...prev, ...newEntries].slice(-500);
         // Persist to localStorage
         try { localStorage.setItem("bricarobd_dtc_history", JSON.stringify(updated)); } catch {}
         return updated;
@@ -334,8 +414,8 @@ export function useVehicleData() {
   }, []);
 
   // Vehicle-specific operations from the 3.17M DB
-  const [vehicleOps, setVehicleOps] = useState<any[]>([]);
-  const [vehicleWriteOps, setVehicleWriteOps] = useState<any[]>([]);
+  const [vehicleOps, setVehicleOps] = useState<VehicleOperation[]>([]);
+  const [vehicleWriteOps, setVehicleWriteOps] = useState<WriteOperation[]>([]);
   const [dbStats, setDbStats] = useState<{ operations: number; profiles: number; ecus: number } | null>(null);
 
   return {
@@ -345,12 +425,18 @@ export function useVehicleData() {
     isPolling,
     ecus,
     monitors,
+    mode06Results,
+    freezeFrame,
+    isLoadingMode06,
+    isLoadingFreezeFrame,
     vehicleOps,
     vehicleWriteOps,
     dbStats,
     startDemoPolling,
     startRealPolling,
     loadMonitors,
+    loadMode06Results,
+    loadFreezeFrame,
     stopPolling,
     changeRefreshRate,
     setDtcs: setDtcsWithHistory,

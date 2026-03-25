@@ -162,10 +162,13 @@ impl OBDTransport for BleTransport {
 /// List available WiFi ELM327 endpoints (common defaults)
 pub fn default_wifi_endpoints() -> Vec<(String, u16)> {
     vec![
-        ("192.168.0.10".to_string(), 35000),  // Most common WiFi ELM327
-        ("192.168.1.10".to_string(), 35000),  // Alternative
-        ("192.168.4.1".to_string(), 35000),   // Some clones
+        ("192.168.0.10".to_string(), 35000),  // Most common WiFi ELM327 (Viecar, generic)
+        ("192.168.0.10".to_string(), 23),     // Some adapters use telnet port
+        ("192.168.4.1".to_string(), 35000),   // Konnwei / hotspot-mode adapters
+        ("192.168.1.10".to_string(), 35000),  // Alternative subnet
+        ("192.168.1.1".to_string(), 3333),    // Older clones (non-standard port)
         ("10.0.0.1".to_string(), 35000),      // Some newer adapters
+        ("192.168.2.10".to_string(), 35000),  // Rare subnet variant
     ]
 }
 

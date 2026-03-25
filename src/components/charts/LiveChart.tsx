@@ -25,7 +25,7 @@ export default function LiveChart({
   data,
   label,
   unit,
-  color = "#06B6D4",
+  color = "var(--obd-chart-cyan)",
   height = 120,
   className,
   showAxis = false,
@@ -67,11 +67,11 @@ export default function LiveChart({
           )}
           <Tooltip
             contentStyle={{
-              backgroundColor: "#111827",
-              border: "1px solid #1E293B",
+              backgroundColor: "var(--obd-chart-tooltip-bg)",
+              border: "1px solid var(--obd-chart-tooltip-border)",
               borderRadius: "8px",
               fontSize: "11px",
-              color: "#F1F5F9",
+              color: "var(--obd-chart-text)",
             }}
             formatter={(val: number) => [`${val.toFixed(1)} ${unit}`, label]}
             labelFormatter={() => ""}

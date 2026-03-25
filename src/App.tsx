@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { useTranslation } from "react-i18next";
 import { cn } from "@/lib/utils";
+import ErrorBoundary from "@/components/ErrorBoundary";
 import Sidebar from "@/components/layout/Sidebar";
 import StatusBar from "@/components/layout/StatusBar";
 import Connection from "@/pages/Connection";
@@ -15,7 +16,7 @@ import Advanced from "@/pages/Advanced";
 import { useConnectionStore } from "@/stores/connection";
 import DevConsole from "@/components/DevConsole";
 import { useVehicleData } from "@/stores/vehicle";
-import type { DtcCode, EcuInfo } from "@/stores/vehicle";
+import type { DtcCode, EcuInfo, MonitorStatus, VehicleOperation, WriteOperation } from "@/stores/vehicle";
 import { devInfo, devDebug } from "@/lib/devlog";
 
 export default function App() {
@@ -48,17 +49,38 @@ export default function App() {
       .catch(() => {});
   }, []);
 
+  // Sync language with Rust backend
+  useEffect(() => {
+    invoke("set_language", { lang: i18n.language }).catch(() => {});
+  }, [i18n.language]);
+
   // Start polling + load DTCs + load vehicle operations when connected
   useEffect(() => {
     devInfo("ui", "Connection: " + connection.status);
     if (connection.status === "demo") {
       devInfo("ui", "Demo polling started");
+      invoke("discover_vehicle_params", { manufacturer: "Peugeot" }).catch(() => {});
       vehicle.startDemoPolling();
     } else if (connection.status === "connected") {
-      // Real vehicle: poll via Rust backend with manufacturer DIDs
+      // Real vehicle: discover supported params first, then poll
       const make = connection.vehicle?.make || "";
-      devInfo("ui", "Real polling started for " + make);
-      vehicle.startRealPolling(1000, make);
+      devInfo("ui", "Starting vehicle discovery for " + make);
+
+      // Run discovery, then start polling with discovered params only
+      invoke<{ standardPids: number; manufacturerDids: number }>("discover_vehicle_params", { manufacturer: make })
+        .then(result => {
+          devInfo("ui", `Discovery: ${result.standardPids} PIDs + ${result.manufacturerDids} DIDs`);
+          vehicle.startRealPolling(1000, make, true); // skipEcuScan since discovery did the heavy lifting
+        })
+        .catch(() => {
+          devInfo("ui", "Discovery failed, starting polling with fallback");
+          vehicle.startRealPolling(1000, make);
+        });
+
+      // Load ECUs and monitors in parallel with discovery
+      invoke<EcuInfo[]>("scan_ecus").then(ecus => vehicle.setEcus(ecus)).catch(() => {});
+      invoke<MonitorStatus[]>("get_monitors").then(m => vehicle.setMonitors(m)).catch(() => {});
+
       invoke<DtcCode[]>("read_all_dtcs", { lang: i18n.language }).then(codes => {
         devInfo("ui", "DTCs loaded: " + codes.length);
         vehicle.setDtcs(codes);
@@ -66,13 +88,13 @@ export default function App() {
 
       // Load vehicle-specific operations from the 3.17M DB
       const vehicleMake = connection.vehicle?.make || "";
-      invoke<any[]>("get_vehicle_operations", { vehicle: vehicleMake, limit: 500 })
+      invoke<VehicleOperation[]>("get_vehicle_operations", { vehicle: vehicleMake, limit: 500 })
         .then(ops => {
           devInfo("ui", "Vehicle ops: " + ops.length);
           vehicle.setVehicleOps(ops);
         })
         .catch(() => {});
-      invoke<any[]>("get_write_operations", { ecuName: "%", vehicle: vehicleMake })
+      invoke<WriteOperation[]>("get_write_operations", { ecuName: "%", vehicle: vehicleMake })
         .then(ops => vehicle.setVehicleWriteOps(ops))
         .catch(() => {});
     } else if (connection.status === "disconnected") {
@@ -149,6 +171,19 @@ export default function App() {
             onDemoConnect={connection.connectDemo}
             onPortChange={connection.setPort}
             onBaudRateChange={connection.setBaudRate}
+            onVehicleUpdate={(info) => {
+              connection.updateVehicle(info);
+              const make = info.make || "";
+              if (connection.status === "connected") {
+                vehicle.startRealPolling(1000, make, true);
+                invoke<DtcCode[]>("read_all_dtcs", { lang: i18n.language })
+                  .then(codes => vehicle.setDtcs(codes)).catch(() => {});
+              }
+              invoke<VehicleOperation[]>("get_vehicle_operations", { vehicle: make, limit: 500 })
+                .then(ops => vehicle.setVehicleOps(ops)).catch(() => {});
+              invoke<WriteOperation[]>("get_write_operations", { ecuName: "%", vehicle: make })
+                .then(ops => vehicle.setVehicleWriteOps(ops)).catch(() => {});
+            }}
           />
         );
       case "dashboard":
@@ -179,6 +214,12 @@ export default function App() {
             onClearAll={handleClearAll}
             isReading={isReading}
             isClearing={isClearing}
+            mode06Results={vehicle.mode06Results}
+            isLoadingMode06={vehicle.isLoadingMode06}
+            onLoadMode06={vehicle.loadMode06Results}
+            freezeFrame={vehicle.freezeFrame}
+            isLoadingFreezeFrame={vehicle.isLoadingFreezeFrame}
+            onLoadFreezeFrame={vehicle.loadFreezeFrame}
           />
         );
       case "ecuInfo":
@@ -199,42 +240,33 @@ export default function App() {
       case "advanced":
         return <Advanced />;
       default:
-        return <Connection
-          status={connection.status}
-          port={connection.port}
-          baudRate={connection.baudRate}
-          vehicle={connection.vehicle}
-          availablePorts={connection.availablePorts}
-          onConnect={connection.connect}
-          onDisconnect={connection.disconnect}
-          onDemoConnect={connection.connectDemo}
-          onPortChange={connection.setPort}
-          onBaudRateChange={connection.setBaudRate}
-        />;
+        return null;
     }
   };
 
   return (
-    <div className="flex h-screen w-screen overflow-hidden bg-obd-bg">
-      <Sidebar
-        activePage={activePage}
-        onNavigate={handleNavigate}
-        connectionStatus={connection.status}
-        onToggleDevConsole={() => setShowDevConsole(!showDevConsole)}
-      />
-      <div className="flex-1 flex flex-col overflow-hidden">
-        <main className="flex-1 overflow-y-auto">{renderPage()}</main>
-        <StatusBar status={connection.status} vehicle={connection.vehicle} />
-      </div>
-      {toastMessage && (
-        <div className={cn("fixed bottom-4 right-4 max-w-md px-4 py-3 rounded-lg shadow-lg flex items-start gap-3 animate-slide-in z-50 text-white", toastMessage.type === "success" ? "bg-obd-success/90" : "bg-obd-danger/90")}>
-          <p className="text-xs flex-1 leading-relaxed">{toastMessage.message}</p>
-          <button onClick={() => setToastMessage(null)} className="flex-shrink-0 hover:opacity-70 text-white">
-            ✕
-          </button>
+    <ErrorBoundary>
+      <div className="flex h-screen w-screen overflow-hidden bg-obd-bg">
+        <Sidebar
+          activePage={activePage}
+          onNavigate={handleNavigate}
+          connectionStatus={connection.status}
+          onToggleDevConsole={() => setShowDevConsole(!showDevConsole)}
+        />
+        <div className="flex-1 flex flex-col overflow-hidden">
+          <main className="flex-1 overflow-y-auto">{renderPage()}</main>
+          <StatusBar status={connection.status} vehicle={connection.vehicle} />
         </div>
-      )}
-      {showDevConsole && <DevConsole onClose={() => setShowDevConsole(false)} />}
-    </div>
+        {toastMessage && (
+          <div className={cn("fixed bottom-4 right-4 max-w-md px-4 py-3 rounded-lg shadow-lg flex items-start gap-3 animate-slide-in z-50 text-white", toastMessage.type === "success" ? "bg-obd-success/90" : "bg-obd-danger/90")}>
+            <p className="text-xs flex-1 leading-relaxed">{toastMessage.message}</p>
+            <button onClick={() => setToastMessage(null)} className="flex-shrink-0 hover:opacity-70 text-white" aria-label={t("common.close")}>
+              ✕
+            </button>
+          </div>
+        )}
+        {showDevConsole && <DevConsole onClose={() => setShowDevConsole(false)} />}
+      </div>
+    </ErrorBoundary>
   );
 }

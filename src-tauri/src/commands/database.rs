@@ -1,4 +1,3 @@
-use std::path::PathBuf;
 use std::sync::Mutex;
 use tauri::command;
 
@@ -10,7 +9,7 @@ fn with_db<F, R>(f: F) -> Result<R, String>
 where
     F: FnOnce(&Database) -> Result<R, String>,
 {
-    let guard = DB.lock().map_err(|e| format!("DB lock: {}", e))?;
+    let guard = DB.lock().unwrap_or_else(|e| e.into_inner());
     let db = guard.as_ref().ok_or("Database not initialized")?;
     f(db)
 }
@@ -21,26 +20,9 @@ pub fn init_database_internal(path: &std::path::Path) -> Result<(u64, u64, u64),
     let db = Database::open(path)?;
     let stats = db.get_stats();
     crate::obd::dev_log::log_info("db", &format!("Database stats — Operations: {}, Profiles: {}, ECUs: {}", stats.0, stats.1, stats.2));
-    let mut guard = DB.lock().map_err(|e| format!("Lock: {}", e))?;
+    let mut guard = DB.lock().unwrap_or_else(|e| e.into_inner());
     *guard = Some(db);
     Ok(stats)
-}
-
-/// Initialize database (can also be called from frontend)
-#[command]
-pub fn init_database(db_path: String) -> Result<serde_json::Value, String> {
-    let path = PathBuf::from(&db_path);
-    let db = Database::open(&path)?;
-    let (ops, profiles, ecus) = db.get_stats();
-
-    let mut guard = DB.lock().map_err(|e| format!("Lock: {}", e))?;
-    *guard = Some(db);
-
-    Ok(serde_json::json!({
-        "operations": ops,
-        "profiles": profiles,
-        "ecus": ecus,
-    }))
 }
 
 /// Get database stats

@@ -15,7 +15,7 @@ tauri-build = { version = "2", features = [] }
 [features]
 default = ["desktop"]
 desktop = ["dep:serialport"]
-mobile = []
+mobile = ["dep:btleplug", "dep:flate2"]
 
 [dependencies]
 tauri = { version = "2", features = [] }
@@ -31,11 +31,11 @@ chrono = { version = "0.4", features = ["serde"] }
 # Desktop only — serial port
 serialport = { version = "4", optional = true }
 
-# BLE for Bluetooth ELM327 (cross-platform including mobile)
-btleplug = "0.11"
+# BLE for Bluetooth ELM327 (mobile only)
+btleplug = { version = "0.11", optional = true }
 
 # Compression for DB download on mobile
-flate2 = "1"
+flate2 = { version = "1", optional = true }
 
 [profile.release]
 panic = "abort"

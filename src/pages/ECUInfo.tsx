@@ -1,7 +1,7 @@
 import { useTranslation } from "react-i18next";
 import { invoke } from "@tauri-apps/api/core";
 import { Cpu, RefreshCw, ChevronRight, Send, Battery } from "lucide-react";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import type { EcuInfo } from "@/stores/vehicle";
 import { cn } from "@/lib/utils";
 
@@ -17,7 +17,25 @@ export default function ECUInfo({ ecus, isScanning = false, onScan }: ECUInfoPro
   const [selectedEcu, setSelectedEcu] = useState<string | null>(null);
   const [didResults, setDidResults] = useState<Record<string, string>>({});
   const [loadingDid, setLoadingDid] = useState<string | null>(null);
+  const [batteryVoltage, setBatteryVoltage] = useState<number | null>(null);
   const selected = ecus.find((e) => e.address === selectedEcu);
+
+  // Fetch battery voltage from adapter (only when ECUs are present = connected)
+  useEffect(() => {
+    if (ecus.length === 0) {
+      setBatteryVoltage(null);
+      return;
+    }
+    const fetchVoltage = async () => {
+      try {
+        const v = await invoke<number | null>("get_battery_voltage");
+        setBatteryVoltage(v);
+      } catch { /* non-critical */ }
+    };
+    fetchVoltage();
+    const interval = setInterval(fetchVoltage, 15000);
+    return () => clearInterval(interval);
+  }, [ecus.length]);
 
   return (
     <div className="p-6 space-y-4 animate-slide-in h-full flex flex-col">
@@ -100,11 +118,19 @@ export default function ECUInfo({ ecus, isScanning = false, onScan }: ECUInfoPro
             <div className="space-y-2">
               <h4 className="text-xs font-semibold text-obd-text-secondary uppercase tracking-wider">{t("ecu.systemStatus")}</h4>
               <div className="flex items-center gap-2 p-3 rounded-lg bg-white/[0.02]">
-                <div className="w-8 h-8 rounded-md bg-obd-success/10 flex items-center justify-center">
-                  <Battery size={16} className="text-obd-success" />
+                <div className={cn("w-8 h-8 rounded-md flex items-center justify-center",
+                  batteryVoltage && batteryVoltage >= 12.4 ? "bg-obd-success/10" : batteryVoltage && batteryVoltage >= 11.8 ? "bg-obd-warning/10" : "bg-obd-danger/10"
+                )}>
+                  <Battery size={16} className={cn(
+                    batteryVoltage && batteryVoltage >= 12.4 ? "text-obd-success" : batteryVoltage && batteryVoltage >= 11.8 ? "text-obd-warning" : "text-obd-danger"
+                  )} />
                 </div>
                 <div>
-                  <p className="text-xs font-medium text-obd-text">—</p>
+                  <p className={cn("text-xs font-medium",
+                    batteryVoltage && batteryVoltage >= 12.4 ? "text-obd-success" : batteryVoltage && batteryVoltage >= 11.8 ? "text-obd-warning" : "text-obd-text"
+                  )}>
+                    {batteryVoltage ? `${batteryVoltage.toFixed(1)} V` : "—"}
+                  </p>
                   <p className="text-[10px] text-obd-text-muted">{t("connection.batteryVoltage")}</p>
                 </div>
               </div>

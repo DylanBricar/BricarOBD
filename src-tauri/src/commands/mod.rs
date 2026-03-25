@@ -4,3 +4,4 @@ pub mod dtc;
 pub mod ecu;
 pub mod database;
 pub mod settings;
+pub mod diagnostic;

@@ -110,6 +110,10 @@ export function useConnectionStore() {
       globalState = { ...defaultState, availablePorts: globalState.availablePorts };
       notify();
     },
+    updateVehicle: (vehicle: VehicleInfo) => {
+      globalState = { ...globalState, vehicle };
+      notify();
+    },
     connectDemo: async () => {
       devInfo("ui", "Demo mode activated");
       try {
