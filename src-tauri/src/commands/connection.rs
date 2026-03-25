@@ -1,6 +1,7 @@
 use tauri::command;
 use crate::models::{ConnectionStatus, PortInfo, VehicleInfo};
 use crate::obd::Elm327Connection;
+use crate::obd::transport::{self, OBDTransport};
 use std::sync::Mutex;
 
 enum ConnectionMode {
@@ -174,4 +175,87 @@ fn parse_vin_response(response: &str) -> String {
 
     // VIN must be exactly 17 characters
     if vin.len() == 17 { vin } else { String::new() }
+}
+
+/// Connect via WiFi (ELM327 WiFi adapter)
+#[command]
+pub async fn connect_wifi(host: String, port: u16) -> Result<VehicleInfo, String> {
+    {
+        let guard = CONNECTION.lock().unwrap_or_else(|e| e.into_inner());
+        if !matches!(*guard, ConnectionMode::Disconnected) {
+            return Err("Already connected".to_string());
+        }
+    }
+
+    crate::obd::dev_log::log_info("connection", &format!("WiFi connect: {}:{}", host, port));
+
+    let result: Result<(Elm327Connection, VehicleInfo), String> = tokio::task::spawn_blocking(move || {
+        // Create WiFi transport
+        let _wifi = transport::WiFiTransport::new(&host, port, 5000)?;
+        crate::obd::dev_log::log_info("connection", "WiFi transport established");
+
+        // For now, use the standard ELM327 connection over serial
+        // TODO: refactor Elm327Connection to accept OBDTransport trait
+        // Workaround: many WiFi ELM327s also appear as a virtual serial port
+        Err("WiFi direct connection not yet wired to ELM327 protocol layer — use the virtual serial port (e.g. /dev/cu.OBDII-WiFi)".to_string())
+    })
+    .await
+    .map_err(|e| format!("Task error: {}", e))?;
+
+    let (conn, info) = result?;
+    let mut guard = CONNECTION.lock().unwrap_or_else(|e| e.into_inner());
+    *guard = ConnectionMode::Real(conn);
+    Ok(info)
+}
+
+/// Scan for WiFi ELM327 adapters on common addresses
+#[command]
+pub async fn scan_wifi() -> Vec<serde_json::Value> {
+    let endpoints = transport::default_wifi_endpoints();
+    let mut found = Vec::new();
+
+    for (host, port) in &endpoints {
+        crate::obd::dev_log::log_debug("connection", &format!("Probing WiFi {}:{}", host, port));
+        match transport::WiFiTransport::new(host, *port, 1500) {
+            Ok(mut t) => {
+                crate::obd::dev_log::log_info("connection", &format!("WiFi adapter found at {}:{}", host, port));
+                t.close();
+                found.push(serde_json::json!({
+                    "host": host,
+                    "port": port,
+                    "name": format!("WiFi ELM327 ({}:{})", host, port),
+                }));
+            }
+            Err(_) => continue,
+        }
+    }
+
+    found
+}
+
+/// Get available connection types for the platform
+#[command]
+pub fn get_connection_types() -> Vec<serde_json::Value> {
+    let mut types = Vec::new();
+
+    #[cfg(feature = "desktop")]
+    types.push(serde_json::json!({
+        "type": "serial",
+        "name": "USB Serial",
+        "available": true,
+    }));
+
+    types.push(serde_json::json!({
+        "type": "wifi",
+        "name": "WiFi (ELM327)",
+        "available": true,
+    }));
+
+    types.push(serde_json::json!({
+        "type": "bluetooth",
+        "name": "Bluetooth BLE",
+        "available": false, // Not yet implemented
+    }));
+
+    types
 }

@@ -12,17 +12,30 @@ crate-type = ["lib", "cdylib", "staticlib"]
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
 
+[features]
+default = ["desktop"]
+desktop = ["dep:serialport"]
+mobile = []
+
 [dependencies]
 tauri = { version = "2", features = [] }
 tauri-plugin-shell = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 tokio = { version = "1", features = ["full"] }
-serialport = "4"
 rusqlite = { version = "0.32", features = ["bundled"] }
 tracing = "0.1"
 tracing-subscriber = "0.3"
 chrono = { version = "0.4", features = ["serde"] }
+
+# Desktop only — serial port
+serialport = { version = "4", optional = true }
+
+# BLE for Bluetooth ELM327 (cross-platform including mobile)
+btleplug = "0.11"
+
+# Compression for DB download on mobile
+flate2 = "1"
 
 [profile.release]
 panic = "abort"

@@ -1,8 +1,10 @@
+#[cfg(feature = "desktop")]
 use serialport::SerialPort;
 use std::io::{Read, Write};
 use std::time::Duration;
 use tracing::{debug, error, info, warn};
 use crate::obd::dev_log;
+use crate::obd::transport::{TransportType, WiFiTransport, OBDTransport};
 
 use crate::models::PortInfo;
 

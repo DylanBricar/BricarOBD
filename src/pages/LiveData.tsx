@@ -196,7 +196,7 @@ export default function LiveData({ pidData, isPolling, onStartPolling, onStopPol
   return (
     <div className="p-6 space-y-4 animate-slide-in h-full flex flex-col">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-3 md:gap-0">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-xl bg-obd-accent/10 border border-obd-accent/20 flex items-center justify-center">
             <Activity className="text-obd-accent" size={20} />
@@ -207,7 +207,7 @@ export default function LiveData({ pidData, isPolling, onStartPolling, onStopPol
           </div>
         </div>
 
-        <div className="flex items-center gap-2 h-[34px]">
+        <div className="flex flex-wrap items-center gap-2 h-auto md:h-[34px]">
           {/* Search */}
           <div className="relative">
             <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-obd-text-muted" />

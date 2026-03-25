@@ -141,7 +141,7 @@ export default function Dashboard({ pidData }: DashboardProps) {
 
       {/* Main Gauges */}
       {availableGauges.length > 0 && (
-        <div className={`grid gap-4 ${availableGauges.length === 1 ? "grid-cols-1" : availableGauges.length === 2 ? "grid-cols-2" : "grid-cols-3"}`}>
+        <div className={`grid gap-4 ${availableGauges.length === 1 ? "grid-cols-1" : availableGauges.length === 2 ? "grid-cols-1 sm:grid-cols-2" : "grid-cols-2 md:grid-cols-4"}`}>
           {availableGauges.map((pidCode) => {
             const pidValue = pidData.get(pidCode)!;
 

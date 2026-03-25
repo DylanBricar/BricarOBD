@@ -1,3 +1,4 @@
+import { useState, useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import {
   Plug,
@@ -10,6 +11,8 @@ import {
   Wrench,
   Globe,
   Terminal,
+  Menu,
+  X,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { ConnectionStatus } from "@/stores/connection";
@@ -38,10 +41,130 @@ const advancedItems = [
 export default function Sidebar({ activePage, onNavigate, connectionStatus, onToggleDevConsole }: SidebarProps) {
   const { t, i18n } = useTranslation();
   const isConnected = connectionStatus === "connected" || connectionStatus === "demo";
+  const [mobileOpen, setMobileOpen] = useState(false);
+  const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
+
+  useEffect(() => {
+    const handleResize = () => setIsMobile(window.innerWidth < 768);
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, []);
 
   const toggleLanguage = () => {
     i18n.changeLanguage(i18n.language === "fr" ? "en" : "fr");
   };
+
+  const handleNavigate = (page: string) => {
+    onNavigate(page);
+    if (isMobile) setMobileOpen(false);
+  };
+
+  if (isMobile) {
+    return (
+      <>
+        <button
+          onClick={() => setMobileOpen(!mobileOpen)}
+          className="fixed top-4 left-4 z-40 p-2 rounded-lg bg-obd-border/20 hover:bg-obd-border/40 transition-colors md:hidden"
+        >
+          {mobileOpen ? <X size={20} /> : <Menu size={20} />}
+        </button>
+
+        {mobileOpen && (
+          <div
+            className="fixed inset-0 bg-black/40 z-30 md:hidden"
+            onClick={() => setMobileOpen(false)}
+          />
+        )}
+
+        <aside className={cn(
+          "glass-sidebar w-[220px] flex flex-col h-full select-none fixed left-0 top-0 z-30 md:static transition-transform duration-300",
+          mobileOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0"
+        )}>
+          {/* Logo */}
+          <div className="px-2 py-3 border-b border-obd-border/30 flex justify-center">
+            <img src="/logo.png" alt="BricarOBD" className="w-40 h-auto object-contain" />
+          </div>
+
+          {/* Main Nav */}
+          <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
+            <p className="px-3 py-1.5 text-[10px] font-semibold uppercase tracking-widest text-obd-text-muted">
+              {t("nav.principal")}
+            </p>
+            {navItems.map((item) => {
+              const isActive = activePage === item.id;
+              const Icon = item.icon;
+              const isDisabled = item.id !== "connection" && !isConnected;
+
+              return (
+                <button
+                  key={item.id}
+                  onClick={() => !isDisabled && handleNavigate(item.id)}
+                  disabled={isDisabled}
+                  className={cn(
+                    isActive ? "nav-item-active" : "nav-item",
+                    isDisabled && "opacity-30 cursor-not-allowed hover:bg-transparent"
+                  )}
+                >
+                  <Icon size={18} strokeWidth={1.8} />
+                  <span>{t(item.labelKey)}</span>
+                </button>
+              );
+            })}
+
+            <div className="pt-3">
+              <p className="px-3 py-1.5 text-[10px] font-semibold uppercase tracking-widest text-obd-text-muted">
+                {t("nav.expert")}
+              </p>
+              {advancedItems.map((item) => {
+                const isActive = activePage === item.id;
+                const Icon = item.icon;
+                const isDisabled = item.id === "advanced" && !isConnected;
+
+                return (
+                  <button
+                    key={item.id}
+                    onClick={() => !isDisabled && handleNavigate(item.id)}
+                    disabled={isDisabled}
+                    className={cn(
+                      item.danger
+                        ? isActive
+                          ? "nav-item-danger-active"
+                          : "nav-item-danger"
+                        : isActive
+                          ? "nav-item-active"
+                          : "nav-item",
+                      isDisabled && "opacity-30 cursor-not-allowed hover:bg-transparent"
+                    )}
+                  >
+                    <Icon size={18} strokeWidth={1.8} />
+                    <span>{t(item.labelKey)}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </nav>
+
+          {/* Footer */}
+          <div className="px-3 pb-4 space-y-2 border-t border-obd-border/30 pt-3">
+            <button
+              onClick={onToggleDevConsole}
+              className="nav-item w-full justify-center text-[10px] opacity-60 hover:opacity-100"
+            >
+              <Terminal size={14} strokeWidth={1.8} />
+              <span className="text-[10px]">Dev Console</span>
+            </button>
+            <button
+              onClick={toggleLanguage}
+              className="nav-item w-full justify-center"
+            >
+              <Globe size={16} strokeWidth={1.8} />
+              <span className="text-xs">{i18n.language === "fr" ? "FR" : "EN"}</span>
+            </button>
+          </div>
+        </aside>
+      </>
+    );
+  }
 
   return (
     <aside className="glass-sidebar w-[220px] flex flex-col h-full select-none">
@@ -76,37 +199,37 @@ export default function Sidebar({ activePage, onNavigate, connectionStatus, onTo
           );
         })}
 
-        <div className="pt-3">
-          <p className="px-3 py-1.5 text-[10px] font-semibold uppercase tracking-widest text-obd-text-muted">
-            {t("nav.expert")}
-          </p>
-          {advancedItems.map((item) => {
-            const isActive = activePage === item.id;
-            const Icon = item.icon;
-            const isDisabled = item.id === "advanced" && !isConnected;
+          <div className="pt-3">
+            <p className="px-3 py-1.5 text-[10px] font-semibold uppercase tracking-widest text-obd-text-muted">
+              {t("nav.expert")}
+            </p>
+            {advancedItems.map((item) => {
+              const isActive = activePage === item.id;
+              const Icon = item.icon;
+              const isDisabled = item.id === "advanced" && !isConnected;
 
-            return (
-              <button
-                key={item.id}
-                onClick={() => !isDisabled && onNavigate(item.id)}
-                disabled={isDisabled}
-                className={cn(
-                  item.danger
-                    ? isActive
-                      ? "nav-item-danger-active"
-                      : "nav-item-danger"
-                    : isActive
-                      ? "nav-item-active"
-                      : "nav-item",
-                  isDisabled && "opacity-30 cursor-not-allowed hover:bg-transparent"
-                )}
-              >
-                <Icon size={18} strokeWidth={1.8} />
-                <span>{t(item.labelKey)}</span>
-              </button>
-            );
-          })}
-        </div>
+              return (
+                <button
+                  key={item.id}
+                  onClick={() => !isDisabled && onNavigate(item.id)}
+                  disabled={isDisabled}
+                  className={cn(
+                    item.danger
+                      ? isActive
+                        ? "nav-item-danger-active"
+                        : "nav-item-danger"
+                      : isActive
+                        ? "nav-item-active"
+                        : "nav-item",
+                    isDisabled && "opacity-30 cursor-not-allowed hover:bg-transparent"
+                  )}
+                >
+                  <Icon size={18} strokeWidth={1.8} />
+                  <span>{t(item.labelKey)}</span>
+                </button>
+              );
+            })}
+          </div>
       </nav>
 
       {/* Footer */}

@@ -151,7 +151,7 @@ export default function Advanced() {
         </p>
       </div>
 
-      <div className="flex gap-6 flex-1 min-h-0">
+      <div className="flex flex-col md:flex-row gap-4 md:gap-6 flex-1 min-h-0">
         {/* Operations panel */}
         <div className="flex-1 overflow-y-auto space-y-3">
           {categories.map((category) => (
@@ -239,7 +239,7 @@ export default function Advanced() {
           ))}
         </div>
 
-        <div className="w-96 glass-card p-5 flex flex-col">
+        <div className="w-full md:w-96 glass-card p-5 flex flex-col">
           <h3 className="text-sm font-semibold text-obd-text-secondary uppercase tracking-wider mb-3">
             {t("advanced.console")}
           </h3>

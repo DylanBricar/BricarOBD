@@ -37,7 +37,7 @@ export default function ECUInfo({ ecus, isScanning = false, onScan }: ECUInfoPro
         </button>
       </div>
 
-      <div className="flex gap-4 flex-1 min-h-0">
+      <div className="flex flex-col md:flex-row gap-4 flex-1 min-h-0">
         {/* ECU List */}
         <div className="flex-1 glass-card overflow-y-auto">
           {ecus.length === 0 ? (
@@ -71,7 +71,7 @@ export default function ECUInfo({ ecus, isScanning = false, onScan }: ECUInfoPro
 
         {/* ECU Detail Panel */}
         {selected && (
-          <div className="w-96 glass-card p-5 space-y-4 overflow-y-auto">
+          <div className="w-full md:w-96 glass-card p-5 space-y-4 overflow-y-auto">
             <div className="flex items-center gap-3">
               <div className="w-12 h-12 rounded-xl bg-obd-accent/10 border border-obd-accent/20 flex items-center justify-center">
                 <Cpu className="text-obd-accent" size={24} />

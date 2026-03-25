@@ -117,7 +117,7 @@ export default function Connection({
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         {/* Connection Settings */}
         <div className="glass-card p-5 space-y-4">
           <h3 className="text-sm font-semibold text-obd-text-secondary uppercase tracking-wider">

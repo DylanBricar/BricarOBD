@@ -46,6 +46,9 @@ pub fn run() {
             // Connection
             connection::list_serial_ports,
             connection::connect_obd,
+            connection::connect_wifi,
+            connection::scan_wifi,
+            connection::get_connection_types,
             connection::disconnect_obd,
             connection::connect_demo,
             connection::get_connection_status,
