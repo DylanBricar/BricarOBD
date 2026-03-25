@@ -181,6 +181,9 @@ jobs:
         with:
           workspaces: src-tauri
 
+      - name: Install Tauri CLI
+        run: cargo install tauri-cli --locked
+
       - name: Install frontend dependencies
         run: pnpm install --no-frozen-lockfile
 
@@ -274,6 +277,9 @@ jobs:
           # Install provisioning profile
           mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
           echo -n "$PROVISIONING_PROFILE" | base64 --decode -o ~/Library/MobileDevice/Provisioning\ Profiles/profile.mobileprovision
+
+      - name: Install Tauri CLI
+        run: cargo install tauri-cli --locked
 
       - name: Init Tauri iOS
         run: cargo tauri ios init

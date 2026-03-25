@@ -224,6 +224,9 @@ jobs:
         with:
           workspaces: src-tauri
 
+      - name: Install Tauri CLI
+        run: cargo install tauri-cli --locked
+
       - name: Install frontend dependencies
         run: pnpm install --no-frozen-lockfile
 
