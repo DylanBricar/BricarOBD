@@ -110,17 +110,17 @@ pub fn save_session_cmd(
 /// Try to find a vehicle model name from the database
 #[command]
 pub fn find_vehicle_model(make: String) -> Option<String> {
-    with_db(|db| db.find_vehicle_model(&make)).ok().flatten()
+    with_db(|db| Ok(db.find_vehicle_model(&make))).ok().flatten()
 }
 
 /// Sync helper for finding vehicle model (used from connection.rs inside spawn_blocking)
 pub fn find_vehicle_model_sync(make: &str) -> Option<String> {
-    with_db(|db| db.find_vehicle_model(make)).ok().flatten()
+    with_db(|db| Ok(db.find_vehicle_model(make))).ok().flatten()
 }
 
 /// Sync helper for DID info lookup (used from dashboard.rs)
 pub fn get_did_info_sync(did: &str, vehicle: &str) -> Option<(String, String, String)> {
-    with_db(|db| db.get_did_info(did, vehicle)).ok().flatten()
+    with_db(|db| Ok(db.get_did_info(did, vehicle))).ok().flatten()
 }
 
 /// Get distinct ECU names that have DTC operations for a vehicle
