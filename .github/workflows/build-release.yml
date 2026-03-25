@@ -4,6 +4,11 @@ on:
   push:
     tags:
       - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag to build and release (e.g. v2.0.1)'
+        required: true
 
 permissions:
   contents: write
@@ -36,6 +41,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag || github.ref }}
 
       - name: Download database from release assets
         run: |
@@ -94,10 +101,10 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          tagName: ${{ github.ref_name }}
-          releaseName: 'BricarOBD ${{ github.ref_name }}'
+          tagName: ${{ inputs.tag || github.ref_name }}
+          releaseName: 'BricarOBD ${{ inputs.tag || github.ref_name }}'
           releaseBody: |
-            ## BricarOBD ${{ github.ref_name }}
+            ## BricarOBD ${{ inputs.tag || github.ref_name }}
 
             ### Professional OBD-II Diagnostic Tool
 
@@ -134,6 +141,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag || github.ref }}
 
       - name: Download database
         run: |
@@ -192,7 +201,7 @@ jobs:
       - name: Upload APK to release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ github.ref_name }}
+          tag_name: ${{ inputs.tag || github.ref_name }}
           files: |
             src-tauri/gen/android/app/build/outputs/apk/universal/release/app-universal-release.apk
             src-tauri/gen/android/app/build/outputs/apk/universal/debug/app-universal-debug.apk
@@ -212,6 +221,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag || github.ref }}
 
       - name: Download database
         run: |
@@ -275,7 +286,7 @@ jobs:
       - name: Upload IPA to release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ github.ref_name }}
+          tag_name: ${{ inputs.tag || github.ref_name }}
           files: |
             src-tauri/gen/apple/build/**/*.ipa
         env:

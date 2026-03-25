@@ -81,3 +81,10 @@ jobs:
           git tag "$NEW_TAG"
           git push origin "$NEW_TAG"
           echo "Created and pushed tag: $NEW_TAG"
+
+      - name: Trigger Build & Release workflow
+        run: |
+          gh workflow run build-release.yml -f tag="${{ steps.bump.outputs.new_tag }}"
+          echo "Triggered Build & Release for ${{ steps.bump.outputs.new_tag }}"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
