@@ -195,7 +195,7 @@ pub fn get_monitors() -> Vec<MonitorStatus> {
     monitors
 }
 
-/// Send raw UDS command or named operation (Advanced mode — uses elevated safety)
+/// Send raw UDS command or named operation (Advanced mode – uses elevated safety)
 #[command]
 pub fn send_raw_command(ecu_address: String, command: String) -> Result<String, String> {
     if let Some((addr, hex_cmd)) = resolve_operation_command(&command) {

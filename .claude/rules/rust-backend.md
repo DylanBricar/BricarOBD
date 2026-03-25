@@ -8,7 +8,7 @@ globs: src-tauri/**/*.rs
 ## Safety — Non-Negotiable
 - NEVER send write commands (2E, 2F, 30, 31, 34-37, 3D, 11, 27, 28) outside `send_raw_command`
 - ALWAYS check `is_demo()` before accessing the real serial connection
-- ALWAYS use `with_real_connection()` to access the Elm327Connection — never access the static directly
+- ALWAYS use `with_real_connection()` to access the ELM327Connection — never access the static directly
 - ALWAYS use `SafetyGuard::check_command()` for normal commands, `check_command_advanced()` only for Advanced page
 - NEVER return DemoConnection data when `is_demo()` returns false
 

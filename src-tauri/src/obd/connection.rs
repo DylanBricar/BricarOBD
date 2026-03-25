@@ -4,7 +4,6 @@ use std::io::{Read, Write};
 use std::time::Duration;
 use tracing::{debug, error, info, warn};
 use crate::obd::dev_log;
-use crate::obd::transport::{TransportType, WiFiTransport, OBDTransport};
 
 use crate::models::PortInfo;
 
@@ -99,7 +98,7 @@ impl Elm327Connection {
         Ok(())
     }
 
-    /// Multi-strategy initialization — tries several approaches
+    /// Multi-strategy initialization – tries several approaches
     fn init_with_resilience(&mut self) -> Result<(), String> {
         // Strategy 1: Standard init (works for genuine ELM327)
         if self.try_standard_init().is_ok() {
@@ -152,7 +151,7 @@ impl Elm327Connection {
         self.flush_buffer();
         std::thread::sleep(Duration::from_millis(200));
 
-        // Skip ATZ — many clones hang on it. Use ATI instead.
+        // Skip ATZ – many clones hang on it. Use ATI instead.
         let ati_response = self.send_command_timeout("ATI", 3000)?;
         if ati_response.contains("ELM") || ati_response.contains("OBD") {
             self.elm_version = ati_response.lines()

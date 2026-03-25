@@ -28,7 +28,7 @@ where
     let mut guard = CONNECTION.lock().unwrap_or_else(|e| e.into_inner());
     match *guard {
         ConnectionMode::Real(ref mut conn) => f(conn),
-        ConnectionMode::Demo => Err("Demo mode — no real connection".to_string()),
+        ConnectionMode::Demo => Err("Demo mode – no real connection".to_string()),
         ConnectionMode::Disconnected => Err("Not connected".to_string()),
     }
 }
@@ -197,7 +197,7 @@ pub async fn connect_wifi(host: String, port: u16) -> Result<VehicleInfo, String
         // For now, use the standard ELM327 connection over serial
         // TODO: refactor Elm327Connection to accept OBDTransport trait
         // Workaround: many WiFi ELM327s also appear as a virtual serial port
-        Err("WiFi direct connection not yet wired to ELM327 protocol layer — use the virtual serial port (e.g. /dev/cu.OBDII-WiFi)".to_string())
+        Err("WiFi direct connection not yet integrated with ELM327 protocol layer – use the virtual serial port (e.g. /dev/cu.OBDII-WiFi)".to_string())
     })
     .await
     .map_err(|e| format!("Task error: {}", e))?;

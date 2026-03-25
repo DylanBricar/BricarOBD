@@ -1,10 +1,9 @@
-//! Transport layer abstraction — Serial USB, Bluetooth BLE, WiFi TCP
+//! Transport layer abstraction – Serial USB, Bluetooth BLE, WiFi TCP
 //! Allows the same ELM327 protocol to work over any physical link.
 
 use std::io::{Read, Write};
 use std::time::Duration;
 use std::net::TcpStream;
-use tracing::{debug, info, warn};
 
 use super::dev_log;
 
@@ -77,7 +76,7 @@ pub struct WiFiTransport {
 }
 
 impl WiFiTransport {
-    /// Connect to WiFi ELM327 — typically 192.168.0.10:35000
+    /// Connect to WiFi ELM327 – typically 192.168.0.10:35000
     pub fn new(host: &str, port: u16, timeout_ms: u64) -> Result<Self, String> {
         dev_log::log_info("transport", &format!("Connecting WiFi: {}:{}", host, port));
         let addr = format!("{}:{}", host, port);
@@ -142,7 +141,7 @@ impl BleTransport {
         // 6. Discover services — look for Nordic UART Service (6E400001-...)
         // 7. Get TX characteristic (6E400002-...) and RX characteristic (6E400003-...)
         // 8. Subscribe to RX notifications
-        Err("BLE transport not yet fully implemented — use WiFi or USB".to_string())
+        Err("BLE transport not yet fully implemented – use WiFi or USB".to_string())
     }
 }
 
