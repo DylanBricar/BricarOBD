@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { useTranslation } from "react-i18next";
+import { invoke } from "@tauri-apps/api/core";
 import {
   Plug,
   RefreshCw,
@@ -11,6 +12,7 @@ import {
   Fingerprint,
   X,
   Clock,
+  Smartphone,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { ConnectionStatus, VehicleInfo } from "@/stores/connection";
@@ -69,6 +71,11 @@ export default function Connection({
   const [manualVin, setManualVin] = useState("");
   const [vinHistory, setVinHistory] = useState<VinHistoryEntry[]>(loadVinHistory);
   const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
+  const [connectionType, setConnectionType] = useState<"usb" | "wifi">("usb");
+  const [wifiHost, setWifiHost] = useState("192.168.0.10");
+  const [wifiPort, setWifiPort] = useState("35000");
+  const [wifiAdapters, setWifiAdapters] = useState<string[]>([]);
+  const [isScanning, setIsScanning] = useState(false);
   const isConnected = status === "connected" || status === "demo";
 
   const showToast = (message: string, type: "success" | "error" = "success") => {
@@ -105,6 +112,27 @@ export default function Connection({
     });
   };
 
+  const handleScanWifi = async () => {
+    setIsScanning(true);
+    try {
+      const adapters = await invoke<string[]>("scan_wifi");
+      setWifiAdapters(adapters);
+      showToast(`${t("connection.found")} ${adapters.length} adapter(s)`);
+    } catch (e) {
+      showToast(`${t("common.error")}: ${e}`, "error");
+    }
+    setIsScanning(false);
+  };
+
+  const handleConnectWifi = async () => {
+    try {
+      await invoke("connect_wifi", { host: wifiHost, port: parseInt(wifiPort) });
+      showToast(t("connection.connected"));
+    } catch (e) {
+      showToast(`${t("common.error")}: ${e}`, "error");
+    }
+  };
+
   return (
     <div className="p-6 space-y-6 animate-slide-in">
       <div className="flex items-center gap-3">
@@ -124,7 +152,41 @@ export default function Connection({
             {t("connection.configuration")}
           </h3>
 
-          {/* Port selector */}
+          {/* Connection Type Selector */}
+          <div className="flex gap-2">
+            <button
+              onClick={() => setConnectionType("usb")}
+              disabled={isConnected}
+              className={cn(
+                "flex-1 px-3 py-2 rounded-lg text-xs font-medium transition-all border",
+                connectionType === "usb"
+                  ? "bg-obd-accent text-white border-obd-accent"
+                  : "bg-obd-border/20 text-obd-text-muted border-obd-border/30 hover:bg-obd-border/40",
+                isConnected && "opacity-50 cursor-not-allowed"
+              )}
+            >
+              USB
+            </button>
+            <button
+              onClick={() => setConnectionType("wifi")}
+              disabled={isConnected}
+              className={cn(
+                "flex-1 px-3 py-2 rounded-lg text-xs font-medium transition-all border",
+                connectionType === "wifi"
+                  ? "bg-obd-accent text-white border-obd-accent"
+                  : "bg-obd-border/20 text-obd-text-muted border-obd-border/30 hover:bg-obd-border/40",
+                isConnected && "opacity-50 cursor-not-allowed"
+              )}
+            >
+              <Smartphone size={14} className="inline mr-1" />
+              WiFi
+            </button>
+          </div>
+
+          {/* USB Configuration */}
+          {connectionType === "usb" && (
+            <>
+              {/* Port selector */}
           <div className="space-y-1.5">
             <label className="text-xs text-obd-text-muted">{t("connection.port")}</label>
             <div className="relative">
@@ -149,47 +211,133 @@ export default function Connection({
             </div>
           </div>
 
-          {/* Baud rate */}
-          <div className="space-y-1.5">
-            <label className="text-xs text-obd-text-muted">{t("connection.baudRate")}</label>
-            <div className="relative">
-              <select
-                value={baudRate}
-                onChange={(e) => onBaudRateChange(Number(e.target.value))}
-                disabled={isConnected}
-                className="input-field appearance-none pr-8"
+                  {/* Baud rate */}
+              <div className="space-y-1.5">
+                <label className="text-xs text-obd-text-muted">{t("connection.baudRate")}</label>
+                <div className="relative">
+                  <select
+                    value={baudRate}
+                    onChange={(e) => onBaudRateChange(Number(e.target.value))}
+                    disabled={isConnected}
+                    className="input-field appearance-none pr-8"
+                  >
+                    {baudRates.map((br) => (
+                      <option key={br} value={br}>{br.toLocaleString()}</option>
+                    ))}
+                  </select>
+                  <ChevronDown
+                    size={14}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-obd-text-muted pointer-events-none"
+                  />
+                </div>
+              </div>
+            </>
+          )}
+
+          {/* WiFi Configuration */}
+          {connectionType === "wifi" && (
+            <>
+              {/* WiFi Host */}
+              <div className="space-y-1.5">
+                <label className="text-xs text-obd-text-muted">WiFi Host</label>
+                <input
+                  type="text"
+                  value={wifiHost}
+                  onChange={(e) => setWifiHost(e.target.value)}
+                  placeholder="192.168.0.10"
+                  disabled={isConnected}
+                  className="input-field text-xs"
+                />
+              </div>
+
+              {/* WiFi Port */}
+              <div className="space-y-1.5">
+                <label className="text-xs text-obd-text-muted">Port</label>
+                <input
+                  type="text"
+                  value={wifiPort}
+                  onChange={(e) => setWifiPort(e.target.value)}
+                  placeholder="35000"
+                  disabled={isConnected}
+                  className="input-field text-xs"
+                />
+              </div>
+
+              {/* Scan WiFi button */}
+              <button
+                onClick={handleScanWifi}
+                disabled={isConnected || isScanning}
+                className={cn(
+                  "w-full btn-ghost text-xs flex items-center justify-center gap-2",
+                  (isConnected || isScanning) && "opacity-50 cursor-not-allowed"
+                )}
               >
-                {baudRates.map((br) => (
-                  <option key={br} value={br}>{br.toLocaleString()}</option>
-                ))}
-              </select>
-              <ChevronDown
-                size={14}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-obd-text-muted pointer-events-none"
-              />
-            </div>
-          </div>
+                {isScanning ? (
+                  <RefreshCw size={14} className="animate-spin" />
+                ) : (
+                  <Wifi size={14} />
+                )}
+                {isScanning ? "Scanning..." : "Scan WiFi"}
+              </button>
+
+              {/* WiFi Adapters List */}
+              {wifiAdapters.length > 0 && (
+                <div className="space-y-1.5">
+                  <label className="text-xs text-obd-text-muted">Found Adapters</label>
+                  <div className="space-y-1">
+                    {wifiAdapters.map((adapter) => (
+                      <div key={adapter} className="px-3 py-2 rounded-lg bg-white/[0.02] text-xs text-obd-text border border-obd-border/30">
+                        {adapter}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </>
+          )}
 
           {/* Connect/Disconnect buttons */}
           <div className="flex gap-3 pt-2">
             {!isConnected ? (
-              <button
-                onClick={onConnect}
-                disabled={!port || status === "connecting"}
-                className={cn(
-                  "btn-accent-solid flex-1 flex items-center justify-center gap-2",
-                  (!port || status === "connecting") && "opacity-50 cursor-not-allowed"
-                )}
-              >
-                {status === "connecting" ? (
-                  <RefreshCw size={16} className="animate-spin" />
+              <>
+                {connectionType === "usb" ? (
+                  <button
+                    onClick={onConnect}
+                    disabled={!port || status === "connecting"}
+                    className={cn(
+                      "btn-accent-solid flex-1 flex items-center justify-center gap-2",
+                      (!port || status === "connecting") && "opacity-50 cursor-not-allowed"
+                    )}
+                  >
+                    {status === "connecting" ? (
+                      <RefreshCw size={16} className="animate-spin" />
+                    ) : (
+                      <Wifi size={16} />
+                    )}
+                    {status === "connecting"
+                      ? t("connection.connecting")
+                      : t("connection.connect")}
+                  </button>
                 ) : (
-                  <Wifi size={16} />
+                  <button
+                    onClick={handleConnectWifi}
+                    disabled={!wifiHost || !wifiPort || status === "connecting"}
+                    className={cn(
+                      "btn-accent-solid flex-1 flex items-center justify-center gap-2",
+                      (!wifiHost || !wifiPort || status === "connecting") && "opacity-50 cursor-not-allowed"
+                    )}
+                  >
+                    {status === "connecting" ? (
+                      <RefreshCw size={16} className="animate-spin" />
+                    ) : (
+                      <Smartphone size={16} />
+                    )}
+                    {status === "connecting"
+                      ? t("connection.connecting")
+                      : t("connection.connect")}
+                  </button>
                 )}
-                {status === "connecting"
-                  ? t("connection.connecting")
-                  : t("connection.connect")}
-              </button>
+              </>
             ) : (
               <button
                 onClick={onDisconnect}

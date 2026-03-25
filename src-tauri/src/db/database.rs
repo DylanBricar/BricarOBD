@@ -285,4 +285,34 @@ impl Database {
             .map_err(|e| format!("Failed to save setting: {}", e))?;
         Ok(())
     }
+
+    // ==================== SESSIONS ====================
+
+    pub fn get_sessions(&self) -> Result<Vec<serde_json::Value>, String> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id, vehicle_vin, vehicle_make, vehicle_model, dtc_count, notes, timestamp
+             FROM sessions ORDER BY timestamp DESC LIMIT 100"
+        ).map_err(|e| format!("Query failed: {}", e))?;
+
+        let rows = stmt.query_map([], |row| {
+            Ok(serde_json::json!({
+                "id": row.get::<_, i64>(0)?,
+                "vin": row.get::<_, String>(1).unwrap_or_default(),
+                "make": row.get::<_, String>(2).unwrap_or_default(),
+                "model": row.get::<_, String>(3).unwrap_or_default(),
+                "dtc_count": row.get::<_, i32>(4).unwrap_or(0),
+                "notes": row.get::<_, String>(5).unwrap_or_default(),
+                "timestamp": row.get::<_, String>(6).unwrap_or_default(),
+            }))
+        }).map_err(|e| format!("Query failed: {}", e))?;
+
+        Ok(rows.filter_map(|r| r.ok()).collect())
+    }
+
+    pub fn delete_session(&self, id: i64) -> Result<(), String> {
+        self.conn
+            .execute("DELETE FROM sessions WHERE id = ?1", params![id])
+            .map_err(|e| format!("Failed to delete session: {}", e))?;
+        Ok(())
+    }
 }

@@ -84,6 +84,9 @@ pub fn run() {
             database::get_vehicle_profiles,
             database::get_profile_ecus,
             database::search_ecu_catalog,
+            database::get_sessions_cmd,
+            database::delete_session_cmd,
+            database::save_session_cmd,
             // Settings + File export
             settings::get_settings,
             settings::save_settings,

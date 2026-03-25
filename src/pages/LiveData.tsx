@@ -67,6 +67,7 @@ export default function LiveData({ pidData, isPolling, onStartPolling, onStopPol
   const [timeRange, setTimeRange] = useState<"30s" | "1m" | "5m" | "all">("all");
   const [selectedPids, setSelectedPids] = useState<Set<number>>(new Set()); // empty = all
   const [showPidSelector, setShowPidSelector] = useState(false);
+  const [isActive, setIsActive] = useState(false);
   const recordBufferRef = useRef<Array<{ timestamp: Date; snapshot: Record<number, number> }>>([]);
   const recordingStartRef = useRef<Date | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -101,8 +102,10 @@ export default function LiveData({ pidData, isPolling, onStartPolling, onStopPol
   const handleTogglePolling = () => {
     if (isPolling) {
       onStopPolling();
+      setIsActive(false);
     } else {
       onStartPolling(refreshRate);
+      setIsActive(true);
     }
   };
 
@@ -177,6 +180,8 @@ export default function LiveData({ pidData, isPolling, onStartPolling, onStopPol
   };
 
   const filteredPids = useMemo(() => {
+    // Only show PIDs if polling is active
+    if (!isActive) return [];
     let all = Array.from(pidData.values());
     // Filter by selected PIDs (if any are selected)
     if (selectedPids.size > 0) {
@@ -189,7 +194,7 @@ export default function LiveData({ pidData, isPolling, onStartPolling, onStopPol
     return all.sort((a, b) =>
       sortBy === "name" ? a.name.localeCompare(b.name) : b.value - a.value
     );
-  }, [pidData, search, sortBy, selectedPids]);
+  }, [pidData, search, sortBy, selectedPids, isActive]);
 
   const selectedData = selectedPid !== null ? pidData.get(selectedPid) : null;
 
@@ -373,7 +378,7 @@ export default function LiveData({ pidData, isPolling, onStartPolling, onStopPol
             {filteredPids.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-12 text-obd-text-muted">
                 <Activity size={32} strokeWidth={1} className="mb-2 opacity-20" />
-                <p className="text-sm">{isPolling ? t("liveData.search") : t("liveData.noDataYet")}</p>
+                <p className="text-sm">{isActive ? t("liveData.search") : t("liveData.noDataYet")}</p>
               </div>
             ) : (
               filteredPids.map((pid) => {

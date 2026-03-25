@@ -100,3 +100,27 @@ pub fn get_profile_ecus(profile_name: String) -> Result<Vec<serde_json::Value>, 
 pub fn search_ecu_catalog(query: String, limit: Option<u32>) -> Result<Vec<serde_json::Value>, String> {
     with_db(|db| db.search_ecu_catalog(&query, limit.unwrap_or(50)))
 }
+
+/// Get all sessions
+#[command]
+pub fn get_sessions_cmd() -> Result<Vec<serde_json::Value>, String> {
+    with_db(|db| db.get_sessions())
+}
+
+/// Delete a session
+#[command]
+pub fn delete_session_cmd(id: i64) -> Result<(), String> {
+    with_db(|db| db.delete_session(id))
+}
+
+/// Save a session
+#[command]
+pub fn save_session_cmd(
+    vin: String,
+    make: String,
+    model: String,
+    dtc_count: i32,
+    notes: String,
+) -> Result<i64, String> {
+    with_db(|db| db.save_session(&vin, &make, &model, dtc_count, &notes, ""))
+}

@@ -15,19 +15,29 @@ interface Session {
 
 export default function History() {
   const { t } = useTranslation();
-  const [sessions, setSessions] = useState<Session[]>(() => {
-    try {
-      const saved = localStorage.getItem("bricarobd_sessions");
-      return saved ? JSON.parse(saved) : [];
-    } catch { return []; }
-  });
+  const [sessions, setSessions] = useState<Session[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
 
-  // Persist sessions to localStorage
+  // Load sessions from database on mount
   useEffect(() => {
-    localStorage.setItem("bricarobd_sessions", JSON.stringify(sessions));
-  }, [sessions]);
+    setIsLoading(true);
+    invoke<any[]>("get_sessions_cmd")
+      .then((data) => {
+        const mapped = data.map((s) => ({
+          id: s.id.toString(),
+          date: s.timestamp,
+          vehicle: `${s.make} ${s.model}`,
+          dtcCount: s.dtc_count,
+          notes: s.notes,
+          dtcCodes: s.notes.split(", ").filter(Boolean),
+        }));
+        setSessions(mapped);
+      })
+      .catch(() => setSessions([]))
+      .finally(() => setIsLoading(false));
+  }, []);
 
   const showToast = (message: string, type: "success" | "error" = "success") => {
     setToast({ message, type });
@@ -69,10 +79,15 @@ export default function History() {
     }
   };
 
-  const handleDelete = (id: string) => {
-    setSessions((prev) => prev.filter((s) => s.id !== id));
-    if (selectedId === id) setSelectedId(null);
-    showToast(t("history.deleted"));
+  const handleDelete = async (id: string) => {
+    try {
+      await invoke("delete_session_cmd", { id: parseInt(id) });
+      setSessions((prev) => prev.filter((s) => s.id !== id));
+      if (selectedId === id) setSelectedId(null);
+      showToast(t("history.deleted"));
+    } catch (e) {
+      showToast(`${t("common.error")}: ${e}`, "error");
+    }
   };
 
   return (
@@ -100,7 +115,12 @@ export default function History() {
       <div className="flex gap-4 flex-1 min-h-0">
         {/* Session list */}
         <div className="flex-1 glass-card overflow-hidden flex flex-col">
-          {sessions.length === 0 ? (
+          {isLoading ? (
+            <div className="flex-1 flex flex-col items-center justify-center text-obd-text-muted">
+              <Clock size={48} strokeWidth={1} className="mb-3 opacity-20" />
+              <p className="text-sm">Loading...</p>
+            </div>
+          ) : sessions.length === 0 ? (
             <div className="flex-1 flex flex-col items-center justify-center text-obd-text-muted">
               <Clock size={48} strokeWidth={1} className="mb-3 opacity-20" />
               <p className="text-sm">{t("history.noSession")}</p>

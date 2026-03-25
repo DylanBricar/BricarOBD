@@ -93,19 +93,13 @@ export default function App() {
     if (!isConnected && activePage !== "connection") {
       // Auto-save session on disconnect
       if (connection.vehicle) {
-        const session = {
-          id: Date.now().toString(),
-          date: new Date().toLocaleString(),
-          vehicle: `${connection.vehicle.make} ${connection.vehicle.model}`,
-          dtcCount: vehicle.dtcs.length,
+        invoke("save_session_cmd", {
+          vin: connection.vehicle.vin,
+          make: connection.vehicle.make,
+          model: connection.vehicle.model,
+          dtc_count: vehicle.dtcs.length,
           notes: vehicle.dtcs.map(d => d.code).join(", ") || "No DTCs",
-          dtcCodes: vehicle.dtcs.map(d => d.code),
-        };
-        try {
-          const existing = JSON.parse(localStorage.getItem("bricarobd_sessions") || "[]");
-          existing.unshift(session);
-          localStorage.setItem("bricarobd_sessions", JSON.stringify(existing.slice(0, 50)));
-        } catch {}
+        }).catch(() => {});
       }
       setActivePage("connection");
     }
