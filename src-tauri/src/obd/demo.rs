@@ -134,6 +134,27 @@ impl DemoConnection {
                 dids: HashMap::from([
                     ("F190".to_string(), "VF3LCBHZ6JS000000".to_string()),
                     ("F18C".to_string(), "BSI 2010".to_string()),
+                    ("F191".to_string(), "BSI HW 1.5".to_string()),
+                    ("F195".to_string(), "BSI SW 6.2".to_string()),
+                ]),
+            },
+            EcuInfo {
+                name: "Climatisation (HVAC)".to_string(),
+                address: "0x7E6".to_string(),
+                protocol: "ISO 15765-4 CAN".to_string(),
+                dids: HashMap::from([
+                    ("F190".to_string(), "VF3LCBHZ6JS000000".to_string()),
+                    ("F195".to_string(), "HVAC 1.0".to_string()),
+                ]),
+            },
+            EcuInfo {
+                name: "Tableau de bord".to_string(),
+                address: "0x7E5".to_string(),
+                protocol: "ISO 15765-4 CAN".to_string(),
+                dids: HashMap::from([
+                    ("F190".to_string(), "VF3LCBHZ6JS000000".to_string()),
+                    ("F195".to_string(), "CLUST 2.3".to_string()),
+                    ("F18C".to_string(), "2018-03-01".to_string()),
                 ]),
             },
         ]

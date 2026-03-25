@@ -451,7 +451,8 @@ export default function Connection({
                 {vinHistory.map((entry) => (
                   <div
                     key={entry.vin}
-                    className="flex items-center gap-3 px-3 py-2 rounded-lg bg-white/[0.02] hover:bg-white/[0.04] transition-colors group"
+                    onClick={() => setManualVin(entry.vin)}
+                    className="flex items-center gap-3 px-3 py-2 rounded-lg bg-white/[0.02] hover:bg-white/[0.04] transition-colors group cursor-pointer"
                   >
                     <Car size={14} className="text-obd-accent flex-shrink-0" />
                     <div className="flex-1 min-w-0">
