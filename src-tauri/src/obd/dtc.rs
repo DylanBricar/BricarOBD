@@ -78,16 +78,26 @@ pub fn get_dtc_description(code: &str) -> String {
         .unwrap_or_else(|| format!("Code {} - Description non disponible", code))
 }
 
-/// Get repair tips for DTC from embedded JSON database
+/// Get repair tips for DTC from embedded JSON database (language-aware)
 pub fn get_dtc_repair_tips(code: &str) -> Option<String> {
+    get_dtc_repair_tips_lang(code, "fr")
+}
+
+/// Get repair tips in a specific language ("fr" or "en")
+pub fn get_dtc_repair_tips_lang(code: &str, lang: &str) -> Option<String> {
     DTC_REPAIR_TIPS.get(code).map(|tips| {
         let mut result = String::new();
+        let causes_label = if lang == "fr" { "Causes possibles:" } else { "Possible causes:" };
+        let check_label = if lang == "fr" { "Vérification rapide: " } else { "Quick check: " };
 
         if let Some(causes) = &tips.causes {
-            if let Some(fr_causes) = causes.get("fr") {
-                if !fr_causes.is_empty() {
-                    result.push_str("Causes possibles:\n");
-                    for cause in fr_causes {
+            // Try requested language, fallback to other
+            let lang_causes = causes.get(lang).or_else(|| causes.get(if lang == "fr" { "en" } else { "fr" }));
+            if let Some(causes_list) = lang_causes {
+                if !causes_list.is_empty() {
+                    result.push_str(causes_label);
+                    result.push('\n');
+                    for cause in causes_list {
                         result.push_str(&format!("- {}\n", cause));
                     }
                 }
@@ -95,10 +105,11 @@ pub fn get_dtc_repair_tips(code: &str) -> Option<String> {
         }
 
         if let Some(quick_check) = &tips.quick_check {
-            if let Some(fr_check) = quick_check.get("fr") {
-                if !fr_check.is_empty() {
-                    result.push_str("Vérification rapide: ");
-                    result.push_str(fr_check);
+            let lang_check = quick_check.get(lang).or_else(|| quick_check.get(if lang == "fr" { "en" } else { "fr" }));
+            if let Some(check) = lang_check {
+                if !check.is_empty() {
+                    result.push_str(check_label);
+                    result.push_str(check);
                     result.push('\n');
                 }
             }

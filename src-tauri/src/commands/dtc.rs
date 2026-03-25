@@ -6,7 +6,8 @@ use crate::commands::connection::{is_demo, with_real_connection};
 
 /// Read all DTCs — Mode 03 (active), Mode 07 (pending), Mode 0A (permanent)
 #[command]
-pub fn read_all_dtcs() -> Vec<DtcCode> {
+pub fn read_all_dtcs(lang: Option<String>) -> Vec<DtcCode> {
+    let _lang = lang.unwrap_or_else(|| "fr".to_string());
     if is_demo() {
         crate::obd::dev_log::log_info("dtc", "Demo mode: returning simulated DTCs");
         return DemoConnection::get_dtcs();

@@ -19,7 +19,7 @@ import type { DtcCode, EcuInfo } from "@/stores/vehicle";
 import { devInfo, devDebug } from "@/lib/devlog";
 
 export default function App() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const [activePage, setActivePage] = useState("connection");
   const [isReading, setIsReading] = useState(false);
   const [isEcuScanning, setIsEcuScanning] = useState(false);
@@ -59,7 +59,7 @@ export default function App() {
       const make = connection.vehicle?.make || "";
       devInfo("ui", "Real polling started for " + make);
       vehicle.startRealPolling(1000, make);
-      invoke<DtcCode[]>("read_all_dtcs").then(codes => {
+      invoke<DtcCode[]>("read_all_dtcs", { lang: i18n.language }).then(codes => {
         devInfo("ui", "DTCs loaded: " + codes.length);
         vehicle.setDtcs(codes);
       }).catch(() => {});
@@ -119,7 +119,7 @@ export default function App() {
   const handleReadAll = async () => {
     setIsReading(true);
     try {
-      const codes = await invoke<DtcCode[]>("read_all_dtcs");
+      const codes = await invoke<DtcCode[]>("read_all_dtcs", { lang: i18n.language });
       vehicle.setDtcs(codes);
     } catch (e) {
       console.error("Read DTCs failed:", e);
