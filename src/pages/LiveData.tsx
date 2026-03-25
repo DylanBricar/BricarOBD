@@ -100,12 +100,10 @@ export default function LiveData({ pidData, isPolling, onStartPolling, onStopPol
   }, [pidData, isRecording]);
 
   const handleTogglePolling = () => {
-    if (isPolling) {
-      onStopPolling();
-      setIsActive(false);
-    } else {
+    setIsActive(!isActive);
+    // If polling isn't running yet, start it
+    if (!isActive && !isPolling) {
       onStartPolling(refreshRate);
-      setIsActive(true);
     }
   };
 
@@ -255,13 +253,13 @@ export default function LiveData({ pidData, isPolling, onStartPolling, onStopPol
             onClick={handleTogglePolling}
             className={cn(
               "h-[34px] px-3 rounded-lg text-xs font-medium flex items-center gap-1.5 transition-all",
-              isPolling
+              isActive
                 ? "bg-obd-warning/20 text-obd-warning border border-obd-warning/30"
                 : "bg-obd-accent/20 text-obd-accent border border-obd-accent/30"
             )}
           >
-            {isPolling ? <Pause size={14} /> : <Play size={14} />}
-            {isPolling ? t("liveData.pause") : t("liveData.start")}
+            {isActive ? <Pause size={14} /> : <Play size={14} />}
+            {isActive ? t("liveData.pause") : t("liveData.start")}
           </button>
 
           {/* Record */}

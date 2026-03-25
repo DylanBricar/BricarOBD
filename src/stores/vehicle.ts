@@ -184,6 +184,31 @@ export function useVehicleData() {
     setEcus(demoEcus);
     setMonitors(demoMonitors);
 
+    // Pre-load demo history with past DTCs (resolved codes no longer active)
+    setDtcHistory((prev) => {
+      const existing = new Set(prev.map((h) => h.code));
+      const pastDtcs: DtcHistoryEntry[] = [
+        // P0440 was seen 3 days ago (same code as current active — will be filtered out of history display)
+        ...(!existing.has("P0440") ? [{
+          code: "P0440", description: "Evaporative Emission Control System Malfunction",
+          status: "active" as const, source: "OBD Mode 03", seenAt: Date.now() - 3 * 86400000,
+        }] : []),
+        // P0171 was seen 2 weeks ago and is now resolved
+        ...(!existing.has("P0171") ? [{
+          code: "P0171", description: "System Too Lean (Bank 1)",
+          status: "active" as const, source: "OBD Mode 03", seenAt: Date.now() - 14 * 86400000,
+          repairTips: "Check MAF sensor, vacuum leaks, fuel pressure",
+        }] : []),
+        // P0300 was seen 1 month ago and is now resolved
+        ...(!existing.has("P0300") ? [{
+          code: "P0300", description: "Random/Multiple Cylinder Misfire Detected",
+          status: "active" as const, source: "OBD Mode 03", seenAt: Date.now() - 30 * 86400000,
+          repairTips: "Check spark plugs, ignition coils, fuel injectors",
+        }] : []),
+      ];
+      return [...prev, ...pastDtcs];
+    });
+
     intervalRef.current = window.setInterval(() => {
       const data = generateDemoData();
       demoDataCache = data;
