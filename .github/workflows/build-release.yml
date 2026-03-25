@@ -5,190 +5,118 @@ on:
     tags:
       - 'v*'
 
-permissions:
-  contents: write
-
 jobs:
-  build-macos:
-    runs-on: macos-latest
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: macos-latest
+            target: aarch64-apple-darwin
+            name: macOS (Apple Silicon)
+          - platform: macos-latest
+            target: x86_64-apple-darwin
+            name: macOS (Intel)
+          - platform: windows-latest
+            target: x86_64-pc-windows-msvc
+            name: Windows (x64)
+          - platform: ubuntu-22.04
+            target: x86_64-unknown-linux-gnu
+            name: Linux (x64)
+
+    runs-on: ${{ matrix.platform }}
+    name: Build — ${{ matrix.name }}
+
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
 
-      - name: Setup Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-
-      - name: Install dependencies
+      - name: Download database from release assets
         run: |
-          pip install -r requirements.txt
-          pip install nuitka ordered-set zstandard
+          mkdir -p src-tauri/data
+          curl -L -o src-tauri/data/bricarobd.db "https://github.com/${{ github.repository }}/releases/download/db-v1/bricarobd.db" || echo "DB download failed — will try gh cli"
+        shell: bash
 
-      - name: Assemble database + convert icon
+      - name: Fallback — download DB via gh cli
+        if: hashFiles('src-tauri/data/bricarobd.db') == ''
+        run: gh release download db-v1 --pattern 'bricarobd.db' --dir src-tauri/data/ || echo "No DB release found"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+
+      - name: Verify database
         run: |
-          cat data/bricarobd_db_part_* > data/bricarobd_database.zip
-          python -c "
-          from PIL import Image
-          img = Image.open('assets/icon.png')
-          img.save('assets/icon.icns', format='ICNS')
-          "
+          if [ -f "src-tauri/data/bricarobd.db" ]; then
+            echo "Database found: $(du -h src-tauri/data/bricarobd.db | cut -f1)"
+          else
+            echo "ERROR: Database not found!"
+            exit 1
+          fi
+        shell: bash
 
-      - name: Build with Nuitka
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Rust cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - name: Install Linux dependencies
+        if: matrix.platform == 'ubuntu-22.04'
         run: |
-          python -m nuitka \
-            --standalone \
-            --enable-plugin=tk-inter \
-            --include-package-data=customtkinter \
-            --include-data-dir=assets=assets \
-            --include-data-files=data/bricarobd_database.zip=data/bricarobd_database.zip \
-            --include-data-files=data/dtc_descriptions.py=data/dtc_descriptions.py \
-            --include-data-files=data/dtc_repair_tips.py=data/dtc_repair_tips.py \
-            --include-data-files=data/__init__.py=data/__init__.py \
-            --macos-create-app-bundle \
-            --macos-app-icon=assets/icon.icns \
-            --macos-app-name=BricarOBD \
-            --macos-app-version=${{ github.ref_name }} \
-            --output-dir=build \
-            main.py
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf libudev-dev
 
-      - name: Create .dmg
-        run: |
-          mkdir -p dist/dmg
-          cp -R build/main.app dist/dmg/BricarOBD.app
-          ln -s /Applications dist/dmg/Applications
-          hdiutil create -volname "BricarOBD" \
-            -srcfolder dist/dmg \
-            -ov -format UDZO \
-            "dist/BricarOBD-macOS.dmg"
+      - name: Install frontend dependencies
+        run: pnpm install
 
-      - name: Upload macOS artifact
-        uses: actions/upload-artifact@v4
+      - name: Build Tauri app
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          name: BricarOBD-macOS
-          path: dist/BricarOBD-macOS.dmg
-
-  build-windows:
-    runs-on: windows-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Setup Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-
-      - name: Install dependencies
-        run: |
-          pip install -r requirements.txt
-          pip install nuitka ordered-set zstandard
-
-      - name: Assemble database + convert icon + install Dependency Walker
-        run: |
-          # Assemble database zip from parts
-          $parts = Get-ChildItem -Path "data/bricarobd_db_part_*" | Sort-Object Name
-          $output = [System.IO.File]::Create("data/bricarobd_database.zip")
-          foreach ($part in $parts) {
-            $bytes = [System.IO.File]::ReadAllBytes($part.FullName)
-            $output.Write($bytes, 0, $bytes.Length)
-          }
-          $output.Close()
-          Write-Host "Database assembled: $((Get-Item 'data/bricarobd_database.zip').Length / 1MB) MB"
-
-          # Convert icon PNG to ICO
-          python -c "
-          from PIL import Image
-          img = Image.open('assets/icon.png').convert('RGBA')
-          img.save('assets/icon.ico', format='ICO', sizes=[(256,256),(128,128),(64,64),(48,48),(32,32),(16,16)])
-          "
-
-          # Pre-download Dependency Walker for Nuitka
-          python -c "
-          import urllib.request, zipfile, os
-          cache = os.path.join(os.environ['LOCALAPPDATA'], 'Nuitka', 'Nuitka', 'Cache', 'downloads', 'depends', 'x86_64')
-          os.makedirs(cache, exist_ok=True)
-          url = 'https://dependencywalker.com/depends22_x64.zip'
-          zip_path = os.path.join(cache, 'depends22_x64.zip')
-          urllib.request.urlretrieve(url, zip_path)
-          with zipfile.ZipFile(zip_path, 'r') as z:
-              z.extractall(cache)
-          print('Dependency Walker ready')
-          "
-
-      - name: Build with Nuitka
-        run: |
-          python -m nuitka `
-            --onefile `
-            --enable-plugin=tk-inter `
-            --include-package-data=customtkinter `
-            --include-data-dir=assets=assets `
-            --include-data-files=data/bricarobd_database.zip=data/bricarobd_database.zip `
-            --include-data-files=data/dtc_descriptions.py=data/dtc_descriptions.py `
-            --include-data-files=data/dtc_repair_tips.py=data/dtc_repair_tips.py `
-            --include-data-files=data/__init__.py=data/__init__.py `
-            --windows-console-mode=disable `
-            --windows-icon-from-ico=assets/icon.ico `
-            --windows-product-name=BricarOBD `
-            --windows-file-version=1.1.0.0 `
-            --windows-product-version=1.1.0.0 `
-            --windows-company-name=DylanBricar `
-            --output-filename=BricarOBD.exe `
-            --output-dir=dist `
-            main.py
-
-      - name: Upload Windows artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: BricarOBD-Windows
-          path: dist/BricarOBD.exe
-
-  release:
-    needs: [build-macos, build-windows]
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Download macOS build
-        uses: actions/download-artifact@v4
-        with:
-          name: BricarOBD-macOS
-          path: artifacts/
-
-      - name: Download Windows build
-        uses: actions/download-artifact@v4
-        with:
-          name: BricarOBD-Windows
-          path: artifacts/
-
-      - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
-        with:
-          files: |
-            artifacts/BricarOBD-macOS.dmg
-            artifacts/BricarOBD.exe
-          body: |
+          tagName: ${{ github.ref_name }}
+          releaseName: 'BricarOBD ${{ github.ref_name }}'
+          releaseBody: |
             ## BricarOBD ${{ github.ref_name }}
 
-            Professional OBD-II diagnostic tool for all vehicles.
-            Built with Nuitka (compiled Python to native code).
+            ### Professional OBD-II Diagnostic Tool
 
-            ### Downloads
-            - **macOS**: `BricarOBD-macOS.dmg` - Open and drag to Applications
-            - **Windows**: `BricarOBD.exe` - Double-click to run (single file, no install)
+            **v2.0 — Rust Edition:**
+            - Complete rewrite in Rust (Tauri 2.x) + React + TypeScript
+            - DDT2000 database: 3.17M operations, 90 vehicle profiles, 4866 ECUs
+            - 8,807 DTC codes with descriptions + 415 repair tips
+            - 70 standard OBD-II PIDs + 391 manufacturer DIDs (PSA, VAG, BMW, Mercedes, etc.)
+            - 9 OBD-II protocols (CAN, KWP2000, ISO 9141, J1850)
+            - Auto baud rate detection + 4 connection strategies (genuine + clone ELM327)
+            - Demo mode (Peugeot 207) for testing without adapter
+            - Bilingual FR/EN interface with glassmorphic automotive theme
+            - Built-in developer console (real-time TX/RX serial logs)
+            - SafetyGuard: 11 blocked UDS services by default
+            - CSV export for live data and DTC reports
 
-            ### Features
-            - Auto vehicle detection via VIN (39 manufacturers)
-            - Real-time dashboard with gauges + live graphs
-            - 70 OBD-II PIDs monitoring with CSV recording
-            - 7,564 DTC codes with repair tips and multi-source help
-            - DTC read/clear/export with 5-layer safety guards
-            - Mode 06 monitor tests (35 MIDs) for emissions check
-            - 3.3M+ manufacturer-specific diagnostic operations
-            - 90 vehicle ECU profiles with CAN addresses
-            - Extended ECU scan (230 DIDs)
-            - Bilingual FR/EN interface (persisted)
-            - Demo mode (--demo)
+            **Compatibility:**
+            - All OBD-II vehicles (1996+)
+            - ELM327 USB, Bluetooth, WiFi adapters (genuine + clones v1.5/v2.1)
+            - macOS (Apple Silicon + Intel), Windows, Linux
 
-            ### Requirements
-            - ELM327 USB or Bluetooth adapter (or use demo mode)
-          draft: false
+            **Install:**
+            - **macOS**: Download `.dmg`, drag to Applications
+            - **Windows**: Download `.msi` or `.exe`, install
+            - **Linux**: Download `.deb` or `.AppImage`
+          releaseDraft: false
           prerelease: false
+          args: --target ${{ matrix.target }}

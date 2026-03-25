@@ -1,0 +1,184 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  * {
+    @apply border-obd-border;
+  }
+
+  body {
+    @apply bg-obd-bg text-obd-text;
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  /* Custom scrollbar */
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    @apply bg-obd-border rounded-full;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    @apply bg-obd-border-light;
+  }
+}
+
+@layer components {
+  /* Glassmorphic card */
+  .glass-card {
+    @apply bg-obd-card/60 backdrop-blur-md border border-obd-border/50 rounded-xl;
+    box-shadow:
+      0 0 0 1px rgba(255, 255, 255, 0.03),
+      0 4px 24px rgba(0, 0, 0, 0.3),
+      inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  }
+
+  .glass-card-hover {
+    @apply glass-card transition-all duration-300;
+  }
+
+  .glass-card-hover:hover {
+    @apply border-obd-accent/30;
+    box-shadow:
+      0 0 0 1px rgba(6, 182, 212, 0.1),
+      0 4px 24px rgba(0, 0, 0, 0.4),
+      0 0 40px rgba(6, 182, 212, 0.05),
+      inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  }
+
+  /* Glassmorphic sidebar */
+  .glass-sidebar {
+    @apply bg-obd-surface/80 backdrop-blur-xl border-r border-obd-border/50;
+    box-shadow:
+      4px 0 24px rgba(0, 0, 0, 0.3),
+      inset -1px 0 0 rgba(255, 255, 255, 0.03);
+  }
+
+  /* Status indicator */
+  .status-dot {
+    @apply w-2 h-2 rounded-full;
+  }
+
+  .status-dot-connected {
+    @apply status-dot bg-obd-success;
+    box-shadow: 0 0 8px rgba(16, 185, 129, 0.6);
+  }
+
+  .status-dot-disconnected {
+    @apply status-dot bg-obd-danger;
+    box-shadow: 0 0 8px rgba(239, 68, 68, 0.6);
+  }
+
+  /* Gauge arc glow */
+  .gauge-glow {
+    filter: drop-shadow(0 0 6px currentColor);
+  }
+
+  /* Accent button */
+  .btn-accent {
+    @apply px-4 py-2 rounded-lg font-medium text-sm transition-all duration-200
+           bg-obd-accent/20 text-obd-accent border border-obd-accent/30
+           hover:bg-obd-accent/30 hover:border-obd-accent/50
+           active:scale-[0.98];
+  }
+
+  .btn-accent-solid {
+    @apply px-4 py-2 rounded-lg font-medium text-sm transition-all duration-200
+           bg-obd-accent text-obd-bg
+           hover:bg-obd-accent-light
+           active:scale-[0.98];
+    box-shadow: 0 0 20px rgba(6, 182, 212, 0.3);
+  }
+
+  .btn-danger {
+    @apply px-4 py-2 rounded-lg font-medium text-sm transition-all duration-200
+           bg-obd-danger/20 text-obd-danger border border-obd-danger/30
+           hover:bg-obd-danger/30 hover:border-obd-danger/50
+           active:scale-[0.98];
+  }
+
+  .btn-ghost {
+    @apply px-4 py-2 rounded-lg font-medium text-sm transition-all duration-200
+           text-obd-text-secondary hover:text-obd-text hover:bg-white/5
+           active:scale-[0.98];
+  }
+
+  /* Nav item — all items same width via w-full + border-transparent for consistent sizing */
+  .nav-item {
+    @apply w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium
+           transition-all duration-200 cursor-pointer border border-transparent
+           text-obd-text-secondary hover:text-obd-text hover:bg-white/5;
+  }
+
+  .nav-item-active {
+    @apply w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium
+           transition-all duration-200 cursor-pointer
+           text-obd-accent bg-obd-accent/10 border border-obd-accent/20;
+    box-shadow: 0 0 20px rgba(6, 182, 212, 0.08);
+  }
+
+  .nav-item-danger {
+    @apply w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium
+           transition-all duration-200 cursor-pointer border border-transparent
+           text-obd-danger hover:text-obd-danger hover:bg-obd-danger/10;
+  }
+
+  .nav-item-danger-active {
+    @apply w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium
+           transition-all duration-200 cursor-pointer
+           text-obd-danger bg-obd-danger/10 border border-obd-danger/20;
+    box-shadow: 0 0 20px rgba(239, 68, 68, 0.08);
+  }
+
+  /* Data table row */
+  .data-row {
+    @apply flex items-center px-4 py-3 border-b border-obd-border/30
+           transition-colors duration-150 hover:bg-white/[0.02];
+  }
+
+  /* Input */
+  .input-field {
+    @apply w-full px-3 py-2 rounded-lg text-sm
+           bg-obd-bg/50 border border-obd-border
+           text-obd-text placeholder-obd-text-muted
+           focus:outline-none focus:border-obd-accent/50 focus:ring-1 focus:ring-obd-accent/20
+           transition-all duration-200;
+  }
+
+  /* Badge */
+  .badge {
+    @apply inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium;
+  }
+
+  .badge-success {
+    @apply badge bg-obd-success/15 text-obd-success border border-obd-success/20;
+  }
+
+  .badge-warning {
+    @apply badge bg-obd-warning/15 text-obd-warning border border-obd-warning/20;
+  }
+
+  .badge-danger {
+    @apply badge bg-obd-danger/15 text-obd-danger border border-obd-danger/20;
+  }
+
+  .badge-info {
+    @apply badge bg-obd-info/15 text-obd-info border border-obd-info/20;
+  }
+}
+
+@layer utilities {
+  .text-gradient {
+    @apply bg-clip-text text-transparent bg-gradient-to-r from-obd-accent to-obd-accent-light;
+  }
+}

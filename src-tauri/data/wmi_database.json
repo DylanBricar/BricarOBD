@@ -1,0 +1,334 @@
+{
+  "VF3": {
+    "make": "Peugeot",
+    "country": "France"
+  },
+  "VF7": {
+    "make": "Citroën",
+    "country": "France"
+  },
+  "VR1": {
+    "make": "Peugeot",
+    "country": "France"
+  },
+  "VR3": {
+    "make": "Peugeot",
+    "country": "France"
+  },
+  "VF1": {
+    "make": "Renault",
+    "country": "France"
+  },
+  "VF6": {
+    "make": "Renault",
+    "country": "France"
+  },
+  "VF2": {
+    "make": "Renault",
+    "country": "France"
+  },
+  "UU1": {
+    "make": "Dacia",
+    "country": "Romania"
+  },
+  "UU6": {
+    "make": "Dacia",
+    "country": "Romania"
+  },
+  "WVW": {
+    "make": "Volkswagen",
+    "country": "Germany"
+  },
+  "WV1": {
+    "make": "Volkswagen",
+    "country": "Germany"
+  },
+  "WV2": {
+    "make": "Volkswagen",
+    "country": "Germany"
+  },
+  "WAU": {
+    "make": "Audi",
+    "country": "Germany"
+  },
+  "WUA": {
+    "make": "Audi",
+    "country": "Germany"
+  },
+  "TMB": {
+    "make": "Skoda",
+    "country": "Czech Republic"
+  },
+  "VSS": {
+    "make": "Seat",
+    "country": "Spain"
+  },
+  "WP0": {
+    "make": "Porsche",
+    "country": "Germany"
+  },
+  "WP1": {
+    "make": "Porsche",
+    "country": "Germany"
+  },
+  "WBA": {
+    "make": "BMW",
+    "country": "Germany"
+  },
+  "WBS": {
+    "make": "BMW M",
+    "country": "Germany"
+  },
+  "WBY": {
+    "make": "BMW",
+    "country": "Germany"
+  },
+  "WMW": {
+    "make": "Mini",
+    "country": "UK"
+  },
+  "WDB": {
+    "make": "Mercedes-Benz",
+    "country": "Germany"
+  },
+  "WDC": {
+    "make": "Mercedes-Benz",
+    "country": "Germany"
+  },
+  "WDD": {
+    "make": "Mercedes-Benz",
+    "country": "Germany"
+  },
+  "WDF": {
+    "make": "Mercedes-Benz",
+    "country": "Germany"
+  },
+  "W1K": {
+    "make": "Mercedes-Benz",
+    "country": "Germany"
+  },
+  "W1N": {
+    "make": "Mercedes-Benz",
+    "country": "Germany"
+  },
+  "WF0": {
+    "make": "Ford",
+    "country": "Germany"
+  },
+  "WFO": {
+    "make": "Ford",
+    "country": "Germany"
+  },
+  "1FA": {
+    "make": "Ford",
+    "country": "USA"
+  },
+  "1FB": {
+    "make": "Ford",
+    "country": "USA"
+  },
+  "1FC": {
+    "make": "Ford",
+    "country": "USA"
+  },
+  "1FD": {
+    "make": "Ford",
+    "country": "USA"
+  },
+  "1FM": {
+    "make": "Ford",
+    "country": "USA"
+  },
+  "1FT": {
+    "make": "Ford",
+    "country": "USA"
+  },
+  "2FA": {
+    "make": "Ford",
+    "country": "Canada"
+  },
+  "3FA": {
+    "make": "Ford",
+    "country": "Mexico"
+  },
+  "JTD": {
+    "make": "Toyota",
+    "country": "Japan"
+  },
+  "JTE": {
+    "make": "Toyota",
+    "country": "Japan"
+  },
+  "JTH": {
+    "make": "Lexus",
+    "country": "Japan"
+  },
+  "JTK": {
+    "make": "Toyota",
+    "country": "Japan"
+  },
+  "JTN": {
+    "make": "Toyota",
+    "country": "Japan"
+  },
+  "1NX": {
+    "make": "Toyota",
+    "country": "USA"
+  },
+  "2T1": {
+    "make": "Toyota",
+    "country": "Canada"
+  },
+  "4T1": {
+    "make": "Toyota",
+    "country": "USA"
+  },
+  "5TD": {
+    "make": "Toyota",
+    "country": "USA"
+  },
+  "SB1": {
+    "make": "Toyota",
+    "country": "UK"
+  },
+  "JHM": {
+    "make": "Honda",
+    "country": "Japan"
+  },
+  "SHH": {
+    "make": "Honda",
+    "country": "UK"
+  },
+  "1HG": {
+    "make": "Honda",
+    "country": "USA"
+  },
+  "2HG": {
+    "make": "Honda",
+    "country": "Canada"
+  },
+  "93H": {
+    "make": "Honda",
+    "country": "Brazil"
+  },
+  "JH4": {
+    "make": "Acura",
+    "country": "Japan"
+  },
+  "KMH": {
+    "make": "Hyundai",
+    "country": "South Korea"
+  },
+  "KNA": {
+    "make": "Kia",
+    "country": "South Korea"
+  },
+  "KNJ": {
+    "make": "Kia",
+    "country": "South Korea"
+  },
+  "KND": {
+    "make": "Kia",
+    "country": "South Korea"
+  },
+  "5NP": {
+    "make": "Hyundai",
+    "country": "USA"
+  },
+  "5XY": {
+    "make": "Kia",
+    "country": "USA"
+  },
+  "KMF": {
+    "make": "Genesis",
+    "country": "South Korea"
+  },
+  "ZFA": {
+    "make": "Fiat",
+    "country": "Italy"
+  },
+  "ZAR": {
+    "make": "Alfa Romeo",
+    "country": "Italy"
+  },
+  "ZLA": {
+    "make": "Lancia",
+    "country": "Italy"
+  },
+  "ZAM": {
+    "make": "Maserati",
+    "country": "Italy"
+  },
+  "YV1": {
+    "make": "Volvo",
+    "country": "Sweden"
+  },
+  "YV4": {
+    "make": "Volvo",
+    "country": "Sweden"
+  },
+  "JM1": {
+    "make": "Mazda",
+    "country": "Japan"
+  },
+  "JM3": {
+    "make": "Mazda",
+    "country": "Japan"
+  },
+  "JM7": {
+    "make": "Mazda",
+    "country": "Japan"
+  },
+  "1YV": {
+    "make": "Mazda",
+    "country": "USA"
+  },
+  "JF1": {
+    "make": "Subaru",
+    "country": "Japan"
+  },
+  "JF2": {
+    "make": "Subaru",
+    "country": "Japan"
+  },
+  "4S3": {
+    "make": "Subaru",
+    "country": "USA"
+  },
+  "4S4": {
+    "make": "Subaru",
+    "country": "USA"
+  },
+  "JN1": {
+    "make": "Nissan",
+    "country": "Japan"
+  },
+  "JN8": {
+    "make": "Nissan",
+    "country": "Japan"
+  },
+  "5N1": {
+    "make": "Nissan",
+    "country": "USA"
+  },
+  "JNK": {
+    "make": "Infiniti",
+    "country": "Japan"
+  },
+  "W0L": {
+    "make": "Opel",
+    "country": "Germany"
+  },
+  "W0V": {
+    "make": "Opel",
+    "country": "Germany"
+  },
+  "5YJ": {
+    "make": "Tesla",
+    "country": "USA"
+  },
+  "7SA": {
+    "make": "Tesla",
+    "country": "USA"
+  }
+}

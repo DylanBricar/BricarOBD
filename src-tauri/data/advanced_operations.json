@@ -1,0 +1,107 @@
+{
+  "categories": {
+    "service_reset": {
+      "name": {
+        "fr": "Entretien (maintenance)",
+        "en": "Service / Maintenance"
+      },
+      "desc": {
+        "fr": "Lecture / écriture des données d'entretien du véhicule.",
+        "en": "Read / write vehicle service maintenance data."
+      },
+      "risk": "low"
+    },
+    "vehicle_config": {
+      "name": {
+        "fr": "Configuration véhicule",
+        "en": "Vehicle Configuration"
+      },
+      "desc": {
+        "fr": "Lecture de la configuration usine du véhicule (options, équipements).",
+        "en": "Read factory vehicle configuration (options, equipment)."
+      },
+      "risk": "low"
+    },
+    "dpf_regeneration": {
+      "name": {
+        "fr": "Filtre à particules (FAP/DPF)",
+        "en": "Diesel Particulate Filter (DPF)"
+      },
+      "desc": {
+        "fr": "Lecture de l'état du filtre à particules.",
+        "en": "Read DPF status data."
+      },
+      "risk": "low"
+    },
+    "actuator_test": {
+      "name": {
+        "fr": "Tests actuateurs",
+        "en": "Actuator Tests"
+      },
+      "desc": {
+        "fr": "Active individuellement des actuateurs pour diagnostic (haut-parleurs, écran, caméra).",
+        "en": "Individually activates actuators for diagnostics (speakers, screen, camera)."
+      },
+      "risk": "medium"
+    },
+    "ecu_identification": {
+      "name": {
+        "fr": "Identification calculateurs",
+        "en": "ECU Identification"
+      },
+      "desc": {
+        "fr": "Lecture d'informations détaillées des calculateurs (références, versions, codage).",
+        "en": "Read detailed ECU information (part numbers, versions, coding)."
+      },
+      "risk": "low"
+    },
+    "ev_battery": {
+      "name": {
+        "fr": "Batterie haute tension (VE)",
+        "en": "HV Battery (EV)"
+      },
+      "desc": {
+        "fr": "Lecture des données de la batterie haute tension (véhicules électriques).",
+        "en": "Read high-voltage battery data (electric vehicles)."
+      },
+      "risk": "low"
+    }
+  },
+  "manufacturer_groups": {
+    "psa": [
+      "Peugeot",
+      "Citroën",
+      "Citroen",
+      "DS",
+      "Opel",
+      "Vauxhall"
+    ],
+    "vag": [
+      "Volkswagen",
+      "Audi",
+      "Seat",
+      "Cupra",
+      "Skoda",
+      "Škoda",
+      "Porsche"
+    ],
+    "bmw": [
+      "BMW",
+      "Mini",
+      "MINI"
+    ],
+    "mercedes": [
+      "Mercedes-Benz",
+      "Mercedes"
+    ],
+    "renault": [
+      "Renault",
+      "Dacia"
+    ],
+    "hyundai": [
+      "Hyundai",
+      "Kia",
+      "Genesis"
+    ]
+  }
+}

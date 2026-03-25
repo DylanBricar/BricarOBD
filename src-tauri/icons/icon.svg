@@ -1,0 +1,8 @@
+<svg width="512" height="512" viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="512" height="512" rx="100" fill="#060913"/>
+  <rect x="8" y="8" width="496" height="496" rx="92" fill="#0C1220" stroke="#06B6D4" stroke-width="2"/>
+  <circle cx="256" cy="230" r="120" stroke="#06B6D4" stroke-width="8" fill="none" opacity="0.3"/>
+  <path d="M 180 310 A 120 120 0 0 1 180 150" stroke="#06B6D4" stroke-width="8" stroke-linecap="round" fill="none"/>
+  <text x="256" y="245" text-anchor="middle" fill="#F1F5F9" font-family="SF Pro Display, Arial" font-size="72" font-weight="700">B</text>
+  <text x="256" y="395" text-anchor="middle" fill="#06B6D4" font-family="SF Pro Display, Arial" font-size="32" font-weight="500">OBD</text>
+</svg>

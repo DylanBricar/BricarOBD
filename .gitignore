@@ -1,18 +1,21 @@
-# Python
-__pycache__/
-*.py[cod]
-*$py.class
-*.so
-*.egg-info/
-*.egg
-dist/
-build/
+# Dependencies
+node_modules/
 
-# Virtual environments
-venv/
-.venv/
-env/
-.env
+# Build output
+dist/
+
+# Rust
+src-tauri/target/
+**/*.rs.bk
+
+# SQLite runtime files
+*.db-shm
+*.db-wal
+*.db-journal
+
+# Logs
+logs/
+*.log
 
 # IDE
 .vscode/
@@ -24,46 +27,17 @@ env/
 # OS
 .DS_Store
 Thumbs.db
-Desktop.ini
-ehthumbs.db
 
-# Logs (generated at runtime)
-logs/
-*.log
+# Env
+.env
+.env.local
 
-# Session data (user-specific diagnostic data)
-data/sessions/*.json
-!data/sessions/.gitkeep
-
-# Build artifacts (Nuitka / PyInstaller)
-*.spec.bak
-*.dmg
-build/
-dist/
-*.build/
-*.dist/
-*.onefile-build/
-
-# Temporary files
-generate_logo.py
-todo.txt
+# Temporary
 *.bak
 *.tmp
 
-# Generated data files
-data/ddt4all_full.json
-data/ddt4all_operations.json
-data/ddt4all_verified_ops.py
-data/unified_database.json
-data/verified_uds_codes_github.py
+# Exports (user data)
+BricarOBD_Exports/
 
-# Full zip is built from parts at first launch
-data/bricarobd_database.zip
-
-# Runtime user data
-data/settings.json
-data/recordings/
-
-# External databases
-databases/
-ecu/
+# Large database file (downloaded separately or built from ZIP)
+src-tauri/data/bricarobd.db
