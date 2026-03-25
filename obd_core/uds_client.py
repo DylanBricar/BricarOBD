@@ -120,7 +120,7 @@ class UDSClient:
         if response:
             clean = response.replace(" ", "").replace("\n", "").replace("\r", "")
             # Positive response is 7E00 somewhere in the response
-            if "7E" in clean and "NO DATA" not in response and "ERROR" not in response:
+            if "7E00" in clean and "NO DATA" not in response and "ERROR" not in response:
                 self.safety.log_operation("TesterPresent", 0x3E, data, "OK")
                 logger.debug(f"TesterPresent OK: {response.strip()[:60]}")
                 return True

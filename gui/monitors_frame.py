@@ -127,6 +127,8 @@ class MonitorsFrame(ctk.CTkFrame):
 
     def read_monitors(self):
         """Read Mode 06 monitor tests in background thread."""
+        if not self.app.connection or not self.app.connection.is_connected():
+            return
         self.read_btn.configure(state="disabled")
         self.status_label.configure(text=t("monitors_reading"))
 
@@ -214,6 +216,8 @@ class MonitorsFrame(ctk.CTkFrame):
 
     def read_vehicle_info(self):
         """Read Mode 09 vehicle info + calibration data."""
+        if not self.app.connection or not self.app.connection.is_connected():
+            return
         self.read_info_btn.configure(state="disabled")
         self.status_label.configure(text=t("monitors_reading"))
 
@@ -339,6 +343,8 @@ class MonitorsFrame(ctk.CTkFrame):
 
     def _on_lang_change(self, lang=None):
         """Rebuild UI on language change."""
+        if not self.winfo_exists():
+            return
         for widget in self.winfo_children():
             widget.destroy()
         self._setup_ui()

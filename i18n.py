@@ -100,6 +100,7 @@ TRANSLATIONS = {
     "dtc_read_all": {"fr": "Lire tous les DTC", "en": "Read All DTCs"},
     "dtc_read_pending": {"fr": "DTC en attente", "en": "Pending DTCs"},
     "dtc_read_permanent": {"fr": "DTC permanents", "en": "Permanent DTCs"},
+    "dtc_ecu_faults": {"fr": "Pannes ECU (historique)", "en": "ECU Faults (history)"},
     "dtc_clear_all": {"fr": "Effacer les DTC", "en": "Clear DTCs"},
     "dtc_code": {"fr": "Code", "en": "Code"},
     "dtc_description": {"fr": "Description", "en": "Description"},
@@ -188,6 +189,8 @@ TRANSLATIONS = {
     "dtc_final_confirm_msg": {"fr": "Tapez le mot ci-dessous pour confirmer", "en": "Type the word below to confirm"},
     "dtc_found_zero": {"fr": "Aucun DTC trouvé", "en": "No DTCs found"},
     "dtc_incorrect": {"fr": "Texte incorrect. Réessayez.", "en": "Incorrect text. Try again."},
+    "dtc_details": {"fr": "Détails", "en": "Details"},
+    "dtc_freeze_frame": {"fr": "Données gel (conditions au moment du défaut)", "en": "Freeze Frame (conditions at fault time)"},
 
     # Extra ECU keys
     "ecu_click_read": {"fr": "Cliquez 'Lire les infos'", "en": "Click 'Read Info'"},
@@ -217,6 +220,27 @@ TRANSLATIONS = {
     # Help descriptions
     "live_help": {"fr": "Surveillance PIDs en temps réel. Sélectionnez les paramètres à surveiller et cliquez Démarrer.", "en": "Real-time PID monitoring. Select parameters to monitor and click Start."},
     "dtc_help": {"fr": "Lecture et gestion des codes défaut véhicule. Lisez, sauvegardez ou effacez les DTC.", "en": "Read and manage vehicle fault codes. Read, save, or clear DTCs."},
+
+    # Database
+    "db_title": {"fr": "Paramètres constructeur", "en": "Manufacturer Parameters"},
+    "db_help": {"fr": "Données temps réel depuis la base DDT2000 (4867 ECU)", "en": "Real-time data from DDT2000 database (4867 ECUs)"},
+    "db_scan": {"fr": "Scanner les ECU", "en": "Scan ECUs"},
+    "db_scanning": {"fr": "Scan en cours...", "en": "Scanning..."},
+    "db_scan_done": {"fr": "{count} ECU détecté(s)", "en": "{count} ECU(s) detected"},
+    "db_no_database": {"fr": "Base de données non disponible", "en": "Database not available"},
+    "db_db_status": {"fr": "{count} définitions ECU chargées", "en": "{count} ECU definitions loaded"},
+    "db_start_monitor": {"fr": "Démarrer le suivi", "en": "Start Monitor"},
+    "db_stop_monitor": {"fr": "Arrêter le suivi", "en": "Stop Monitor"},
+    "db_select_params": {"fr": "Sélectionnez des paramètres à surveiller", "en": "Select parameters to monitor"},
+    "db_no_ecus": {"fr": "Aucun ECU détecté — lancez un scan", "en": "No ECUs detected — run a scan"},
+    "db_loading": {"fr": "Chargement de la base...", "en": "Loading database..."},
+    "db_param": {"fr": "Paramètre", "en": "Parameter"},
+    "db_value": {"fr": "Valeur", "en": "Value"},
+    "db_unit": {"fr": "Unité", "en": "Unit"},
+    "db_comment": {"fr": "Description", "en": "Description"},
+    "db_request_group": {"fr": "Groupe", "en": "Group"},
+    "db_refresh": {"fr": "Rafraîchissement", "en": "Refresh Rate"},
+    "db_samples": {"fr": "{count} lectures", "en": "{count} readings"},
 
     # Dialog keys
     "dialog_confirm_operation": {"fr": "Confirmation requise", "en": "Confirmation Required"},
@@ -280,6 +304,7 @@ TRANSLATIONS = {
     # Dialog
     # Advanced tab
     "nav_advanced": {"fr": "Avancé", "en": "Advanced"},
+    "nav_database": {"fr": "Base données", "en": "Database"},
     "adv_warning_title": {
         "fr": "ATTENTION — Opérations avancées",
         "en": "WARNING — Advanced Operations",
@@ -327,6 +352,7 @@ TRANSLATIONS = {
     },
     "adv_param_required": {"fr": "Requis", "en": "Required"},
     "adv_tab_verified": {"fr": "Vérifiés (sources publiques)", "en": "Verified (public sources)"},
+    "adv_tab_all_ops": {"fr": "Toutes les opérations", "en": "All Operations"},
     "adv_ddt_search_hint": {
         "fr": "Cliquez sur un groupe ECU pour voir ses opérations, ou utilisez la recherche "
               "(ex: DPF, inject, throttle, EGR, 2E2481, oil, battery, actuator).",

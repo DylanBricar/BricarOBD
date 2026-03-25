@@ -125,10 +125,22 @@ class ELM327Connection:
 
             except serial.SerialException as e:
                 self.state = ConnectionState.ERROR
+                if self.serial_conn:
+                    try:
+                        self.serial_conn.close()
+                    except Exception:
+                        pass
+                    self.serial_conn = None
                 logger.error(f"Serial connection failed: {e}")
                 return False
             except Exception as e:
                 self.state = ConnectionState.ERROR
+                if self.serial_conn:
+                    try:
+                        self.serial_conn.close()
+                    except Exception:
+                        pass
+                    self.serial_conn = None
                 logger.error(f"Connection error: {e}")
                 return False
 

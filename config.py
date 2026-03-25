@@ -14,9 +14,12 @@ DATA_DIR = APP_DIR / "data"
 SESSIONS_DIR = DATA_DIR / "sessions"
 LOG_DIR = APP_DIR / "logs"
 
-# Ensure directories exist
-SESSIONS_DIR.mkdir(parents=True, exist_ok=True)
-LOG_DIR.mkdir(parents=True, exist_ok=True)
+# Ensure directories exist (graceful on read-only filesystems)
+try:
+    SESSIONS_DIR.mkdir(parents=True, exist_ok=True)
+    LOG_DIR.mkdir(parents=True, exist_ok=True)
+except OSError:
+    pass
 
 # Connection defaults
 DEFAULT_BAUD_RATE = 38400
@@ -99,4 +102,7 @@ GRAPH_HISTORY_SAMPLES = 60  # Number of samples to display in graphs
 
 # CSV recording
 CSV_DIR = DATA_DIR / "recordings"
-CSV_DIR.mkdir(parents=True, exist_ok=True)
+try:
+    CSV_DIR.mkdir(parents=True, exist_ok=True)
+except OSError:
+    pass

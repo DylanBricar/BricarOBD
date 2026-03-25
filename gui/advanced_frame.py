@@ -52,29 +52,17 @@ class AdvancedFrame(ctk.CTkFrame):
 
     def _setup_ui(self):
         """Build the frame UI."""
+        self._loaded = False
         self._create_warning_banner()
 
-        # Tab selector: Verified | BricarDB
-        tab_frame = ctk.CTkFrame(self, fg_color="transparent")
-        tab_frame.pack(fill="x", padx=16, pady=(4, 0))
+        # Single unified view (no tabs)
+        title_frame = ctk.CTkFrame(self, fg_color="transparent")
+        title_frame.pack(fill="x", padx=16, pady=(4, 0))
 
-        self._tab_var = ctk.StringVar(value="verified")
-        self.tab_verified = ctk.CTkButton(
-            tab_frame, text=t("adv_tab_verified"), width=160, height=30,
-            font=FONTS["body_bold"],
-            fg_color=COLORS["danger"], hover_color=COLORS["danger_hover"],
-            command=lambda: self._switch_tab("verified"),
-        )
-        self.tab_verified.pack(side="left", padx=(0, 4))
-
-        self.tab_unified = ctk.CTkButton(
-            tab_frame, text="Full database (0 ops)", width=240, height=30,
-            font=FONTS["body_bold"],
-            fg_color=COLORS["bg_card"], hover_color=COLORS["bg_card_hover"],
-            text_color=COLORS["text_secondary"],
-            command=lambda: self._switch_tab("unified"),
-        )
-        self.tab_unified.pack(side="left", padx=4)
+        ctk.CTkLabel(
+            title_frame, text=t("adv_tab_all_ops"), font=FONTS["body_bold"],
+            text_color=COLORS["text_primary"]
+        ).pack(side="left")
 
         # Search bar (for BricarDB tab)
         self.search_frame = ctk.CTkFrame(self, fg_color="transparent")
@@ -167,20 +155,26 @@ class AdvancedFrame(ctk.CTkFrame):
         )
         self.warning_text.pack(anchor="w", padx=16, pady=(0, 12))
 
-    # ── Tab switching ─────────────────────────────────────────
-    def _switch_tab(self, tab: str):
-        self._tab_var.set(tab)
-        for btn in [self.tab_verified, self.tab_unified]:
-            btn.configure(fg_color=COLORS["bg_card"], text_color=COLORS["text_secondary"])
+    # ── Display initialization ────────────────────────────────
+    def on_frame_shown(self):
+        """Called when user navigates to this tab — reload every time."""
+        if not hasattr(self, '_layout_done'):
+            self._layout_done = True
+            self.search_frame.pack(fill="x", padx=16, pady=(4, 0))
+            self.scroll.pack(fill="both", expand=True, padx=0, pady=0)
+        self._show_all_ops()
 
-        if tab == "verified":
-            self.tab_verified.configure(fg_color=COLORS["danger"], text_color=COLORS["text_primary"])
-            self.search_frame.pack_forget()
-            self._show_verified_ops()
-        elif tab == "unified":
-            self.tab_unified.configure(fg_color=COLORS["danger"], text_color=COLORS["text_primary"])
-            self.search_frame.pack(fill="x", padx=16, pady=(4, 0), before=self.scroll)
-            self._show_unified_ops()
+    def _show_all_ops(self):
+        """Show all operations from all sources in one unified list."""
+        self._clear_ops()
+        make = self._get_detected_make()
+        if not make:
+            self.vehicle_label.configure(text=t("adv_no_vehicle"))
+            self._show_empty(t("adv_no_vehicle_detail"))
+            return
+
+        # Show unified DB with search
+        self._show_unified_ops()
 
     # ── Verified operations (existing) ────────────────────────
     def _show_verified_ops(self):
@@ -209,6 +203,141 @@ class AdvancedFrame(ctk.CTkFrame):
 
         for cat_key, ops in by_category.items():
             self._create_category_section(cat_key, ops, lang)
+
+    # ── ECU DDT2000 (actuations + extended DIDs from ZIP database) ──
+    def _show_ecu_ddt_ops(self):
+        """Show ECU DDT2000 operations: actuations, configs, extended DIDs."""
+        self._clear_ops()
+
+        make = self._get_detected_make()
+        if not make:
+            self.vehicle_label.configure(text=t("adv_no_vehicle"))
+            self._show_empty("Connect to detect vehicle first.")
+            return
+
+        ecu_database = getattr(self.app, 'ecu_database', None)
+        if not ecu_database or not ecu_database.is_loaded:
+            self._show_empty("ECU database not loaded (data/bricarobd_db_part_*)")
+            return
+
+        from obd_core.ecu_identifier import KNOWN_ADDRESSES
+        from obd_core.ecu_database import get_extended_dids, get_ecus_for_make
+
+        # Determine which addresses to scan for this make
+        _MAKE_ADDRS = {
+            "peugeot": ["7A", "26", "28", "60"], "citroen": ["7A", "26", "28", "60"],
+            "citroën": ["7A", "26", "28", "60"], "opel": ["7A", "26", "28", "60"],
+            "renault": ["7A", "26", "10"], "dacia": ["7A", "26", "10"],
+            "volkswagen": ["7A", "7B", "7C"], "audi": ["7A", "7B", "7C"],
+            "bmw": ["7A", "7B", "7C", "7D"], "mercedes-benz": ["7A", "7B", "7C"],
+        }
+        allowed = _MAKE_ADDRS.get(make.lower(), ["7A"])
+
+        all_ops = []
+
+        # 1. Load ECU definitions — ALL requests (reads + actuations)
+        for addr in allowed:
+            addr_info = KNOWN_ADDRESSES.get(addr, {})
+            ecus = ecu_database.find_ecus_by_address(addr)
+            for ecu_info in ecus[:3]:  # Top 3 per address
+                ecu_def = ecu_database.load_ecu_definition(ecu_info.get("filename", ""))
+                if not ecu_def:
+                    continue
+                for req in ecu_def.requests:
+                    cmd = req.sentbytes.upper()
+                    # Determine type
+                    if cmd.startswith(("21", "22", "19")):
+                        op_type = "read"
+                    elif cmd.startswith(("30", "31", "32", "3B", "2E", "2F")):
+                        op_type = "write"
+                    elif cmd.startswith(("10", "14", "17")):
+                        op_type = "diag"
+                    else:
+                        op_type = "other"
+                    all_ops.append({
+                        "name": req.name,
+                        "sentbytes": req.sentbytes,
+                        "service": cmd[:2] if len(cmd) >= 2 else "",
+                        "did": cmd[2:] if len(cmd) > 2 else "",
+                        "type": op_type,
+                        "ecu_name": ecu_def.ecuname,
+                        "ecu_tx": f"{addr_info.get('can_tx', 0x7E0):03X}",
+                        "ecu_rx": f"{addr_info.get('can_rx', 0x7E8):03X}",
+                        "params_count": len(req.params),
+                    })
+
+        # 2. Extended DIDs from ecu_database.py
+        ext_dids = get_extended_dids(make)
+        make_ecus = get_ecus_for_make(make)
+        # Find engine ECU for default addressing
+        default_tx, default_rx = "7E0", "7E8"
+        for ecu in make_ecus:
+            if "engine" in ecu.name.lower() or "inject" in ecu.name.lower():
+                default_tx = f"{ecu.request_id:03X}"
+                default_rx = f"{ecu.response_id:03X}"
+                break
+        for did, desc in ext_dids.items():
+            all_ops.append({
+                "name": f"{desc} (DID 0x{did:04X})",
+                "sentbytes": f"22{did:04X}",
+                "service": "22",
+                "did": f"{did:04X}",
+                "type": "read",
+                "ecu_name": "Extended DID",
+                "ecu_tx": default_tx,
+                "ecu_rx": default_rx,
+            })
+
+        # Display
+        self.vehicle_label.configure(text=f"{make}: {len(all_ops)} ECU operations")
+
+        if not all_ops:
+            self._show_empty(f"No ECU data for {make}")
+            return
+
+        # Group by ECU name
+        by_ecu = {}
+        for op in all_ops:
+            ecu = op.get("ecu_name", "Unknown")
+            if ecu not in by_ecu:
+                by_ecu[ecu] = []
+            by_ecu[ecu].append(op)
+
+        # Filter by search if active
+        query = self.search_var.get().strip().lower()
+        type_filter = self.type_var.get()
+
+        for ecu_name, ops in sorted(by_ecu.items()):
+            filtered = ops
+            if query:
+                filtered = [o for o in filtered if query in o["name"].lower() or query in o["sentbytes"].lower()]
+            if "read" in type_filter:
+                filtered = [o for o in filtered if o["type"] == "read"]
+            elif "write" in type_filter:
+                filtered = [o for o in filtered if o["type"] == "write"]
+            elif "routine" in type_filter:
+                filtered = [o for o in filtered if o["sentbytes"][:2] in ("31",)]
+            elif "actuator" in type_filter:
+                filtered = [o for o in filtered if o["sentbytes"][:2] in ("30", "2F")]
+
+            if not filtered:
+                continue
+
+            # ECU section header
+            reads = len([o for o in filtered if o["type"] == "read"])
+            writes = len(filtered) - reads
+            header_text = f"{ecu_name} ({len(filtered)} ops: {reads}R / {writes}W)"
+            ctk.CTkLabel(
+                self.ops_container, text=header_text,
+                font=FONTS["body_bold"], text_color=COLORS["text_secondary"],
+            ).pack(anchor="w", padx=16, pady=(12, 4))
+
+            ecu_data = {"send_id": ops[0].get("ecu_tx", "7E0"),
+                        "recv_id": ops[0].get("ecu_rx", "7E8"),
+                        "ecuname": ecu_name}
+
+            for op in filtered[:_MAX_DISPLAY]:
+                self._create_op_row(self.ops_container, ecu_data, op)
 
     # ── Unified database ─────────────────────────────────────
     def _get_detected_make(self) -> str:
@@ -242,22 +371,45 @@ class AdvancedFrame(ctk.CTkFrame):
             return
 
         manufacturer = make_to_manufacturer(make)
-        total = udb.count_for_manufacturer(manufacturer)
-        self.tab_unified.configure(text=f"Full database ({total:,} ops)")
 
-        if total == 0:
-            self.vehicle_label.configure(text=f"{make}: no data")
-            self._show_empty(
-                f"No operations found for {make} in the unified database"
-            )
+        # Only show WRITE operations (reads are in Live Data / Dashboard)
+        all_write_ops = udb.get_operations_for_manufacturer(manufacturer, op_type="write", limit=5000)
+        all_diag_ops = udb.get_operations_for_manufacturer(manufacturer, op_type="diag", limit=5000)
+        all_other_ops = udb.get_operations_for_manufacturer(manufacturer, op_type="other", limit=5000)
+
+        # Also add ECU DDT2000 write commands
+        ecu_write_ops = self._get_ecu_write_ops(make)
+
+        total_writes = len(all_write_ops) + len(all_diag_ops) + len(all_other_ops) + len(ecu_write_ops)
+
+        if total_writes == 0:
+            self.vehicle_label.configure(text=f"{make}: no write operations")
+            self._show_empty(f"No write/actuation operations for {make}")
             return
 
         self.vehicle_label.configure(
-            text=f"{make} ({manufacturer}): {total:,} operations"
+            text=f"{make}: {total_writes} write/actuation operations"
         )
 
-        # Show ECU groups
-        groups = udb.get_groups_for_manufacturer(manufacturer)
+        # Group by ECU name
+        groups = {}
+        for op in all_write_ops + all_diag_ops + all_other_ops:
+            ecu = op.get("ecu_name", "Unknown")
+            if ecu not in groups:
+                groups[ecu] = {"name": ecu, "total": 0, "reads": 0, "writes": 0,
+                               "ecu_tx": op.get("ecu_tx", ""), "ecu_rx": op.get("ecu_rx", "")}
+            groups[ecu]["total"] += 1
+            groups[ecu]["writes"] += 1
+
+        for op in ecu_write_ops:
+            ecu = op.get("ecu_name", "ECU DDT2000")
+            if ecu not in groups:
+                groups[ecu] = {"name": ecu, "total": 0, "reads": 0, "writes": 0,
+                               "ecu_tx": op.get("ecu_tx", ""), "ecu_rx": op.get("ecu_rx", "")}
+            groups[ecu]["total"] += 1
+            groups[ecu]["writes"] += 1
+
+        groups = sorted(groups.values(), key=lambda g: -g["total"])
 
         info = ctk.CTkLabel(
             self.ops_container,
@@ -344,6 +496,45 @@ class AdvancedFrame(ctk.CTkFrame):
                 font=FONTS["small"], text_color=COLORS["warning"],
             ).pack(pady=8)
 
+    def _get_ecu_write_ops(self, make):
+        """Get write/actuation operations from ECU DDT2000 database."""
+        ecu_database = getattr(self.app, 'ecu_database', None)
+        if not ecu_database or not ecu_database.is_loaded:
+            return []
+
+        from obd_core.ecu_identifier import KNOWN_ADDRESSES, MAKE_ADDRESSES
+        allowed = MAKE_ADDRESSES.get(make.lower(), ["7A"])
+        ops = []
+        seen = set()
+
+        for addr in allowed:
+            addr_info = KNOWN_ADDRESSES.get(addr, {})
+            ecus = ecu_database.find_ecus_by_address(addr)
+            for ecu_info in ecus[:3]:
+                ecu_def = ecu_database.load_ecu_definition(ecu_info.get("filename", ""))
+                if not ecu_def:
+                    continue
+                for req in ecu_def.requests:
+                    cmd = req.sentbytes.upper()
+                    # Only write/actuation services
+                    if not cmd.startswith(("30", "31", "32", "3B", "2E", "2F")):
+                        continue
+                    key = (cmd, ecu_def.ecuname)
+                    if key in seen:
+                        continue
+                    seen.add(key)
+                    ops.append({
+                        "name": req.name,
+                        "sentbytes": req.sentbytes,
+                        "service": cmd[:2],
+                        "did": cmd[2:] if len(cmd) > 2 else "",
+                        "type": "write",
+                        "ecu_name": ecu_def.ecuname[:30],
+                        "ecu_tx": f"{addr_info.get('can_tx', 0x7E0):03X}",
+                        "ecu_rx": f"{addr_info.get('can_rx', 0x7E8):03X}",
+                    })
+        return ops
+
     def _do_search(self):
         """Search operations in the unified database."""
         query = self.search_var.get().strip()
@@ -368,12 +559,14 @@ class AdvancedFrame(ctk.CTkFrame):
 
         manufacturer = make_to_manufacturer(make)
 
-        # Map type filter
-        op_type = None
+        # Map type filter (default to write — reads are in Live Data)
+        op_type = "write"  # Default: only writes
         if "read" in type_filter:
             op_type = "read"
         elif "write" in type_filter:
             op_type = "write"
+        elif "all" in type_filter:
+            op_type = None  # User explicitly wants all
 
         self.search_status.configure(text="Searching...")
         self.update_idletasks()
@@ -487,42 +680,50 @@ class AdvancedFrame(ctk.CTkFrame):
         status_text = [None]
 
         def run():
-            mgr = self.app.advanced_manager
-
-            # Set header to target ECU
-            send_id = ecu.get("send_id", "7E0")
-            send_id_int = int(send_id, 16) if isinstance(send_id, str) else send_id
-            mgr._set_header(send_id_int)
-
-            # SAFETY: Only enter extended session for non-read operations
+            # SAFETY: Check SafetyGuard for write operations
             if not is_read:
-                mgr._enter_session(0x03)
+                allowed, reason = self.app.safety.is_operation_allowed(int(service, 16))
+                if not allowed:
+                    self.after(0, lambda: self._show_exec_result(f"BLOCKED: {reason}", False))
+                    return
 
-            # Log operation BEFORE sending
-            self.app.safety.log_operation(
-                f"BricarDB:{op.get('name', '?')}", int(service, 16),
-                f"TX=0x{send_id} cmd={sentbytes}", "SENDING"
-            )
+            send_id = ecu.get("send_id", "7E0")
+            recv_id = ecu.get("recv_id", "7E8")
 
-            # Send the command
-            response = mgr._send_raw(sentbytes)
+            # Use custom connection to ensure serial access works
+            def _do_exec(conn):
+                conn.send_command("ATE0")
+                # Set header
+                send_int = int(send_id, 16) if isinstance(send_id, str) else send_id
+                recv_int = int(recv_id, 16) if isinstance(recv_id, str) else recv_id
+                conn.send_command(f"AT SH {send_int:03X}")
+                conn.send_command(f"AT CRA {recv_int:03X}")
 
-            # Log result
+                if not is_read:
+                    conn.send_command("1003", timeout=3)  # Extended session
+
+                self.app.safety.log_operation(
+                    f"BricarDB:{op.get('name', '?')}", int(service, 16),
+                    f"TX=0x{send_id} cmd={sentbytes}", "SENDING"
+                )
+
+                response = conn.send_command(sentbytes, timeout=5)
+
+                if not is_read:
+                    conn.send_command("1001", timeout=2)  # Return to default
+
+                conn.send_command("AT D")
+                conn.send_command("AT CRA")
+                conn.send_command("AT H0")
+                return response
+
+            response = self.app.connection.use_custom_connection(_do_exec)
             result_text = response if response else "No response"
             self.app.safety.log_operation(
                 f"BricarDB:{op.get('name', '?')}", int(service, 16),
                 f"TX=0x{send_id} cmd={sentbytes}", f"RESULT: {result_text}"
             )
-
-            # Return to default session if we entered extended
-            if not is_read:
-                mgr._return_to_default()
-            mgr._restore_header()
-
-            status_text[0] = result_text
             logger.info(f"BricarDB exec: [{sentbytes}] -> {result_text}")
-
-            # Update UI with result
             self.after(0, lambda: self._show_exec_result(result_text, is_read))
 
         thread = threading.Thread(target=run, daemon=True)
@@ -722,6 +923,8 @@ class AdvancedFrame(ctk.CTkFrame):
 
     def _on_lang_change(self, lang=None):
         """Rebuild UI on language change."""
+        if not self.winfo_exists():
+            return
         for widget in self.winfo_children():
             widget.destroy()
         self._setup_ui()

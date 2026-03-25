@@ -93,7 +93,7 @@ class DemoConnection:
         elif mode == "04":
             return "44"  # DTC clear OK
         elif mode == "07":
-            return "47"  # No pending DTCs
+            return "47 01 04 40"  # P0440 pending
         elif mode == "06" and pid:
             return self._simulate_mode06(int(pid, 16))
         elif mode == "09" and pid:
@@ -313,9 +313,10 @@ class DemoConnection:
         return responses.get(pid, "NO DATA")
 
     def _simulate_dtcs(self):
-        """Return simulated DTCs (one active code for demo)."""
-        # P0420 - Catalyst efficiency below threshold
-        return "43 01 04 20 00 00"
+        """Return simulated DTCs (active + historical for demo)."""
+        # Format: 43 [count] [DTC1_hi DTC1_lo] [DTC2_hi DTC2_lo]...
+        # P0420 = 04 20, P1338 = 13 38
+        return "43 02 04 20 13 38"
 
     def _simulate_mode06(self, mid):
         """Simulate Mode 06 test results (monitoring)."""
@@ -369,10 +370,77 @@ class DemoConnection:
     def _simulate_mode09(self, info_type):
         """Simulate Mode 09 vehicle info."""
         if info_type == 0x02:
-            # VIN: VF3WC9HXC1S123456
             vin_hex = "56 46 33 57 43 39 48 58 43 31 53 31 32 33 34 35 36"
             return f"49 02 01 {vin_hex}"
+        elif info_type == 0x04:
+            # Calibration ID: PSA207_CAL_V3
+            cal_hex = "50 53 41 32 30 37 5F 43 41 4C 5F 56 33 00 00 00"
+            return f"49 04 01 {cal_hex}"
+        elif info_type == 0x0A:
+            # ECU name: S2000-PSA
+            ecu_hex = "53 32 30 30 30 2D 50 53 41 00 00 00 00 00 00 00"
+            return f"49 0A 01 {ecu_hex}"
         return "NO DATA"
+
+    def get_supported_pids(self):
+        """Return list of supported PID codes for demo."""
+        return [0x01, 0x03, 0x04, 0x05, 0x06, 0x07, 0x0B, 0x0C, 0x0D, 0x0E,
+                0x0F, 0x10, 0x11, 0x1C, 0x1F, 0x2F, 0x33, 0x42, 0x46, 0x51, 0x5C, 0x5E]
+
+    def get_vin(self):
+        """Return demo VIN."""
+        return "VF3WC9HXC1S123456"
+
+    def get_dtcs(self):
+        """Return demo DTCs including historical ones."""
+        return [
+            {"code": "P0420", "description": "Catalyst System Efficiency Below Threshold (Bank 1)", "status": "Active"},
+            {"code": "P1338", "description": "Misfire Detection - Cylinder Combustion Fault (PSA)", "status": "Active"},
+            {"code": "P0171", "description": "System Too Lean (Bank 1)", "status": "Historical"},
+            {"code": "P0300", "description": "Random/Multiple Cylinder Misfire Detected", "status": "Historical"},
+            {"code": "P0440", "description": "Evaporative Emission Control System Malfunction", "status": "Pending"},
+        ]
+
+    def query_pid(self, pid):
+        """Simulate python-obd query_pid for HybridConnection compatibility."""
+        self._update_simulation()
+        pid_values = {
+            0x04: (self._load, "%"),
+            0x05: (self._coolant, "degree_Celsius"),
+            0x06: (random.uniform(-5, 5), "%"),
+            0x07: (random.uniform(-3, 3), "%"),
+            0x0B: (100 + self._speed * 0.2, "kilopascal"),
+            0x0C: (self._rpm, "revolutions_per_minute"),
+            0x0D: (self._speed, "kilometer_per_hour"),
+            0x0E: (self._timing, "degree"),
+            0x0F: (self._intake_temp, "degree_Celsius"),
+            0x10: (self._maf, "grams_per_second"),
+            0x11: (self._throttle, "percent"),
+            0x2F: (self._fuel, "percent"),
+            0x42: (self._voltage, "volt"),
+            0x46: (self._ambient, "degree_Celsius"),
+            0x5C: (self._oil_temp, "degree_Celsius"),
+            0x5E: (self._load * 0.3, "liters_per_hour"),
+        }
+        result = pid_values.get(pid)
+        if result:
+            return result
+        return None, ""
+
+    def use_custom_connection(self, callback):
+        """Simulate custom connection — just run the callback with self."""
+        try:
+            return callback(self)
+        except Exception:
+            return None
+
+    def _pause_async(self):
+        """No-op for demo."""
+        pass
+
+    def _resume_async(self):
+        """No-op for demo."""
+        pass
 
     def _format_response(self, pid, data_bytes):
         """Format a Mode 01 response."""

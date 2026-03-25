@@ -298,6 +298,8 @@ class HistoryFrame(ctk.CTkFrame):
 
     def _on_lang_change(self, lang=None):
         """Rebuild UI on language change."""
+        if not self.winfo_exists():
+            return
         for widget in self.winfo_children():
             widget.destroy()
         self._setup_ui()

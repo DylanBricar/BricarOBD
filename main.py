@@ -105,6 +105,20 @@ def main():
     advanced_frame = AdvancedFrame(app.content_area, app)
     app.register_frame("Advanced", advanced_frame)
 
+    from gui.database_frame import DatabaseFrame
+    from obd_core.database_reader import ECUDatabase
+    ecu_database = ECUDatabase()
+    ecu_database.load()  # Load 4866 ECU definitions from ZIP
+    app.ecu_database = ecu_database
+
+    # Pre-load EV parser (cached on app for reuse)
+    from obd_core.ev_data_parser import EVDataParser
+    ev_parser = EVDataParser()
+    ev_parser.load()
+    app.ev_parser = ev_parser
+    database_frame = DatabaseFrame(app.content_area, app)
+    app.register_frame("Database", database_frame)
+
     # Show connection frame by default
     app.show_frame("Connection")
 
@@ -121,12 +135,21 @@ def main():
                 live_data_frame.stop_monitoring()
             if hasattr(live_data_frame, '_stop_csv') and live_data_frame._csv_recording:
                 live_data_frame._stop_csv()
+            if hasattr(database_frame, 'stop_monitoring'):
+                database_frame.stop_monitoring()
         except Exception:
             pass
 
         # Disconnect from vehicle
-        if connection.is_connected():
-            connection.disconnect()
+        try:
+            if connection.is_connected():
+                connection.disconnect()
+        except Exception:
+            pass
+
+        # Close database
+        if hasattr(ecu_database, 'close'):
+            ecu_database.close()
 
         app.destroy()
 

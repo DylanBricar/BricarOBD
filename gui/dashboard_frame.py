@@ -117,7 +117,7 @@ class DashboardFrame(ctk.CTkFrame):
 
         self.rpm_graph = GraphWidget(
             graph_row, t("graph_rpm"), "RPM", 0, 8000,
-            color=COLORS["success"], width=320, height=100,
+            color=COLORS["success"], width=280, height=90,
             max_samples=GRAPH_HISTORY_SAMPLES,
             warning_threshold=5500, danger_threshold=7000
         )
@@ -125,7 +125,7 @@ class DashboardFrame(ctk.CTkFrame):
 
         self.speed_graph = GraphWidget(
             graph_row, t("graph_speed"), "km/h", 0, 250,
-            color=COLORS["accent"], width=320, height=100,
+            color=COLORS["accent"], width=280, height=90,
             max_samples=GRAPH_HISTORY_SAMPLES,
             warning_threshold=130, danger_threshold=180
         )
@@ -133,7 +133,7 @@ class DashboardFrame(ctk.CTkFrame):
 
         self.temp_graph = GraphWidget(
             graph_row, t("graph_temp"), "°C", -40, 130,
-            color=COLORS["success"], width=320, height=100,
+            color=COLORS["success"], width=280, height=90,
             max_samples=GRAPH_HISTORY_SAMPLES,
             warning_threshold=100, danger_threshold=115
         )
@@ -141,11 +141,44 @@ class DashboardFrame(ctk.CTkFrame):
 
         self.load_graph = GraphWidget(
             graph_row, t("graph_load"), "%", 0, 100,
-            color="#8B5CF6", width=320, height=100,
+            color="#8B5CF6", width=280, height=90,
             max_samples=GRAPH_HISTORY_SAMPLES,
             warning_threshold=80, danger_threshold=95
         )
         self.load_graph.pack(side="left")
+
+        # Second row of graphs
+        graph_row2 = ctk.CTkFrame(c, fg_color="transparent")
+        graph_row2.pack(fill="x", padx=16, pady=(0, 8))
+
+        self.throttle_graph = GraphWidget(
+            graph_row2, t("dash_throttle"), "%", 0, 100,
+            color=COLORS["accent"], width=280, height=90,
+            max_samples=GRAPH_HISTORY_SAMPLES,
+        )
+        self.throttle_graph.pack(side="left", padx=(0, 6))
+
+        self.fuel_graph = GraphWidget(
+            graph_row2, t("dash_fuel"), "%", 0, 100,
+            color="#F59E0B", width=280, height=90,
+            max_samples=GRAPH_HISTORY_SAMPLES,
+        )
+        self.fuel_graph.pack(side="left", padx=(0, 6))
+
+        self.voltage_graph = GraphWidget(
+            graph_row2, t("dash_voltage"), "V", 10, 16,
+            color="#10B981", width=280, height=90,
+            max_samples=GRAPH_HISTORY_SAMPLES,
+            warning_threshold=11.5, danger_threshold=11.0
+        )
+        self.voltage_graph.pack(side="left", padx=(0, 6))
+
+        self.intake_graph = GraphWidget(
+            graph_row2, t("dash_intake"), "°C", -40, 80,
+            color="#6366F1", width=280, height=90,
+            max_samples=GRAPH_HISTORY_SAMPLES,
+        )
+        self.intake_graph.pack(side="left")
 
         self.status_title_label = ctk.CTkLabel(
             c, text=t("dash_parameters"), font=FONTS["small"],
@@ -188,32 +221,24 @@ class DashboardFrame(ctk.CTkFrame):
         )
         self.vehicle_info_title.pack(anchor="w", padx=12, pady=(8, 4))
 
+        # Vehicle info labels — hidden until data is available
+        self._vehicle_info_frame = vehicle_info_frame
         self.vin_label = ctk.CTkLabel(
-            vehicle_info_frame, text="VIN: --", font=FONTS["mono_small"],
+            vehicle_info_frame, text="", font=FONTS["mono_small"],
             text_color=COLORS["text_muted"]
         )
-        self.vin_label.pack(anchor="w", padx=12, pady=1)
-
         self.protocol_label = ctk.CTkLabel(
-            vehicle_info_frame, text=f"{t('dash_obd_protocol')}: --", font=FONTS["small"],
+            vehicle_info_frame, text="", font=FONTS["small"],
             text_color=COLORS["text_muted"]
         )
-        self.protocol_label.pack(anchor="w", padx=12, pady=1)
-
         self.mil_label = ctk.CTkLabel(
-            vehicle_info_frame, text=f"{t('dash_mil')}: --", font=FONTS["small"],
+            vehicle_info_frame, text="", font=FONTS["small"],
             text_color=COLORS["text_muted"]
         )
-        self.mil_label.pack(anchor="w", padx=12, pady=(1, 8))
-
-        # Additional vehicle info
-        self.fuel_type_label = ctk.CTkLabel(vehicle_info_frame, text=f"{t('dash_fuel_type')}: --",
+        self.fuel_type_label = ctk.CTkLabel(vehicle_info_frame, text="",
             font=FONTS["small"], text_color=COLORS["text_muted"])
-        self.fuel_type_label.pack(anchor="w", padx=12, pady=1)
-
-        self.obd_standard_label = ctk.CTkLabel(vehicle_info_frame, text=f"{t('dash_obd_standard')}: --",
+        self.obd_standard_label = ctk.CTkLabel(vehicle_info_frame, text="",
             font=FONTS["small"], text_color=COLORS["text_muted"])
-        self.obd_standard_label.pack(anchor="w", padx=12, pady=(1, 8))
 
         # System info card
         sys_card = ctk.CTkFrame(c, fg_color=COLORS["bg_card"], corner_radius=10,
@@ -271,6 +296,10 @@ class DashboardFrame(ctk.CTkFrame):
         self.speed_graph.reset()
         self.temp_graph.reset()
         self.load_graph.reset()
+        self.throttle_graph.reset()
+        self.fuel_graph.reset()
+        self.voltage_graph.reset()
+        self.intake_graph.reset()
 
         # Stop CSV if recording
         if self._csv_recording:
@@ -284,10 +313,10 @@ class DashboardFrame(ctk.CTkFrame):
         self.voltage_card.set_value("--")
         self.timing_card.set_value("--")
 
-        # Reset vehicle info
-        self.vin_label.configure(text="VIN: --")
-        self.protocol_label.configure(text=f"{t('dash_obd_protocol')}: --")
-        self.mil_label.configure(text=f"{t('dash_mil')}: --", text_color=COLORS["text_muted"])
+        # Hide vehicle info labels (they'll re-show when data arrives)
+        for lbl in [self.vin_label, self.protocol_label, self.mil_label,
+                     self.fuel_type_label, self.obd_standard_label]:
+            lbl.pack_forget()
 
     def _schedule_update(self):
         """Schedule next update via self.after()."""
@@ -308,16 +337,6 @@ class DashboardFrame(ctk.CTkFrame):
 
         try:
             rpm_val, _ = self.app.obd_reader.read_pid(0x0C)
-            speed_val_check, _ = self.app.obd_reader.read_pid(0x0D)
-            coolant_check, _ = self.app.obd_reader.read_pid(0x05)
-            load_check, _ = self.app.obd_reader.read_pid(0x04)
-            throttle_check, _ = self.app.obd_reader.read_pid(0x11)
-            if not hasattr(self, '_dash_log_count'):
-                self._dash_log_count = 0
-            if self._dash_log_count < 5:
-                self._dash_log_count += 1
-                logger.info(f"Dashboard read #{self._dash_log_count}: RPM={rpm_val} Speed={speed_val_check} Coolant={coolant_check} Load={load_check} Throttle={throttle_check}")
-
             if rpm_val is not None:
                 self.after(0, lambda v=rpm_val: (self.rpm_gauge.set_value(v), self.rpm_graph.add_value(v)))
 
@@ -335,11 +354,11 @@ class DashboardFrame(ctk.CTkFrame):
 
             throttle_val, _ = self.app.obd_reader.read_pid(0x11)
             if throttle_val is not None:
-                self.after(0, lambda v=throttle_val: self.throttle_card.set_value(f"{v:.1f}"))
+                self.after(0, lambda v=throttle_val: (self.throttle_card.set_value(f"{v:.1f}"), self.throttle_graph.add_value(v)))
 
             intake_val, _ = self.app.obd_reader.read_pid(0x0F)
             if intake_val is not None:
-                self.after(0, lambda v=intake_val: self.intake_temp_card.set_value(f"{v:.1f}"))
+                self.after(0, lambda v=intake_val: (self.intake_temp_card.set_value(f"{v:.1f}"), self.intake_graph.add_value(v)))
 
             maf_val, _ = self.app.obd_reader.read_pid(0x10)
             if maf_val is not None:
@@ -347,15 +366,22 @@ class DashboardFrame(ctk.CTkFrame):
 
             fuel_val, _ = self.app.obd_reader.read_pid(0x2F)
             if fuel_val is not None:
-                self.after(0, lambda v=fuel_val: self.fuel_level_card.set_value(f"{v:.1f}"))
+                self.after(0, lambda v=fuel_val: (self.fuel_level_card.set_value(f"{v:.1f}"), self.fuel_graph.add_value(v)))
 
             voltage_val, _ = self.app.obd_reader.read_pid(0x42)
             if voltage_val is not None:
-                self.after(0, lambda v=voltage_val: self.voltage_card.set_value(f"{v:.2f}"))
+                self.after(0, lambda v=voltage_val: (self.voltage_card.set_value(f"{v:.2f}"), self.voltage_graph.add_value(v)))
 
             timing_val, _ = self.app.obd_reader.read_pid(0x0E)
             if timing_val is not None:
                 self.after(0, lambda v=timing_val: self.timing_card.set_value(f"{v:.1f}"))
+
+            # Log first few reads for diagnostics
+            if not hasattr(self, '_dash_log_count'):
+                self._dash_log_count = 0
+            if self._dash_log_count < 5:
+                self._dash_log_count += 1
+                logger.info(f"Dashboard read #{self._dash_log_count}: RPM={rpm_val} Speed={speed_val} Coolant={coolant_val} Load={load_val} Throttle={throttle_val}")
 
             # CSV recording (thread-safe)
             with self._csv_lock:
@@ -446,7 +472,7 @@ class DashboardFrame(ctk.CTkFrame):
                     self.after(0, lambda v=elm_v: self.elm_voltage_label.configure(
                         text=f"{t('dash_elm_voltage')}: {v.strip()}"))
             except Exception as e:
-                    logger.debug(f"ELM voltage read error: {e}")
+                logger.debug(f"ELM voltage read error: {e}")
 
             # Fuel status
             FUEL_STATUS_NAMES = {
@@ -474,23 +500,29 @@ class DashboardFrame(ctk.CTkFrame):
                 else:
                     mil_text = f"{t('dash_mil')}: ✓ OFF"
                     mil_color = COLORS.get("success", "#2ecc71")
-                self.after(0, lambda txt=mil_text, col=mil_color: self.mil_label.configure(
-                    text=txt, text_color=col))
+                def _show_mil(txt=mil_text, col=mil_color):
+                    self.mil_label.configure(text=txt, text_color=col)
+                    self.mil_label.pack(anchor="w", padx=12, pady=(1, 8))
+                self.after(0, _show_mil)
 
             def update_ui():
+                # Only show labels that have actual data
                 if vin_val:
                     self.vin_label.configure(text=f"VIN: {vin_val}")
-                self.protocol_label.configure(text=f"{t('dash_obd_protocol')}: {protocol}")
-
-                # Update fuel type
+                    self.vin_label.pack(anchor="w", padx=12, pady=1)
+                if protocol:
+                    self.protocol_label.configure(text=f"{t('dash_obd_protocol')}: {protocol}")
+                    self.protocol_label.pack(anchor="w", padx=12, pady=1)
                 if fuel_type_val is not None:
                     fuel_name = FUEL_TYPES.get(int(fuel_type_val), "Unknown")
-                    self.fuel_type_label.configure(text=f"{t('dash_fuel_type')}: {fuel_name}")
-
-                # Update OBD standard
+                    if fuel_name != "Unknown":
+                        self.fuel_type_label.configure(text=f"{t('dash_fuel_type')}: {fuel_name}")
+                        self.fuel_type_label.pack(anchor="w", padx=12, pady=1)
                 if obd_std_val is not None:
                     obd_name = OBD_STANDARDS.get(int(obd_std_val), "Unknown")
-                    self.obd_standard_label.configure(text=f"{t('dash_obd_standard')}: {obd_name}")
+                    if obd_name != "Unknown":
+                        self.obd_standard_label.configure(text=f"{t('dash_obd_standard')}: {obd_name}")
+                        self.obd_standard_label.pack(anchor="w", padx=12, pady=1)
 
             self.after(0, update_ui)
         except Exception as e:
@@ -502,6 +534,8 @@ class DashboardFrame(ctk.CTkFrame):
         Args:
             lang: Language code (unused, kept for callback signature)
         """
+        if not self.winfo_exists():
+            return
         was_monitoring = self.monitoring
         if was_monitoring:
             self.stop_monitoring()

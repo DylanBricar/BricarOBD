@@ -45,28 +45,16 @@ class DTCFrame(ctk.CTkFrame):
 
         ctk.CTkButton(
             button_bar, text=t("dtc_read_all"), fg_color=COLORS["accent"],
-            width=110, height=24, font=FONTS["small"],
+            width=160, height=32, font=FONTS["body_bold"],
             command=self.read_all_dtcs
-        ).pack(side="left", padx=2)
+        ).pack(side="left", padx=4)
 
-        ctk.CTkButton(
-            button_bar, text=t("dtc_read_pending"),
-            width=110, height=24, font=FONTS["small"],
-            command=self.read_pending
-        ).pack(side="left", padx=2)
-
-        ctk.CTkButton(
-            button_bar, text=t("dtc_read_permanent"),
-            width=110, height=24, font=FONTS["small"],
-            command=self.read_permanent
-        ).pack(side="left", padx=2)
-
-        separator = ctk.CTkFrame(button_bar, fg_color=COLORS["border"], width=1, height=24)
+        separator = ctk.CTkFrame(button_bar, fg_color=COLORS["border"], width=1, height=28)
         separator.pack(side="left", padx=10)
 
         ctk.CTkButton(
             button_bar, text=t("dtc_clear_all"), fg_color=COLORS["danger"],
-            width=110, height=24, font=FONTS["small"],
+            width=140, height=32, font=FONTS["body_bold"],
             command=self.clear_dtcs
         ).pack(side="left", padx=2)
 
@@ -120,41 +108,168 @@ class DTCFrame(ctk.CTkFrame):
             command=self.import_session
         ).pack(side="left", padx=4)
 
+    def _check_connected(self) -> bool:
+        """Check connection before DTC operations."""
+        if not self.app.connection or not self.app.connection.is_connected():
+            return False
+        return True
+
     def read_all_dtcs(self):
         """Read all DTCs in a background thread."""
+        if not self._check_connected():
+            return
         from utils.dev_console import log_user_action
         log_user_action("DTC", "Read All DTCs")
         def task():
-            dtcs = self.app.dtc_manager.read_all_dtcs()
-            log_user_action("DTC", f"Found {len(dtcs)} DTCs: {[d.code for d in dtcs]}")
-            self.after(0, self.populate_table, dtcs)
+            try:
+                make = getattr(self.app, 'detected_make', '') or ''
 
-        thread = threading.Thread(target=task, daemon=True)
-        thread.start()
+                # Step 1: Read all standard DTCs (Mode 03 + 07 + 0A + UDS)
+                dtcs = self.app.dtc_manager.read_all_dtcs(make=make)
+                log_user_action("DTC", f"Standard DTCs: {len(dtcs)}")
+
+                # Step 2: Also read ECU fault history (S2000 trames pannes)
+                ecu_faults = self._read_ecu_faults_sync()
+                if ecu_faults:
+                    log_user_action("DTC", f"ECU faults: {len(ecu_faults)}")
+                    dtcs = list(dtcs) + ecu_faults
+
+                log_user_action("DTC", f"Total: {len(dtcs)} DTCs: {[d.code for d in dtcs]}")
+                self.after(0, self.populate_table, dtcs)
+            except Exception as e:
+                self.after(0, self._show_error, str(e))
+
+        threading.Thread(target=task, daemon=True).start()
 
     def read_pending(self):
         """Read pending DTCs in a background thread."""
+        if not self._check_connected():
+            return
         from utils.dev_console import log_user_action
         log_user_action("DTC", "Read Pending DTCs")
         def task():
-            dtcs = self.app.dtc_manager.read_pending_dtcs()
-            log_user_action("DTC", f"Found {len(dtcs)} pending DTCs")
-            self.after(0, self.populate_table, dtcs)
+            try:
+                dtcs = self.app.dtc_manager.read_pending_dtcs()
+                log_user_action("DTC", f"Found {len(dtcs)} pending DTCs")
+                self.after(0, self.populate_table, dtcs)
+            except Exception as e:
+                self.after(0, self._show_error, str(e))
 
-        thread = threading.Thread(target=task, daemon=True)
-        thread.start()
+        threading.Thread(target=task, daemon=True).start()
 
     def read_permanent(self):
         """Read permanent DTCs in a background thread."""
+        if not self._check_connected():
+            return
         from utils.dev_console import log_user_action
         log_user_action("DTC", "Read Permanent DTCs")
         def task():
-            dtcs = self.app.dtc_manager.read_permanent_dtcs()
-            log_user_action("DTC", f"Found {len(dtcs)} permanent DTCs")
-            self.after(0, self.populate_table, dtcs)
+            try:
+                dtcs = self.app.dtc_manager.read_permanent_dtcs()
+                log_user_action("DTC", f"Found {len(dtcs)} permanent DTCs")
+                self.after(0, self.populate_table, dtcs)
+            except Exception as e:
+                self.after(0, self._show_error, str(e))
 
-        thread = threading.Thread(target=task, daemon=True)
-        thread.start()
+        threading.Thread(target=task, daemon=True).start()
+
+    def _read_ecu_faults_sync(self):
+        """Read ECU fault history synchronously (called from read_all_dtcs thread)."""
+        try:
+            from obd_core.dtc_manager import DTCRecord
+            from obd_core.ecu_identifier import KNOWN_ADDRESSES, MAKE_ADDRESSES
+
+            make = getattr(self.app, 'detected_make', '') or ''
+            ecu_database = getattr(self.app, 'ecu_database', None)
+            if not ecu_database or not ecu_database.is_loaded:
+                return []
+            if not self.app.connection or not self.app.connection.is_connected():
+                return []
+
+            matched_files = None
+            for frame in self.app.frames.values():
+                if hasattr(frame, '_matched_ecu_files'):
+                    matched_files = frame._matched_ecu_files
+                    break
+
+            allowed_addrs = MAKE_ADDRESSES.get(make.lower(), ["7A"]) if make else ["7A"]
+
+            def _read_faults(conn):
+                    conn.send_command("ATE0")
+                    results = []
+
+                    for addr in allowed_addrs:
+                        addr_info = KNOWN_ADDRESSES.get(addr, {})
+                        can_tx = addr_info.get("can_tx", 0x7E0)
+                        can_rx = addr_info.get("can_rx", 0x7E8)
+
+                        # Load ECU definition
+                        if matched_files and addr in matched_files:
+                            ecu_def = ecu_database.load_ecu_definition(matched_files[addr])
+                        else:
+                            ecus = ecu_database.find_ecus_by_address(addr)
+                            ecu_def = ecu_database.load_ecu_definition(ecus[0].get("filename", "")) if ecus else None
+
+                        if not ecu_def:
+                            continue
+
+                        conn.send_command(f"AT SH {can_tx:03X}")
+                        conn.send_command(f"AT CRA {can_rx:03X}")
+
+                        # Find fault-reading requests (Trame pannes)
+                        for req in ecu_def.requests:
+                            cmd = req.sentbytes.upper()
+                            name_lower = req.name.lower()
+                            # Only read fault trames (21Ax = pannes, 1200 = contexte panne)
+                            if not (cmd.startswith("21A") and ("panne" in name_lower or "diag" in name_lower)):
+                                continue
+
+                            response = conn.send_command(req.sentbytes, timeout=3)
+                            if not response or "NO DATA" in response:
+                                continue
+
+                            # Parse response to bytes
+                            clean = response.replace(" ", "").replace("\r", "").replace("\n", "").replace(">", "")
+                            hex_only = "".join(c for c in clean if c in "0123456789ABCDEFabcdef")
+                            if not hex_only:
+                                continue
+                            try:
+                                resp_bytes = bytes.fromhex(hex_only)
+                            except ValueError:
+                                continue
+
+                            # Decode fault parameters
+                            decoded = ecu_def.decode_response(req, resp_bytes)
+                            for param_name, value in decoded.items():
+                                if not isinstance(value, bool):
+                                    continue
+                                if not value:
+                                    continue  # Only show active faults
+                                # This is an active fault flag
+                                is_memorized = "mémorisée" in param_name.lower() or "memorisee" in param_name.lower()
+                                is_present = "présente" in param_name.lower() or "presente" in param_name.lower()
+
+                                status = "Mémorisée" if is_memorized else ("Présente" if is_present else "Active")
+                                results.append(DTCRecord(
+                                    code=f"ECU:{addr}",
+                                    description=param_name,
+                                    status=status,
+                                    status_byte=1,
+                                    source=ecu_def.ecuname[:20],
+                                ))
+
+                    conn.send_command("AT D")
+                    conn.send_command("AT CRA")
+                    conn.send_command("AT H0")
+                    return results
+
+            return self.app.connection.use_custom_connection(_read_faults) or []
+        except Exception:
+            return []
+
+    def _show_error(self, msg):
+        """Show error in count label."""
+        self.count_label.configure(text=f"Error: {msg[:60]}", text_color=COLORS.get("danger", "#e74c3c"))
 
     def clear_dtcs(self):
         """Clear all DTCs with confirmation."""
@@ -216,8 +331,18 @@ class DTCFrame(ctk.CTkFrame):
         )
         code_label.pack(side="left", padx=8, pady=8)
 
+        # Use FR description if available and language is French
+        desc_text = dtc_record.description
+        try:
+            if get_lang() == 'fr':
+                from data.dtc_descriptions import get_dtc_description_fr
+                fr = get_dtc_description_fr(dtc_record.code)
+                if fr:
+                    desc_text = fr
+        except Exception:
+            pass
         desc_label = ctk.CTkLabel(
-            row_frame, text=dtc_record.description[:40], font=FONTS["body"],
+            row_frame, text=desc_text[:50], font=FONTS["body"],
             text_color=COLORS["text_primary"], width=250, anchor="w"
         )
         desc_label.pack(side="left", padx=8)
@@ -266,6 +391,11 @@ class DTCFrame(ctk.CTkFrame):
             command=lambda c=dtc_record.code: self._show_help_panel(c)
         ).pack(side="left", padx=2)
 
+        ctk.CTkButton(
+            action_frame, text=t("dtc_details") if hasattr(t, '__call__') else "Details", width=60, font=FONTS["small"],
+            command=lambda d=dtc_record: self._show_dtc_details(d)
+        ).pack(side="left", padx=2)
+
         self.dtc_rows[dtc_record.code] = row_frame
 
     def search_web(self, dtc_code):
@@ -283,7 +413,8 @@ class DTCFrame(ctk.CTkFrame):
         # Use localized search term
         search_term = "diagnostic véhicule" if get_lang() == "fr" else "vehicle diagnostic"
 
-        url = DTC_SEARCH_URL.format(code=dtc_code, vehicle=f"{vehicle} {search_term}")
+        from urllib.parse import quote
+        url = DTC_SEARCH_URL.format(code=quote(dtc_code), vehicle=quote(f"{vehicle} {search_term}"))
         webbrowser.open(url)
 
     def save_single(self, dtc_record):
@@ -476,8 +607,88 @@ class DTCFrame(ctk.CTkFrame):
         ctk.CTkButton(popup, text=t("dialog_close"), width=100,
                       command=popup.destroy).pack(pady=(4, 12))
 
+    def _show_dtc_details(self, dtc_record):
+        """Show detailed DTC info including freeze frame data."""
+        popup = ctk.CTkToplevel(self)
+        popup.title(f"DTC {dtc_record.code}")
+        popup.geometry("500x400")
+        popup.transient(self.winfo_toplevel())
+
+        # Header
+        ctk.CTkLabel(popup, text=f"DTC {dtc_record.code}", font=FONTS["h3"],
+                     text_color=COLORS["highlight"]).pack(padx=16, pady=(16, 4))
+
+        # Description (EN + FR)
+        ctk.CTkLabel(popup, text=dtc_record.description, font=FONTS["body"],
+                     text_color=COLORS["text_primary"], wraplength=460).pack(padx=16, pady=4)
+
+        # French description
+        try:
+            from data.dtc_descriptions import get_dtc_description_fr
+            fr_desc = get_dtc_description_fr(dtc_record.code)
+            if fr_desc:
+                ctk.CTkLabel(popup, text=f"FR: {fr_desc}", font=FONTS["body"],
+                             text_color=COLORS["text_secondary"], wraplength=460).pack(padx=16, pady=4)
+        except ImportError:
+            pass
+
+        # Status info
+        info_frame = ctk.CTkFrame(popup, fg_color=COLORS["bg_card"], corner_radius=8)
+        info_frame.pack(fill="x", padx=16, pady=8)
+
+        ctk.CTkLabel(info_frame, text=f"Status: {dtc_record.status}", font=FONTS["small"],
+                     text_color=COLORS["text_secondary"]).pack(anchor="w", padx=12, pady=4)
+        ctk.CTkLabel(info_frame, text=f"Source: {dtc_record.source}", font=FONTS["small"],
+                     text_color=COLORS["text_secondary"]).pack(anchor="w", padx=12, pady=4)
+        if dtc_record.status_byte:
+            ctk.CTkLabel(info_frame, text=f"Status byte: 0x{dtc_record.status_byte:02X}", font=FONTS["mono_small"],
+                         text_color=COLORS["text_muted"]).pack(anchor="w", padx=12, pady=4)
+
+        # Freeze frame data (read from vehicle if connected)
+        ff_frame = ctk.CTkFrame(popup, fg_color=COLORS["bg_card"], corner_radius=8)
+        ff_frame.pack(fill="x", padx=16, pady=8)
+        ctk.CTkLabel(ff_frame, text=t("dtc_freeze_frame"), font=FONTS["small_bold"],
+                     text_color=COLORS["text_secondary"]).pack(anchor="w", padx=12, pady=(8, 4))
+
+        if self.app.obd_reader and self._check_connected():
+            # Read freeze frame PIDs
+            freeze_pids = [
+                (0x0C, "RPM", "tr/min"),
+                (0x0D, "Speed", "km/h"),
+                (0x05, "Coolant", "°C"),
+                (0x04, "Load", "%"),
+                (0x11, "Throttle", "%"),
+                (0x0F, "Intake Temp", "°C"),
+            ]
+            def _read_freeze():
+                results = []
+                for pid, name, unit in freeze_pids:
+                    val, _ = self.app.obd_reader.read_freeze_frame(pid) if hasattr(self.app.obd_reader, 'read_freeze_frame') else (None, "")
+                    if val is not None:
+                        results.append(f"  {name}: {val:.1f} {unit}")
+                if results:
+                    self.after(0, lambda r=results: self._show_freeze_data(ff_frame, r))
+                else:
+                    self.after(0, lambda: ctk.CTkLabel(ff_frame, text="  No freeze frame data available",
+                                                       font=FONTS["small"], text_color=COLORS["text_muted"]).pack(anchor="w", padx=12, pady=4))
+            threading.Thread(target=_read_freeze, daemon=True).start()
+        else:
+            ctk.CTkLabel(ff_frame, text="  Connect to vehicle to read freeze frame",
+                         font=FONTS["small"], text_color=COLORS["text_muted"]).pack(anchor="w", padx=12, pady=4)
+
+        # Close button
+        ctk.CTkButton(popup, text="Close", width=100, command=popup.destroy).pack(pady=12)
+
+    def _show_freeze_data(self, parent, results):
+        """Display freeze frame results."""
+        for line in results:
+            ctk.CTkLabel(parent, text=line, font=FONTS["mono_small"],
+                         text_color=COLORS["text_primary"]).pack(anchor="w", padx=12, pady=2)
+
     def _on_lang_change(self, lang=None):
         """Rebuild UI on language change."""
+        if not self.winfo_exists():
+            return
         for widget in self.winfo_children():
             widget.destroy()
         self._setup_ui()

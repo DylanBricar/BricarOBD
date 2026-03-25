@@ -122,13 +122,17 @@ class DevConsoleWindow(ctk.CTkToplevel):
 
     def _poll(self):
         """Poll the queue for new log messages (runs on main thread)."""
-        try:
-            while True:
-                msg = _log_queue.get_nowait()
-                if not self._paused:
+        if not self.winfo_exists():
+            return
+        if not self._paused:
+            try:
+                while True:
+                    msg = _log_queue.get_nowait()
                     self._insert(msg)
-        except queue.Empty:
-            pass
+            except queue.Empty:
+                pass
+            except Exception:
+                pass  # Widget destroyed mid-insert
         if self.winfo_exists():
             self.after(100, self._poll)
 

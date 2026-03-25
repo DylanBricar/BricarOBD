@@ -75,6 +75,8 @@ class ECUInfoFrame(ctk.CTkFrame):
         """Scan for responding ECUs in background thread."""
         if self.scanning:
             return
+        if not self.app.connection or not self.app.connection.is_connected():
+            return
 
         self.scanning = True
         self.scan_btn.configure(state="disabled")
@@ -189,25 +191,6 @@ class ECUInfoFrame(ctk.CTkFrame):
         # Store details frame for later updates
         ecu["details_frame"] = details_frame
 
-    def read_ecu_info(self, request_id, response_id):
-        """Read ECU information via UDS.
-
-        Args:
-            request_id: CAN request ID
-            response_id: CAN response ID
-        """
-        def _read():
-            try:
-                if self.app.uds_client:
-                    self.app.uds_client.set_target_ecu(request_id, response_id)
-                    info = self.app.uds_client.read_ecu_info()
-                    self.after(0, self._display_ecu_info, request_id, info)
-            except Exception as e:
-                self.after(0, self._update_status, f"{t('ecu_read_failed')}: {str(e)}")
-
-        thread = Thread(target=_read, daemon=True)
-        thread.start()
-
     def _show_ecu_infos(self, ecu_infos):
         """Display pre-fetched ECU infos."""
         for request_id, info in ecu_infos.items():
@@ -272,6 +255,8 @@ class ECUInfoFrame(ctk.CTkFrame):
 
     def _on_lang_change(self, lang=None):
         """Rebuild UI on language change."""
+        if not self.winfo_exists():
+            return
         for widget in self.winfo_children():
             widget.destroy()
         self._setup_ui()

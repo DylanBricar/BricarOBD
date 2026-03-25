@@ -45,10 +45,13 @@ class DTCManager:
         self.uds_client = uds_client
         self.safety = safety
 
-    def read_all_dtcs(self) -> List[DTCRecord]:
+    def read_all_dtcs(self, make: str = "") -> List[DTCRecord]:
         """Read DTCs from both OBD and UDS sources.
 
         Combines and deduplicates results.
+
+        Args:
+            make: Vehicle manufacturer (for ECU address selection)
 
         Returns:
             Sorted list of DTCRecord objects
@@ -95,7 +98,7 @@ class DTCManager:
                 # 4. Read DTCs from all ECUs directly (skip tester_present)
                 # Enable headers so we can see which ECU responds
                 custom_conn.send_command("ATH1")
-                make = getattr(conn, '_detected_make', '')
+                # Use make passed as parameter (from app.detected_make)
                 from obd_core.ecu_database import get_ecus_for_make
                 if make:
                     candidates = get_ecus_for_make(make)
@@ -254,17 +257,37 @@ class DTCManager:
         except Exception as e:
             logger.warning(f"Backup failed (proceeding with clear): {e}")
 
-        success = self.obd_reader._clear_dtcs()
-        if success:
-            self.safety.log_operation("ClearDTC", 0x04, "", "OBD Mode 04 success")
-            self.safety.record_dtc_clear()
-            return True, "DTCs cleared successfully"
+        # Clear via custom connection (python-obd blocks Mode 04)
+        conn = self.obd_reader.connection
+        if hasattr(conn, 'use_custom_connection'):
+            def _do_clear(custom_conn):
+                custom_conn.send_command("ATE0")
+                # Try OBD Mode 04 first
+                resp = custom_conn.send_obd("04", _internal=True)
+                if resp and ("44" in resp or "OK" in resp.upper()):
+                    return "obd"
+                # Fallback: UDS Service 0x14
+                resp = custom_conn.send_raw("14FFFFFF")
+                if resp and "54" in resp:
+                    return "uds"
+                return None
 
-        success = self.uds_client.clear_dtc(0xFFFFFF)
-        if success:
-            self.safety.log_operation("ClearDTC", 0x14, "", "UDS Service 0x14 success")
-            self.safety.record_dtc_clear()
-            return True, "DTCs cleared successfully via UDS"
+            result = conn.use_custom_connection(_do_clear)
+            if result == "obd":
+                self.safety.log_operation("ClearDTC", 0x04, "", "OBD Mode 04 success")
+                self.safety.record_dtc_clear()
+                return True, "DTCs cleared successfully"
+            elif result == "uds":
+                self.safety.log_operation("ClearDTC", 0x14, "", "UDS Service 0x14 success")
+                self.safety.record_dtc_clear()
+                return True, "DTCs cleared successfully via UDS"
+        else:
+            # Direct connection (no python-obd)
+            success = self.obd_reader._clear_dtcs()
+            if success:
+                self.safety.log_operation("ClearDTC", 0x04, "", "OBD Mode 04 success")
+                self.safety.record_dtc_clear()
+                return True, "DTCs cleared successfully"
 
         return False, "Failed to clear DTCs via OBD and UDS"
 

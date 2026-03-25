@@ -445,7 +445,7 @@ class ConnectionFrame(ctk.CTkFrame):
         self.app.update_status(True, self.app.connection.protocol_name, self.app.connection.port)
 
     def _apply_manual_vin(self):
-        """Apply a manually entered VIN to detect vehicle make."""
+        """Apply a manually entered VIN and trigger full vehicle detection."""
         import re
         raw = self.vin_entry.get().strip().upper()
         # Keep only valid VIN characters (A-Z 0-9, no I/O/Q), take first 17
@@ -461,6 +461,7 @@ class ConnectionFrame(ctk.CTkFrame):
         vehicle = decode_vin(vin)
         make = vehicle.get("make", "Unknown")
         country = vehicle.get("country", "Unknown")
+        year = vehicle.get("model_year", "")
 
         self.app.detected_vehicle = vehicle
         self.app.detected_make = make
@@ -469,6 +470,24 @@ class ConnectionFrame(ctk.CTkFrame):
             text_color=COLORS["success"]
         )
         self.log_message(t("conn_vin_applied", make=make, country=country))
+
+        # Trigger full vehicle setup (same as auto-detect) if connected
+        if self.app.connection and self.app.connection.is_connected():
+            import threading
+            def _post_vin_setup():
+                try:
+                    # Step 2: Discover supported PIDs (if not already done)
+                    if self.app.obd_reader and not self.app.obd_reader._supported_pids:
+                        self.after(0, self.log_message, t("conn_step_pids"))
+                        supported = self.app.obd_reader.discover_supported_pids()
+                        self.after(0, self.log_message, t("conn_step_pids_result", count=len(supported)))
+
+                    # Step 3: Update display
+                    self.after(0, self._update_vehicle_display, make, year)
+                except Exception as e:
+                    self.after(0, self.log_message, f"Post-VIN setup error: {e}")
+
+            threading.Thread(target=_post_vin_setup, daemon=True).start()
 
     def _on_lang_change(self, lang=None):
         """Update all text when language changes.
@@ -484,6 +503,7 @@ class ConnectionFrame(ctk.CTkFrame):
         self.connect_btn.configure(text=t("conn_connect"))
         self.disconnect_btn.configure(text=t("conn_disconnect"))
         self.status_card.winfo_children()[0].configure(text=t("conn_status"))
+        self.vin_apply_btn.configure(text=t("conn_vin_apply"))
         self.log_label.configure(text=t("conn_log"))
         # Update log card title
         if self.log_card.winfo_children():

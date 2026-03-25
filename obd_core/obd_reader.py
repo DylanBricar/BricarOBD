@@ -253,7 +253,7 @@ class OBDReader:
         Returns:
             Tuple of (value, unit) or (None, "") on error
         """
-        response = self.connection.send_obd("02", f"{pid:02X}")
+        response = self.connection.send_obd("02", f"{pid:02X}00")  # Frame #0
         parsed = self._parse_obd_response(response, "42")
 
         if not parsed:
