@@ -105,8 +105,7 @@ function NavItemsSection({
       {items.map((item) => {
         const isActive = activePage === item.id;
         const isDisabled =
-          (item.id === "connection" ? false : !isConnected) ||
-          (item.id === "advanced" ? !isConnected : false);
+          item.id === "connection" ? false : !isConnected;
 
         return (
           <NavItemButton

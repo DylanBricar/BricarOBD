@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { cn, clamp, mapRange } from "@/lib/utils";
+import { cn, clamp } from "@/lib/utils";
 
 interface CircularGaugeProps {
   value: number;
@@ -29,7 +29,7 @@ export default function CircularGauge({
   const normalizedValue = clamp(value, min, max);
   const percentage = ((normalizedValue - min) / (max - min)) * 100;
 
-  const { arcPath, valuePath, color, glowColor } = useMemo(() => {
+  const { arcPath, valuePath, color } = useMemo(() => {
     const startAngle = 135;
     const endAngle = 405;
     const totalArc = endAngle - startAngle;
@@ -59,30 +59,28 @@ export default function CircularGauge({
       : "";
 
     let col = "var(--obd-chart-cyan)"; // cyan
-    let glow = "var(--obd-glow-cyan)";
     if (dangerThreshold && normalizedValue >= dangerThreshold) {
       col = "var(--obd-chart-red)";
-      glow = "var(--obd-glow-red)";
     } else if (warningThreshold && normalizedValue >= warningThreshold) {
       col = "var(--obd-chart-amber)";
-      glow = "var(--obd-glow-amber)";
     }
 
-    return { arcPath: bgPath, valuePath: valPath, color: col, glowColor: glow };
+    return { arcPath: bgPath, valuePath: valPath, color: col };
   }, [size, percentage, normalizedValue, warningThreshold, dangerThreshold]);
 
   const displayValue = decimals > 0 ? normalizedValue.toFixed(decimals) : Math.round(normalizedValue);
+  const sanitizedLabel = label.replace(/\s+|[^a-z0-9-]/gi, "-").toLowerCase();
 
   return (
     <div className={cn("flex flex-col items-center", className)}>
       <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} className="drop-shadow-lg">
         {/* Background gradient */}
         <defs>
-          <linearGradient id={`gauge-bg-${label}`} x1="0%" y1="0%" x2="100%" y2="100%">
+          <linearGradient id={`gauge-bg-${sanitizedLabel}`} x1="0%" y1="0%" x2="100%" y2="100%">
             <stop offset="0%" stopColor="var(--obd-gauge-grad-start)" stopOpacity="0.3" />
             <stop offset="100%" stopColor="var(--obd-gauge-grad-end)" stopOpacity="0.5" />
           </linearGradient>
-          <filter id={`glow-${label}`}>
+          <filter id={`glow-${sanitizedLabel}`}>
             <feGaussianBlur stdDeviation="3" result="coloredBlur" />
             <feMerge>
               <feMergeNode in="coloredBlur" />
@@ -119,10 +117,9 @@ export default function CircularGauge({
             stroke={color}
             strokeWidth="8"
             strokeLinecap="round"
-            filter={`url(#glow-${label})`}
+            filter={`url(#glow-${sanitizedLabel})`}
             style={{
               transition: "stroke 0.3s ease, d 0.3s ease",
-              filter: `drop-shadow(0 0 8px ${glowColor})`,
             }}
           />
         )}

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { invoke } from "@tauri-apps/api/core";
 import { devInfo, devDebug } from "@/lib/devlog";
@@ -70,81 +70,42 @@ export interface WriteOperation {
   [key: string]: any;
 }
 
-// Demo data generator
-function generateDemoData(): Map<number, PidValue> {
-  const now = Date.now();
-  const baseRpm = 850 + Math.sin(now / 3000) * 200 + Math.random() * 50;
-  const baseSpeed = Math.max(0, Math.sin(now / 10000) * 60 + 30 + Math.random() * 5);
-  const baseCoolant = 85 + Math.sin(now / 20000) * 8 + Math.random() * 2;
-  const baseLoad = 25 + Math.sin(now / 5000) * 15 + Math.random() * 5;
-
-  const pids = new Map<number, PidValue>();
-
-  const addPid = (pid: number, name: string, value: number, unit: string, min: number, max: number) => {
-    const existing = demoDataCache.get(pid);
-    const history = existing ? [...existing.history.slice(-59), value] : [value];
-    pids.set(pid, { pid, name, value, unit, min, max, history, timestamp: now });
-  };
-
-  // PID names use neutral/technical labels (backend provides localized names in real mode)
-  addPid(0x0c, "RPM", baseRpm, "tr/min", 0, 8000);
-  addPid(0x0d, "Speed", baseSpeed, "km/h", 0, 250);
-  addPid(0x05, "Coolant Temp", baseCoolant, "°C", -40, 215);
-  addPid(0x04, "Engine Load", baseLoad, "%", 0, 100);
-  addPid(0x0f, "Intake Temp", 32 + Math.random() * 3, "°C", -40, 215);
-  addPid(0x10, "MAF Rate", 5.2 + Math.sin(now / 4000) * 2, "g/s", 0, 655);
-  addPid(0x11, "Throttle Pos", 15 + Math.sin(now / 2000) * 8, "%", 0, 100);
-  addPid(0x0b, "Intake Pressure", 95 + Math.sin(now / 3000) * 5, "kPa", 0, 255);
-  addPid(0x0e, "Timing Advance", 12 + Math.sin(now / 2500) * 4, "°", -64, 63.5);
-  addPid(0x2f, "Fuel Level", 65 - (now % 100000) / 100000 * 2, "%", 0, 100);
-  addPid(0x42, "Battery Voltage", 14.1 + Math.sin(now / 8000) * 0.3, "V", 0, 65.5);
-  addPid(0x46, "Ambient Temp", 22 + Math.random() * 1, "°C", -40, 215);
-  addPid(0x33, "Baro Pressure", 101 + Math.random() * 0.5, "kPa", 0, 255);
-  addPid(0x06, "STFT Bank 1", 2.3 + Math.random() * 1, "%", -100, 99.2);
-  addPid(0x07, "LTFT Bank 1", 4.1 + Math.random() * 0.5, "%", -100, 99.2);
-  addPid(0x03, "Fuel Status", 2, "", 0, 16);
-  addPid(0x1c, "OBD Standard", 6, "", 0, 255);
-  addPid(0x1f, "Run Time", Math.floor((now % 360000) / 1000), "s", 0, 65535);
-
-  return pids;
-}
-
-let demoDataCache = new Map<number, PidValue>();
-
-export const demoDtcs: DtcCode[] = [
+// Demo DTC keys — descriptions use i18n to avoid hardcoded English
+const DEMO_DTC_KEYS = [
   {
     code: "P0440",
-    description: "Evaporative Emission Control System Malfunction",
-    status: "active",
+    descKey: "demo.dtc.P0440",
+    status: "active" as const,
     source: "OBD Mode 03",
-    repairTips: "Check fuel cap, EVAP hoses and purge valve.",
-    causes: [
-      "Loose or missing fuel filler cap",
-      "Damaged EVAP hoses or connections",
-      "Faulty purge valve",
-      "EVAP canister leak",
-      "Fuel pump seal leaking"
-    ],
-    quickCheck: "Start with the fuel cap. Many vehicles throw this code simply due to a loose cap. If tight, inspect hoses for cracks.",
+    tipsKey: "demo.dtc.P0440.tips",
+    causeKeys: ["demo.dtc.P0440.cause1", "demo.dtc.P0440.cause2", "demo.dtc.P0440.cause3", "demo.dtc.P0440.cause4", "demo.dtc.P0440.cause5"],
+    quickCheckKey: "demo.dtc.P0440.quickCheck",
     difficulty: 2,
   },
   {
     code: "P0500",
-    description: "Vehicle Speed Sensor Malfunction",
-    status: "pending",
+    descKey: "demo.dtc.P0500",
+    status: "pending" as const,
     source: "OBD Mode 07",
-    repairTips: "Inspect VSS sensor, wiring and connectors.",
-    causes: [
-      "Defective vehicle speed sensor",
-      "Loose or corroded connectors",
-      "Broken wiring harness",
-      "Transmission issue",
-      "ABS sensor malfunction"
-    ],
-    quickCheck: "Check the VSS sensor located on the transmission. Verify wiring is secure and clean corrosion if needed.",
+    tipsKey: "demo.dtc.P0500.tips",
+    causeKeys: ["demo.dtc.P0500.cause1", "demo.dtc.P0500.cause2", "demo.dtc.P0500.cause3", "demo.dtc.P0500.cause4", "demo.dtc.P0500.cause5"],
+    quickCheckKey: "demo.dtc.P0500.quickCheck",
     difficulty: 2,
   },
 ];
+
+function buildDemoDtcs(t: (key: string) => string): DtcCode[] {
+  return DEMO_DTC_KEYS.map((d) => ({
+    code: d.code,
+    description: t(d.descKey),
+    status: d.status,
+    source: d.source,
+    repairTips: t(d.tipsKey),
+    causes: d.causeKeys.map((k) => t(k)),
+    quickCheck: t(d.quickCheckKey),
+    difficulty: d.difficulty,
+  }));
+}
 
 const demoMonitors: MonitorStatus[] = [
   { nameKey: "monitors.misfire", available: true, complete: true, descriptionKey: "monitors.misfireDesc", specificationKey: "monitors.misfireSpec" },
@@ -243,7 +204,30 @@ export function useVehicleData() {
   const intervalRef = useRef<number | null>(null);
   const pollingModeRef = useRef<"demo" | "real">("demo");
   const manufacturerRef = useRef<string>("");
+  const isLoadingMode06Ref = useRef(false);
+  const isLoadingFreezeFrameRef = useRef(false);
   const { i18n } = useTranslation();
+
+  const { t } = useTranslation();
+
+  const demoDtcs = useMemo(() => buildDemoDtcs(t), [t]);
+
+  const setDtcsWithHistory = useCallback((newDtcs: DtcCode[]) => {
+    devInfo("ui", "DTCs updated: " + newDtcs.length);
+    setDtcs(newDtcs);
+    if (newDtcs.length > 0) {
+      setDtcHistory((prev) => {
+        const now = Date.now();
+        const codes = new Set(prev.map((h) => h.code));
+        const newEntries = newDtcs
+          .filter((d) => !codes.has(d.code))
+          .map((d) => ({ ...d, seenAt: now }));
+        const updated = [...prev, ...newEntries].slice(-500);
+        try { localStorage.setItem("bricarobd_dtc_history", JSON.stringify(updated)); } catch {}
+        return updated;
+      });
+    }
+  }, []);
 
   const startDemoPolling = useCallback((intervalMs: number = 500) => {
     devInfo("ui", "Demo polling @ " + intervalMs + " ms");
@@ -253,7 +237,7 @@ export function useVehicleData() {
     pollingModeRef.current = "demo";
     manufacturerRef.current = "";
     setIsPolling(true);
-    setDtcs(demoDtcs);
+    setDtcsWithHistory(demoDtcs);
     setEcus(demoEcus);
     setMonitors(demoMonitors);
 
@@ -261,22 +245,19 @@ export function useVehicleData() {
     setDtcHistory((prev) => {
       const existing = new Set(prev.map((h) => h.code));
       const pastDtcs: DtcHistoryEntry[] = [
-        // P0440 was seen 3 days ago (same code as current active — will be filtered out of history display)
         ...(!existing.has("P0440") ? [{
-          code: "P0440", description: "Evaporative Emission Control System Malfunction",
+          code: "P0440", description: t("demo.dtc.P0440"),
           status: "active" as const, source: "OBD Mode 03", seenAt: Date.now() - 3 * 86400000,
         }] : []),
-        // P0171 was seen 2 weeks ago and is now resolved
         ...(!existing.has("P0171") ? [{
-          code: "P0171", description: "System Too Lean (Bank 1)",
+          code: "P0171", description: t("demo.dtc.P0171"),
           status: "active" as const, source: "OBD Mode 03", seenAt: Date.now() - 14 * 86400000,
-          repairTips: "Check MAF sensor, vacuum leaks, fuel pressure",
+          repairTips: t("demo.dtc.P0171.tips"),
         }] : []),
-        // P0300 was seen 1 month ago and is now resolved
         ...(!existing.has("P0300") ? [{
-          code: "P0300", description: "Random/Multiple Cylinder Misfire Detected",
+          code: "P0300", description: t("demo.dtc.P0300"),
           status: "active" as const, source: "OBD Mode 03", seenAt: Date.now() - 30 * 86400000,
-          repairTips: "Check spark plugs, ignition coils, fuel injectors",
+          repairTips: t("demo.dtc.P0300.tips"),
         }] : []),
       ];
       return [...prev, ...pastDtcs];
@@ -295,7 +276,7 @@ export function useVehicleData() {
 
     pollFn(); // First poll immediately
     intervalRef.current = window.setInterval(pollFn, intervalMs);
-  }, []);
+  }, [setDtcsWithHistory, demoDtcs, t]);
 
   const startRealPolling = useCallback((intervalMs: number = 1000, manufacturer: string = "", skipEcuScan: boolean = false) => {
     devInfo("ui", "Real polling @ " + intervalMs + " ms for " + manufacturer);
@@ -330,7 +311,8 @@ export function useVehicleData() {
   }, []);
 
   const loadMode06Results = useCallback(async () => {
-    if (isLoadingMode06) return;
+    if (isLoadingMode06Ref.current) return;
+    isLoadingMode06Ref.current = true;
     setIsLoadingMode06(true);
     try {
       const results = await invoke<Mode06Result[]>("get_mode06_results", { lang: i18n.language });
@@ -338,12 +320,14 @@ export function useVehicleData() {
     } catch (e) {
       devInfo("ui", "Mode 06 error: " + String(e));
     } finally {
+      isLoadingMode06Ref.current = false;
       setIsLoadingMode06(false);
     }
-  }, [isLoadingMode06, i18n.language]);
+  }, [i18n.language]);
 
   const loadFreezeFrame = useCallback(async () => {
-    if (isLoadingFreezeFrame) return;
+    if (isLoadingFreezeFrameRef.current) return;
+    isLoadingFreezeFrameRef.current = true;
     setIsLoadingFreezeFrame(true);
     try {
       const data = await invoke<FreezeFrameData[]>("get_freeze_frame", { lang: i18n.language });
@@ -351,9 +335,19 @@ export function useVehicleData() {
     } catch (e) {
       devInfo("ui", "Freeze frame error: " + String(e));
     } finally {
+      isLoadingFreezeFrameRef.current = false;
       setIsLoadingFreezeFrame(false);
     }
-  }, [isLoadingFreezeFrame, i18n.language]);
+  }, [i18n.language]);
+
+  const pausePolling = useCallback(() => {
+    devInfo("ui", "Polling paused");
+    setIsPolling(false);
+    if (intervalRef.current) {
+      clearInterval(intervalRef.current);
+      intervalRef.current = null;
+    }
+  }, []);
 
   const stopPolling = useCallback(() => {
     devInfo("ui", "Polling stopped — clearing all vehicle data");
@@ -375,50 +369,44 @@ export function useVehicleData() {
 
   const changeRefreshRate = useCallback((intervalMs: number) => {
     devInfo("ui", "Refresh rate: " + intervalMs + " ms");
+    // Always clear previous interval first to prevent stacking
     if (intervalRef.current) {
       clearInterval(intervalRef.current);
+      intervalRef.current = null;
+    }
 
-      if (pollingModeRef.current === "real") {
-        const pollFn = createRealPollFn(manufacturerRef.current, setPidData);
-        intervalRef.current = window.setInterval(pollFn, intervalMs);
-      } else {
-        const pollFn = async () => {
-          try {
-            const data = await invoke<PidValue[]>("get_pid_data");
-            const map = new Map<number, PidValue>();
-            data.forEach(p => map.set(p.pid, p));
-            setPidData(map);
-          } catch (e) {
-            devDebug("ui", `Demo poll error: ${String(e)}`);
-          }
-        };
-        intervalRef.current = window.setInterval(pollFn, intervalMs);
-      }
+    if (pollingModeRef.current !== "demo" && pollingModeRef.current !== "real") return;
+
+    if (pollingModeRef.current === "real") {
+      const pollFn = createRealPollFn(manufacturerRef.current, setPidData);
+      intervalRef.current = window.setInterval(pollFn, intervalMs);
+    } else {
+      const pollFn = async () => {
+        try {
+          const data = await invoke<PidValue[]>("get_pid_data");
+          const map = new Map<number, PidValue>();
+          data.forEach(p => map.set(p.pid, p));
+          setPidData(map);
+        } catch (e) {
+          devDebug("ui", `Demo poll error: ${String(e)}`);
+        }
+      };
+      intervalRef.current = window.setInterval(pollFn, intervalMs);
     }
   }, []);
+
+  useEffect(() => {
+    isLoadingMode06Ref.current = isLoadingMode06;
+  }, [isLoadingMode06]);
+
+  useEffect(() => {
+    isLoadingFreezeFrameRef.current = isLoadingFreezeFrame;
+  }, [isLoadingFreezeFrame]);
 
   useEffect(() => {
     return () => {
       if (intervalRef.current) clearInterval(intervalRef.current);
     };
-  }, []);
-
-  const setDtcsWithHistory = useCallback((newDtcs: DtcCode[]) => {
-    devInfo("ui", "DTCs updated: " + newDtcs.length);
-    setDtcs(newDtcs);
-    if (newDtcs.length > 0) {
-      setDtcHistory((prev) => {
-        const now = Date.now();
-        const codes = new Set(prev.map((h) => h.code));
-        const newEntries = newDtcs
-          .filter((d) => !codes.has(d.code))
-          .map((d) => ({ ...d, seenAt: now }));
-        const updated = [...prev, ...newEntries].slice(-500);
-        // Persist to localStorage
-        try { localStorage.setItem("bricarobd_dtc_history", JSON.stringify(updated)); } catch {}
-        return updated;
-      });
-    }
   }, []);
 
   const clearAllDtcs = useCallback(() => {
@@ -452,6 +440,7 @@ export function useVehicleData() {
     loadMonitors,
     loadMode06Results,
     loadFreezeFrame,
+    pausePolling,
     stopPolling,
     changeRefreshRate,
     setDtcs: setDtcsWithHistory,

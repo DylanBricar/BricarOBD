@@ -239,6 +239,11 @@ fn is_valid_ecu_response(response: &str) -> bool {
 /// Read DID from ECU — UDS Service 0x22 with improved error handling
 #[command]
 pub fn read_did(ecu_address: String, did: String) -> Result<String, String> {
+    // Validate DID format: 1-4 hex characters only (prevents injection attacks)
+    if did.len() > 4 || did.is_empty() || !did.chars().all(|c| c.is_ascii_hexdigit()) {
+        return Err("Invalid DID format: must be 1-4 hex characters".to_string());
+    }
+
     let cmd = format!("22{}", did.replace(" ", ""));
     let risk = SafetyGuard::check_command(&format!("22 {}", did));
     dev_log::log_info("ecu", &format!("Read DID safety check: {:?}", risk));
@@ -269,7 +274,6 @@ pub fn read_did(ecu_address: String, did: String) -> Result<String, String> {
 
     match result {
         Ok(r) => {
-            dev_log::log_rx(&cmd, &r);
             if r.contains("NO DATA") {
                 Err(format!("DID {} not supported by ECU {}", did, ecu_address))
             } else if r.contains("7F") {

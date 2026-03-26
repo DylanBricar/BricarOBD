@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useCallback, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import {
   AlertTriangle,
@@ -14,10 +14,9 @@ import {
   Lock,
   Wrench,
   Youtube,
-  X,
 } from "lucide-react";
-import { invoke } from "@tauri-apps/api/core";
 import type { DtcCode, DtcHistoryEntry, Mode06Result, FreezeFrameData } from "@/stores/vehicle";
+import { makeCSVFilename, saveCSVFile } from "@/lib/csv";
 import type { VehicleInfo } from "@/stores/connection";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/useToast";
@@ -36,6 +35,8 @@ const statusBadge = {
   pending: "badge-warning",
   permanent: "badge-info",
 };
+
+const TAB_OPTIONS = ["dtc", "mode06", "freeze"] as const;
 
 interface DTCProps {
   dtcs: DtcCode[];
@@ -75,7 +76,7 @@ export default function DTC({
   const [searchQuery, setSearchQuery] = useState("");
   const { toast, showToast, dismissToast } = useToast();
 
-  const handleExportDtcs = async () => {
+  const handleExportDtcs = useCallback(async () => {
     if (dtcs.length === 0 && dtcHistory.length === 0) {
       showToast(t("liveData.noExportData"), "error");
       return;
@@ -93,64 +94,70 @@ export default function DTC({
       });
     }
     const csv = rows.join("\n");
-    const now = new Date();
-    const filename = `bricarobd_dtc_${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, "0")}${String(now.getDate()).padStart(2, "0")}_${String(now.getHours()).padStart(2, "0")}${String(now.getMinutes()).padStart(2, "0")}.csv`;
+    const filename = makeCSVFilename("bricarobd_dtc");
 
     try {
-      const path = await invoke<string>("save_csv_file", { filename, content: csv });
+      const path = await saveCSVFile(csv, filename);
       showToast(`${t("liveData.exportSuccess")} : ${path}`);
     } catch (e) {
       showToast(`${t("common.error")}: ${e}`, "error");
     }
-  };
+  }, [dtcs, dtcHistory, t, showToast]);
 
-  // Filter current DTCs
-  const filteredDtcs = dtcs.filter((d) =>
-    d.code.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    d.description.toLowerCase().includes(searchQuery.toLowerCase())
+  const filteredDtcs = useMemo(
+    () => dtcs.filter((d) =>
+      d.code.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      d.description.toLowerCase().includes(searchQuery.toLowerCase())
+    ),
+    [dtcs, searchQuery]
   );
 
-  // Filter history — only show codes NOT currently active/pending/permanent
-  const activeCodes = new Set(dtcs.map((d) => d.code));
-  const uniqueHistory = Array.from(
-    new Map(dtcHistory.map((h) => [h.code, h])).values()
-  )
-    .filter((h) => !activeCodes.has(h.code)) // Exclude codes still active
-    .sort((a, b) => b.seenAt - a.seenAt);
+  const filteredHistory = useMemo(() => {
+    const activeCodes = new Set(dtcs.map((d) => d.code));
+    const uniqueHistory = Array.from(
+      new Map(dtcHistory.map((h) => [h.code, h])).values()
+    )
+      .filter((h) => !activeCodes.has(h.code))
+      .sort((a, b) => b.seenAt - a.seenAt);
 
-  const filteredHistory = searchQuery
-    ? uniqueHistory.filter((h) =>
-        h.code.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        h.description.toLowerCase().includes(searchQuery.toLowerCase())
-      )
-    : uniqueHistory;
+    return searchQuery
+      ? uniqueHistory.filter((h) =>
+          h.code.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          h.description.toLowerCase().includes(searchQuery.toLowerCase())
+        )
+      : uniqueHistory;
+  }, [dtcs, dtcHistory, searchQuery]);
 
-  // Selected — use prefix to distinguish active vs history
-  const selectedData = selectedDtc?.startsWith("hist-")
-    ? dtcHistory.find((h) => h.code === selectedDtc.replace("hist-", ""))
-    : filteredDtcs.find((d) => d.code === selectedDtc);
+  const selectedData = useMemo(() => {
+    if (!selectedDtc) return null;
+    if (selectedDtc.startsWith("hist-")) {
+      return dtcHistory.find((h) => h.code === selectedDtc.replace("hist-", ""));
+    }
+    return filteredDtcs.find((d) => d.code === selectedDtc);
+  }, [selectedDtc, dtcHistory, filteredDtcs]);
 
-  const openExternal = (url: string) => {
+  const openExternal = useCallback((url: string) => {
     const a = document.createElement("a");
     a.href = url;
     a.target = "_blank";
     a.rel = "noopener noreferrer";
     document.body.appendChild(a);
     a.click();
-    document.body.removeChild(a);
-  };
+    // Remove immediately in next microtask to prevent orphaned DOM elements
+    requestAnimationFrame(() => {
+      if (a.parentNode) a.parentNode.removeChild(a);
+    });
+  }, []);
 
-  const buildSearchQuery = (code: string, platform: "google" | "youtube") => {
+  const buildSearchQuery = useCallback((code: string, platform: "google" | "youtube") => {
     const isFr = i18n.language === "fr";
     const parts = [code];
 
-    // Add vehicle info if available
     if (vehicle) {
       if (vehicle.make) parts.push(vehicle.make);
       if (vehicle.model) parts.push(vehicle.model);
     }
 
-    // Add localized keywords
     if (isFr) {
       parts.push("diagnostic", "réparation");
     } else {
@@ -162,7 +169,7 @@ export default function DTC({
       return `https://www.google.com/search?q=${query}`;
     }
     return `https://www.youtube.com/results?search_query=${query}`;
-  };
+  }, [i18n.language, vehicle]);
 
   return (
     <div className="p-6 space-y-4 animate-slide-in h-full flex flex-col">
@@ -202,7 +209,7 @@ export default function DTC({
 
       {/* Tab bar */}
       <div className="flex gap-1 p-1 rounded-lg bg-white/5 w-fit">
-        {(["dtc", "mode06", "freeze"] as const).map(tab => (
+        {TAB_OPTIONS.map(tab => (
           <button
             key={tab}
             onClick={() => setActiveTab(tab)}

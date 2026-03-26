@@ -210,6 +210,7 @@ dependencies = [
  "btleplug",
  "chrono",
  "flate2",
+ "futures",
  "rusqlite",
  "serde",
  "serde_json",

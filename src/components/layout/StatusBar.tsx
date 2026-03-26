@@ -85,7 +85,7 @@ export default function StatusBar({ status, vehicle }: StatusBarProps) {
 
       {/* Right side */}
       <span className="text-obd-text-muted">
-        BricarOBD v2.0
+        BricarOBD v2.0.3
       </span>
     </footer>
   );

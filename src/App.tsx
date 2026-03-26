@@ -1,23 +1,24 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, Suspense, lazy } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { useTranslation } from "react-i18next";
 import { cn } from "@/lib/utils";
 import ErrorBoundary from "@/components/ErrorBoundary";
 import Sidebar from "@/components/layout/Sidebar";
 import StatusBar from "@/components/layout/StatusBar";
-import Connection from "@/pages/Connection";
-import Dashboard from "@/pages/Dashboard";
-import LiveData from "@/pages/LiveData";
-import DTC from "@/pages/DTC";
-import ECUInfo from "@/pages/ECUInfo";
-import Monitors from "@/pages/Monitors";
-import History from "@/pages/History";
-import Advanced from "@/pages/Advanced";
 import { useConnectionStore } from "@/stores/connection";
 import DevConsole from "@/components/DevConsole";
 import { useVehicleData } from "@/stores/vehicle";
 import type { DtcCode, EcuInfo, MonitorStatus, VehicleOperation, WriteOperation } from "@/stores/vehicle";
-import { devInfo, devDebug } from "@/lib/devlog";
+import { devInfo, devError } from "@/lib/devlog";
+
+const Connection = lazy(() => import("@/pages/Connection"));
+const Dashboard = lazy(() => import("@/pages/Dashboard"));
+const LiveData = lazy(() => import("@/pages/LiveData"));
+const DTC = lazy(() => import("@/pages/DTC"));
+const ECUInfo = lazy(() => import("@/pages/ECUInfo"));
+const Monitors = lazy(() => import("@/pages/Monitors"));
+const History = lazy(() => import("@/pages/History"));
+const Advanced = lazy(() => import("@/pages/Advanced"));
 
 export default function App() {
   const { t, i18n } = useTranslation();
@@ -27,6 +28,7 @@ export default function App() {
   const [isClearing, setIsClearing] = useState(false);
   const [toastMessage, setToastMessage] = useState<{ message: string; type: "success" | "error" } | null>(null);
   const [showDevConsole, setShowDevConsole] = useState(false);
+  const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const connection = useConnectionStore();
   const vehicle = useVehicleData();
 
@@ -49,10 +51,29 @@ export default function App() {
       .catch(() => {});
   }, []);
 
+  // Load settings on mount
+  useEffect(() => {
+    invoke<{ language: string; defaultBaudRate: number }>("get_settings")
+      .then(settings => {
+        if (settings.language && settings.language !== i18n.language) {
+          i18n.changeLanguage(settings.language);
+        }
+        if (settings.defaultBaudRate) {
+          connection.setBaudRate(settings.defaultBaudRate);
+        }
+      })
+      .catch(() => {});
+  }, []);
+
   // Sync language with Rust backend
   useEffect(() => {
     invoke("set_language", { lang: i18n.language }).catch(() => {});
   }, [i18n.language]);
+
+  // Persist settings when language or baud rate changes
+  useEffect(() => {
+    invoke("save_settings", { settings: { language: i18n.language, defaultBaudRate: connection.baudRate } }).catch(() => {});
+  }, [i18n.language, connection.baudRate]);
 
   // Start polling + load DTCs + load vehicle operations when connected
   useEffect(() => {
@@ -103,16 +124,11 @@ export default function App() {
     }
   }, [connection.status]);
 
-  // Navigate to dashboard on connection
+  // Navigate based on connection status
   useEffect(() => {
     if (isConnected && activePage === "connection") {
       setActivePage("dashboard");
-    }
-  }, [isConnected]);
-
-  // Navigate to connection on disconnect
-  useEffect(() => {
-    if (!isConnected && activePage !== "connection") {
+    } else if (!isConnected && activePage !== "connection") {
       // Auto-save session on disconnect
       if (connection.vehicle) {
         invoke("save_session_cmd", {
@@ -127,6 +143,15 @@ export default function App() {
     }
   }, [isConnected]);
 
+  // Cleanup toast timer on unmount
+  useEffect(() => {
+    return () => {
+      if (toastTimerRef.current) {
+        clearTimeout(toastTimerRef.current);
+      }
+    };
+  }, []);
+
   const handleNavigate = (page: string) => {
     devInfo("ui", "Navigate: " + page);
     setActivePage(page);
@@ -138,7 +163,7 @@ export default function App() {
       const codes = await invoke<DtcCode[]>("read_all_dtcs", { lang: i18n.language });
       vehicle.setDtcs(codes);
     } catch (e) {
-      console.error("Read DTCs failed:", e);
+      devError("ui", "Read DTCs failed: " + String(e));
     }
     setIsReading(false);
   };
@@ -146,99 +171,155 @@ export default function App() {
   const handleClearAll = async () => {
     setIsClearing(true);
     try {
-      await invoke("clear_dtcs");
+      await invoke("clear_dtcs", { confirmed: true });
       vehicle.clearAllDtcs();
       setToastMessage({ message: t("dtc.clearSuccess"), type: "success" });
     } catch (e) {
       setToastMessage({ message: String(e), type: "error" });
     }
     setIsClearing(false);
-    setTimeout(() => setToastMessage(null), 5000);
+    if (toastTimerRef.current) {
+      clearTimeout(toastTimerRef.current);
+    }
+    toastTimerRef.current = setTimeout(() => setToastMessage(null), 5000);
   };
+
+  const LoadingFallback = () => (
+    <div className="flex items-center justify-center h-full">
+      <div className="text-center">
+        <div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-obd-border border-t-obd-accent"></div>
+        <p className="mt-4 text-obd-text/60">{t("common.loading")}</p>
+      </div>
+    </div>
+  );
 
   const renderPage = () => {
     switch (activePage) {
       case "connection":
         return (
-          <Connection
-            status={connection.status}
-            port={connection.port}
-            baudRate={connection.baudRate}
-            vehicle={connection.vehicle}
-            availablePorts={connection.availablePorts}
-            onConnect={connection.connect}
-            onDisconnect={connection.disconnect}
-            onDemoConnect={connection.connectDemo}
-            onPortChange={connection.setPort}
-            onBaudRateChange={connection.setBaudRate}
-            onVehicleUpdate={(info) => {
-              connection.updateVehicle(info);
-              const make = info.make || "";
-              if (connection.status === "connected") {
-                vehicle.startRealPolling(1000, make, true);
-                invoke<DtcCode[]>("read_all_dtcs", { lang: i18n.language })
-                  .then(codes => vehicle.setDtcs(codes)).catch(() => {});
-              }
-              invoke<VehicleOperation[]>("get_vehicle_operations", { vehicle: make, limit: 500 })
-                .then(ops => vehicle.setVehicleOps(ops)).catch(() => {});
-              invoke<WriteOperation[]>("get_write_operations", { ecuName: "%", vehicle: make })
-                .then(ops => vehicle.setVehicleWriteOps(ops)).catch(() => {});
-            }}
-          />
+          <ErrorBoundary>
+            <Suspense fallback={<LoadingFallback />}>
+              <Connection
+                status={connection.status}
+                port={connection.port}
+                baudRate={connection.baudRate}
+                vehicle={connection.vehicle}
+                availablePorts={connection.availablePorts}
+                onConnect={connection.connect}
+                onDisconnect={connection.disconnect}
+                onDemoConnect={connection.connectDemo}
+                onConnectWifi={connection.connectWifi}
+                onPortChange={connection.setPort}
+                onBaudRateChange={connection.setBaudRate}
+                onVehicleUpdate={(info) => {
+                  connection.updateVehicle(info);
+                  const make = info.make || "";
+                  if (connection.status === "connected") {
+                    vehicle.startRealPolling(1000, make, true);
+                    invoke<DtcCode[]>("read_all_dtcs", { lang: i18n.language })
+                      .then(codes => vehicle.setDtcs(codes)).catch(() => {});
+                  }
+                  invoke<VehicleOperation[]>("get_vehicle_operations", { vehicle: make, limit: 500 })
+                    .then(ops => vehicle.setVehicleOps(ops)).catch(() => {});
+                  invoke<WriteOperation[]>("get_write_operations", { ecuName: "%", vehicle: make })
+                    .then(ops => vehicle.setVehicleWriteOps(ops)).catch(() => {});
+                }}
+              />
+            </Suspense>
+          </ErrorBoundary>
         );
       case "dashboard":
-        return <Dashboard pidData={vehicle.pidData} />;
+        return (
+          <ErrorBoundary>
+            <Suspense fallback={<LoadingFallback />}>
+              <Dashboard pidData={vehicle.pidData} />
+            </Suspense>
+          </ErrorBoundary>
+        );
       case "liveData":
         return (
-          <LiveData
-            pidData={vehicle.pidData}
-            isPolling={vehicle.isPolling}
-            onStartPolling={(ms: number) => {
-              if (connection.status === "connected") {
-                vehicle.startRealPolling(ms, connection.vehicle?.make || "");
-              } else {
-                vehicle.startDemoPolling(ms);
-              }
-            }}
-            onStopPolling={vehicle.stopPolling}
-            onChangeRefreshRate={vehicle.changeRefreshRate}
-          />
+          <ErrorBoundary>
+            <Suspense fallback={<LoadingFallback />}>
+              <LiveData
+                pidData={vehicle.pidData}
+                isPolling={vehicle.isPolling}
+                onStartPolling={(ms: number) => {
+                  if (connection.status === "connected") {
+                    vehicle.startRealPolling(ms, connection.vehicle?.make || "");
+                  } else {
+                    vehicle.startDemoPolling(ms);
+                  }
+                }}
+                onPausePolling={vehicle.pausePolling}
+                onStopPolling={vehicle.stopPolling}
+                onChangeRefreshRate={vehicle.changeRefreshRate}
+              />
+            </Suspense>
+          </ErrorBoundary>
         );
       case "dtc":
         return (
-          <DTC
-            dtcs={vehicle.dtcs}
-            dtcHistory={vehicle.dtcHistory}
-            vehicle={connection.vehicle}
-            onReadAll={handleReadAll}
-            onClearAll={handleClearAll}
-            isReading={isReading}
-            isClearing={isClearing}
-            mode06Results={vehicle.mode06Results}
-            isLoadingMode06={vehicle.isLoadingMode06}
-            onLoadMode06={vehicle.loadMode06Results}
-            freezeFrame={vehicle.freezeFrame}
-            isLoadingFreezeFrame={vehicle.isLoadingFreezeFrame}
-            onLoadFreezeFrame={vehicle.loadFreezeFrame}
-          />
+          <ErrorBoundary>
+            <Suspense fallback={<LoadingFallback />}>
+              <DTC
+                dtcs={vehicle.dtcs}
+                dtcHistory={vehicle.dtcHistory}
+                vehicle={connection.vehicle}
+                onReadAll={handleReadAll}
+                onClearAll={handleClearAll}
+                isReading={isReading}
+                isClearing={isClearing}
+                mode06Results={vehicle.mode06Results}
+                isLoadingMode06={vehicle.isLoadingMode06}
+                onLoadMode06={vehicle.loadMode06Results}
+                freezeFrame={vehicle.freezeFrame}
+                isLoadingFreezeFrame={vehicle.isLoadingFreezeFrame}
+                onLoadFreezeFrame={vehicle.loadFreezeFrame}
+              />
+            </Suspense>
+          </ErrorBoundary>
         );
       case "ecuInfo":
-        return <ECUInfo ecus={vehicle.ecus} isScanning={isEcuScanning} onScan={async () => {
-          setIsEcuScanning(true);
-          try {
-            const ecus = await invoke<EcuInfo[]>("scan_ecus");
-            vehicle.setEcus(ecus);
-          } catch (e) {
-            devInfo("ui", "ECU scan error: " + String(e));
-          }
-          setIsEcuScanning(false);
-        }} />;
+        return (
+          <ErrorBoundary>
+            <Suspense fallback={<LoadingFallback />}>
+              <ECUInfo ecus={vehicle.ecus} isScanning={isEcuScanning} onScan={async () => {
+                setIsEcuScanning(true);
+                try {
+                  const ecus = await invoke<EcuInfo[]>("scan_ecus");
+                  vehicle.setEcus(ecus);
+                } catch (e) {
+                  devInfo("ui", "ECU scan error: " + String(e));
+                }
+                setIsEcuScanning(false);
+              }} />
+            </Suspense>
+          </ErrorBoundary>
+        );
       case "monitors":
-        return <Monitors monitors={vehicle.monitors} />;
+        return (
+          <ErrorBoundary>
+            <Suspense fallback={<LoadingFallback />}>
+              <Monitors monitors={vehicle.monitors} />
+            </Suspense>
+          </ErrorBoundary>
+        );
       case "history":
-        return <History />;
+        return (
+          <ErrorBoundary>
+            <Suspense fallback={<LoadingFallback />}>
+              <History />
+            </Suspense>
+          </ErrorBoundary>
+        );
       case "advanced":
-        return <Advanced />;
+        return (
+          <ErrorBoundary>
+            <Suspense fallback={<LoadingFallback />}>
+              <Advanced />
+            </Suspense>
+          </ErrorBoundary>
+        );
       default:
         return null;
     }

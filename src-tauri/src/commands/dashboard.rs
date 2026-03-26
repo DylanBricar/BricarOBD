@@ -559,18 +559,3 @@ pub fn get_battery_voltage() -> Option<f64> {
     }).unwrap_or(None)
 }
 
-/// Start CSV recording (returns filename)
-#[command]
-pub fn start_recording() -> Result<String, String> {
-    let timestamp = chrono::Local::now().format("%Y%m%d_%H%M%S");
-    let filename = format!("recording_{}.csv", timestamp);
-    dev_log::log_info("dashboard", &format!("CSV recording started: {}", filename));
-    Ok(filename)
-}
-
-/// Stop CSV recording
-#[command]
-pub fn stop_recording() -> Result<(), String> {
-    dev_log::log_info("dashboard", "CSV recording stopped");
-    Ok(())
-}

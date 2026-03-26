@@ -5,6 +5,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/useToast";
 import { Toast } from "@/components/Toast";
+import { makeCSVFilename } from "@/lib/csv";
 
 interface Session {
   id: string;
@@ -34,21 +35,24 @@ export default function History() {
 
   // Load sessions from database on mount
   useEffect(() => {
+    let cancelled = false;
     setIsLoading(true);
     invoke<SessionData[]>("get_sessions_cmd")
       .then((data) => {
+        if (cancelled) return;
         const mapped = data.map((s) => ({
           id: s.id.toString(),
           date: s.timestamp,
           vehicle: `${s.make} ${s.model}`,
           dtcCount: s.dtc_count,
           notes: s.notes,
-          dtcCodes: s.notes.split(", ").filter(Boolean),
+          dtcCodes: s.notes.split(", ").filter(c => /^[PCBU]\d{4}$/i.test(c.trim())),
         }));
         setSessions(mapped);
       })
-      .catch(() => setSessions([]))
-      .finally(() => setIsLoading(false));
+      .catch(() => { if (!cancelled) setSessions([]); })
+      .finally(() => { if (!cancelled) setIsLoading(false); });
+    return () => { cancelled = true; };
   }, []);
 
   const selected = sessions.find((s) => s.id === selectedId);
@@ -63,8 +67,7 @@ export default function History() {
       rows.push(`${s.date},${s.vehicle},${s.dtcCount},"${(s.dtcCodes || []).join("; ")}","${s.notes}"`);
     });
     const csv = rows.join("\n");
-    const now = new Date();
-    const filename = `bricarobd_sessions_${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, "0")}${String(now.getDate()).padStart(2, "0")}.csv`;
+    const filename = makeCSVFilename("bricarobd_sessions");
     try {
       const path = await invoke<string>("save_csv_file", { filename, content: csv });
       showToast(`${t("liveData.exportSuccess")} : ${path}`);
@@ -77,7 +80,7 @@ export default function History() {
     const rows = ["Date,Vehicle,DTC Count,DTC Codes,Notes"];
     rows.push(`${session.date},${session.vehicle},${session.dtcCount},"${(session.dtcCodes || []).join("; ")}","${session.notes}"`);
     const csv = rows.join("\n");
-    const filename = `bricarobd_session_${session.id}_${session.date.replace(/[:\s]/g, "_")}.csv`;
+    const filename = makeCSVFilename(`bricarobd_session_${session.id}`);
     try {
       const path = await invoke<string>("save_csv_file", { filename, content: csv });
       showToast(`${t("liveData.exportSuccess")} : ${path}`);

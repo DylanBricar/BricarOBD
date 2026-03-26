@@ -81,8 +81,16 @@ pub async fn connect_obd(port: String, baud_rate: u32) -> Result<VehicleInfo, St
 
         crate::obd::dev_log::log_info("connection", &format!("Attempting connection to port {} with baud rates: {:?}", port, baud_rates));
 
+        let overall_start = std::time::Instant::now();
+        let overall_timeout = std::time::Duration::from_secs(90);
+
         let mut last_error = String::new();
         for &baud in &baud_rates {
+            if overall_start.elapsed() > overall_timeout {
+                crate::obd::dev_log::log_error("connection", "Connection attempt timed out after 90 seconds");
+                break;
+            }
+
             let mut conn = Elm327Connection::new();
             crate::obd::dev_log::log_debug("connection", &format!("Trying baud rate: {}", baud));
             match conn.connect(&port, baud) {
@@ -166,7 +174,7 @@ pub fn get_connection_status() -> ConnectionStatus {
     let guard = CONNECTION.lock().unwrap_or_else(|e| e.into_inner());
     let status = match *guard {
         ConnectionMode::Disconnected => ConnectionStatus::Disconnected,
-        ConnectionMode::Demo => ConnectionStatus::Connected,
+        ConnectionMode::Demo => ConnectionStatus::Demo,
         ConnectionMode::Real(_) => ConnectionStatus::Connected,
     };
     crate::obd::dev_log::log_debug("connection", &format!("Status requested: {:?}", status));
@@ -402,7 +410,7 @@ pub fn get_connection_types() -> Vec<serde_json::Value> {
     types.push(serde_json::json!({
         "type": "bluetooth",
         "name": "Bluetooth BLE",
-        "available": false, // Not yet implemented
+        "available": cfg!(feature = "mobile"),
     }));
 
     types

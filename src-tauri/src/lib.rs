@@ -58,8 +58,6 @@ pub fn run() {
             dashboard::get_pid_data,
             dashboard::get_all_pids,
             dashboard::get_pid_data_extended,
-            dashboard::start_recording,
-            dashboard::stop_recording,
             dashboard::reset_pid_blacklist,
             dashboard::discover_vehicle_params,
             dashboard::get_battery_voltage,
@@ -82,7 +80,6 @@ pub fn run() {
             // Diagnostic (Mode 06, Mode 02)
             commands::diagnostic::get_mode06_results,
             commands::diagnostic::get_freeze_frame,
-            commands::diagnostic::discover_vehicle_dids,
             // Database (3.27M operations pre-built)
             database::get_database_stats,
             database::search_operations,

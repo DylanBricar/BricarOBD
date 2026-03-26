@@ -73,7 +73,3 @@ pub fn get_manufacturer_groups() -> HashMap<String, ManufacturerGroup> {
         })
         .collect()
 }
-
-pub fn get_all_operations() -> Vec<Category> {
-    get_categories()
-}

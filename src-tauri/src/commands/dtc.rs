@@ -223,12 +223,18 @@ fn parse_uds_dtc_response(response: &str, ecu_addr: &str, lang: &str) -> Vec<Dtc
 
 /// Clear all DTCs — sends OBD Mode 04 (with safety check)
 #[command]
-pub fn clear_dtcs() -> Result<String, String> {
+pub fn clear_dtcs(confirmed: Option<bool>) -> Result<String, String> {
     let risk = crate::obd::safety::SafetyGuard::check_command("04");
     dev_log::log_info("dtc", &format!("Clear DTCs safety check: {:?}", risk));
     if risk == crate::models::RiskLevel::Blocked {
         dev_log::log_warn("dtc", "Clear DTCs blocked by safety guard");
         return Err(crate::commands::connection::err_msg("BLOQUÉ — commande bloquée par la sécurité", "BLOCKED — command blocked by safety system"));
+    }
+
+    // Require frontend confirmation for Caution-level commands
+    if risk == crate::models::RiskLevel::Caution && confirmed != Some(true) {
+        dev_log::log_info("dtc", "Clear DTCs requires confirmation");
+        return Err("CONFIRM_REQUIRED".to_string());
     }
 
     if is_demo() {

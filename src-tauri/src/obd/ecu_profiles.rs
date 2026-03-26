@@ -5,14 +5,6 @@ use std::sync::LazyLock;
 const ECU_DATABASE_JSON: &str = include_str!("../../data/ecu_database.json");
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ManufacturerDid {
-    #[serde(rename = "id")]
-    pub id: Option<String>,
-    pub description: Option<String>,
-    pub unit: Option<String>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GenericEcu {
     pub name: String,
     pub request_id: u16,

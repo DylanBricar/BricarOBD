@@ -1,12 +1,10 @@
 import { useState, useEffect } from "react";
 import { useTranslation } from "react-i18next";
-import { invoke } from "@tauri-apps/api/core";
 import {
   Plug,
   RefreshCw,
   Radio,
   ChevronDown,
-  ChevronUp,
   Wifi,
   Car,
   KeyRound,
@@ -14,9 +12,11 @@ import {
   Clock,
   Smartphone,
   X,
-  AlertCircle,
   AlertTriangle,
 } from "lucide-react";
+import WiFiSettings from "@/components/connection/WiFiSettings";
+import ManualVinInput from "@/components/connection/ManualVinInput";
+import Troubleshooting from "@/components/connection/Troubleshooting";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/useToast";
 import { Toast } from "@/components/Toast";
@@ -31,6 +31,7 @@ interface ConnectionProps {
   onConnect: () => void;
   onDisconnect: () => void;
   onDemoConnect: () => void;
+  onConnectWifi: (host: string, port: number) => Promise<void>;
   onPortChange: (port: string) => void;
   onBaudRateChange: (baud: number) => void;
   onVehicleUpdate?: (vehicle: VehicleInfo) => void;
@@ -42,12 +43,6 @@ interface VinHistoryEntry {
   model: string;
   year: number;
   lastSeen: number;
-}
-
-interface WiFiAdapter {
-  host: string;
-  port: number;
-  name: string;
 }
 
 const STORAGE_KEY = "bricarobd_vin_history";
@@ -67,22 +62,6 @@ function saveVinHistory(entries: VinHistoryEntry[]) {
 
 const baudRates = [9600, 38400, 115200, 230400, 500000];
 
-// WiFi validation functions
-const isValidIpAddress = (ip: string): boolean => {
-  const ipRegex = /^(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/;
-  return ipRegex.test(ip);
-};
-
-const isValidPort = (port: string): boolean => {
-  const portNum = parseInt(port);
-  return !isNaN(portNum) && portNum >= 1 && portNum <= 65535;
-};
-
-const isValidVin = (vin: string): boolean => {
-  if (vin.length !== 17) return false;
-  const invalidChars = /[IOQ]/i;
-  return !invalidChars.test(vin) && /^[A-Z0-9]+$/.test(vin);
-};
 
 export default function Connection({
   status,
@@ -93,6 +72,7 @@ export default function Connection({
   onConnect,
   onDisconnect,
   onDemoConnect,
+  onConnectWifi,
   onPortChange,
   onBaudRateChange,
   onVehicleUpdate,
@@ -102,10 +82,6 @@ export default function Connection({
   const [vinHistory, setVinHistory] = useState<VinHistoryEntry[]>(loadVinHistory);
   const { toast, showToast, dismissToast } = useToast();
   const [connectionType, setConnectionType] = useState<"usb" | "wifi">("usb");
-  const [wifiHost, setWifiHost] = useState("192.168.0.10");
-  const [wifiPort, setWifiPort] = useState("35000");
-  const [wifiAdapters, setWifiAdapters] = useState<WiFiAdapter[]>([]);
-  const [isScanning, setIsScanning] = useState(false);
   const [showTroubleshoot, setShowTroubleshoot] = useState(false);
   const isConnected = status === "connected" || status === "demo";
 
@@ -142,31 +118,6 @@ export default function Connection({
       saveVinHistory(updated);
       return updated;
     });
-  };
-
-  const handleScanWifi = async () => {
-    setIsScanning(true);
-    try {
-      const adapters = await invoke<WiFiAdapter[]>("scan_wifi");
-      setWifiAdapters(adapters);
-      if (adapters.length > 0) {
-        showToast(t("connection.wifiFound", { count: adapters.length }));
-      } else {
-        showToast(t("connection.wifiNone"), "error");
-      }
-    } catch (e) {
-      showToast(`${t("common.error")}: ${e instanceof Error ? e.message : String(e)}`, "error");
-    }
-    setIsScanning(false);
-  };
-
-  const handleConnectWifi = async () => {
-    try {
-      await invoke("connect_wifi", { host: wifiHost, port: parseInt(wifiPort) });
-      showToast(t("connection.connected"));
-    } catch (e) {
-      showToast(`${t("common.error")}: ${e}`, "error");
-    }
   };
 
   return (
@@ -272,115 +223,43 @@ export default function Connection({
 
           {/* WiFi Configuration */}
           {connectionType === "wifi" && (
-            <>
-              {/* WiFi Host */}
-              <div className="space-y-1.5">
-                <label className="text-xs text-obd-text-muted">{t("connection.wifiHost")}</label>
-                <input
-                  type="text"
-                  value={wifiHost}
-                  onChange={(e) => setWifiHost(e.target.value)}
-                  placeholder="192.168.0.10"
-                  disabled={isConnected}
-                  className={cn("input-field text-xs", wifiHost && !isValidIpAddress(wifiHost) && "border-obd-danger")}
-                />
-                {wifiHost && !isValidIpAddress(wifiHost) && (
-                  <p className="text-xs text-obd-danger">{t("connection.wifiHostInvalid")}</p>
-                )}
-              </div>
-
-              {/* WiFi Port */}
-              <div className="space-y-1.5">
-                <label className="text-xs text-obd-text-muted">{t("connection.wifiPort")}</label>
-                <input
-                  type="text"
-                  value={wifiPort}
-                  onChange={(e) => setWifiPort(e.target.value)}
-                  placeholder="35000"
-                  disabled={isConnected}
-                  className={cn("input-field text-xs", wifiPort && !isValidPort(wifiPort) && "border-obd-danger")}
-                />
-                {wifiPort && !isValidPort(wifiPort) && (
-                  <p className="text-xs text-obd-danger">{t("connection.wifiPortInvalid")}</p>
-                )}
-              </div>
-
-              {/* Scan WiFi button */}
-              <button
-                onClick={handleScanWifi}
-                disabled={isConnected || isScanning}
-                className={cn(
-                  "w-full btn-ghost text-xs flex items-center justify-center gap-2",
-                  (isConnected || isScanning) && "opacity-50 cursor-not-allowed"
-                )}
-              >
-                {isScanning ? (
-                  <RefreshCw size={14} className="animate-spin" />
-                ) : (
-                  <Wifi size={14} />
-                )}
-                {isScanning ? t("connection.scanning") : t("connection.wifiScan")}
-              </button>
-
-              {/* WiFi Adapters List */}
-              {wifiAdapters.length > 0 && (
-                <div className="space-y-1.5">
-                  <label className="text-xs text-obd-text-muted">{t("connection.wifiAdapters")}</label>
-                  <div className="space-y-1">
-                    {wifiAdapters.map((adapter) => (
-                      <div key={adapter.name} className="px-3 py-2 rounded-lg bg-white/[0.02] text-xs text-obd-text border border-obd-border/30">
-                        {adapter.name} ({adapter.host}:{adapter.port})
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </>
+            <WiFiSettings isConnected={isConnected} status={status} onConnectWifi={onConnectWifi} showToast={showToast} />
           )}
 
-          {/* Connect/Disconnect buttons */}
-          <div className="flex gap-3 pt-2">
-            {!isConnected ? (
-              <>
-                {connectionType === "usb" ? (
-                  <button
-                    onClick={onConnect}
-                    disabled={!port || status === "connecting"}
-                    className={cn(
-                      "btn-accent-solid flex-1 flex items-center justify-center gap-2",
-                      (!port || status === "connecting") && "opacity-50 cursor-not-allowed"
-                    )}
-                  >
-                    {status === "connecting" ? (
-                      <RefreshCw size={16} className="animate-spin" />
-                    ) : (
-                      <Wifi size={16} />
-                    )}
-                    {status === "connecting"
-                      ? t("connection.connecting")
-                      : t("connection.connect")}
-                  </button>
-                ) : (
-                  <button
-                    onClick={handleConnectWifi}
-                    disabled={!wifiHost || !wifiPort || !isValidIpAddress(wifiHost) || !isValidPort(wifiPort) || status === "connecting"}
-                    className={cn(
-                      "btn-accent-solid flex-1 flex items-center justify-center gap-2",
-                      (!wifiHost || !wifiPort || !isValidIpAddress(wifiHost) || !isValidPort(wifiPort) || status === "connecting") && "opacity-50 cursor-not-allowed"
-                    )}
-                  >
-                    {status === "connecting" ? (
-                      <RefreshCw size={16} className="animate-spin" />
-                    ) : (
-                      <Smartphone size={16} />
-                    )}
-                    {status === "connecting"
-                      ? t("connection.connecting")
-                      : t("connection.connect")}
-                  </button>
-                )}
-              </>
-            ) : (
+          {/* Connect/Disconnect buttons (USB only — WiFi has its own in WiFiSettings) */}
+          {connectionType === "usb" && (
+            <div className="flex gap-3 pt-2">
+              {!isConnected ? (
+                <button
+                  onClick={onConnect}
+                  disabled={!port || status === "connecting"}
+                  className={cn(
+                    "btn-accent-solid flex-1 flex items-center justify-center gap-2",
+                    (!port || status === "connecting") && "opacity-50 cursor-not-allowed"
+                  )}
+                >
+                  {status === "connecting" ? (
+                    <RefreshCw size={16} className="animate-spin" />
+                  ) : (
+                    <Wifi size={16} />
+                  )}
+                  {status === "connecting"
+                    ? t("connection.connecting")
+                    : t("connection.connect")}
+                </button>
+              ) : (
+                <button
+                  onClick={onDisconnect}
+                  className="btn-danger flex-1 flex items-center justify-center gap-2"
+                >
+                  <Wifi size={16} />
+                  {t("connection.disconnect")}
+                </button>
+              )}
+            </div>
+          )}
+          {connectionType === "wifi" && isConnected && (
+            <div className="flex gap-3 pt-2">
               <button
                 onClick={onDisconnect}
                 className="btn-danger flex-1 flex items-center justify-center gap-2"
@@ -388,8 +267,8 @@ export default function Connection({
                 <Wifi size={16} />
                 {t("connection.disconnect")}
               </button>
-            )}
-          </div>
+            </div>
+          )}
 
           {/* Demo mode */}
           <div className="pt-2 border-t border-obd-border/30">
@@ -421,44 +300,7 @@ export default function Connection({
           )}
 
           {/* Manual VIN */}
-          <div className="space-y-1.5 pt-2 border-t border-obd-border/30">
-            <label className="text-xs text-obd-text-muted">{t("connection.manualVin")}</label>
-            <div className="flex gap-2">
-              <div className="flex-1">
-                <input
-                  type="text"
-                  value={manualVin}
-                  onChange={(e) => setManualVin(e.target.value.toUpperCase())}
-                  placeholder="VF3LCBHZ6JS123456"
-                  maxLength={17}
-                  className={cn("input-field font-mono text-xs w-full", manualVin && !isValidVin(manualVin) && "border-obd-danger")}
-                />
-                <p className="text-xs text-obd-text-muted mt-1">
-                  {t("connection.vinLength", { current: manualVin.length })}
-                </p>
-                {manualVin && /[IOQ]/i.test(manualVin) && (
-                  <p className="text-xs text-obd-danger mt-1">{t("connection.vinInvalidChars")}</p>
-                )}
-              </div>
-              <button
-                onClick={async () => {
-                  if (isValidVin(manualVin)) {
-                    try {
-                      const info = await invoke<VehicleInfo>("set_manual_vin", { vin: manualVin });
-                      onVehicleUpdate?.(info);
-                      showToast(`${t("connection.vin")}: ${info.make || manualVin} ${info.year || ""}`);
-                    } catch (e) {
-                      showToast(String(e), "error");
-                    }
-                  } else if (manualVin.length > 0) {
-                    showToast(t("connection.vinInvalid", { count: manualVin.length }), "error");
-                  }
-                }}
-                disabled={!isValidVin(manualVin)}
-                className={cn("btn-ghost text-xs px-3", manualVin && !isValidVin(manualVin) && "opacity-50")}
-              >{t("common.ok")}</button>
-            </div>
-          </div>
+          <ManualVinInput value={manualVin} onChange={setManualVin} onVehicleUpdate={onVehicleUpdate} showToast={showToast} />
         </div>
 
         {/* Right column: Vehicle Info + VIN History */}
@@ -543,25 +385,7 @@ export default function Connection({
 
       {/* Troubleshooting Guide */}
       {showTroubleshoot && (
-        <div className="glass-card p-4 border-obd-warning/30">
-          <button
-            onClick={() => setShowTroubleshoot((prev) => !prev)}
-            className="flex items-center gap-2 w-full text-left"
-          >
-            <AlertCircle size={16} className="text-obd-warning" />
-            <span className="text-sm font-semibold text-obd-warning flex-1">
-              {t("connection.troubleshoot.title")}
-            </span>
-            <ChevronUp size={14} className="text-obd-text-muted" />
-          </button>
-          <ol className="mt-3 space-y-1.5 list-decimal list-inside">
-            {[1, 2, 3, 4, 5, 6].map((n) => (
-              <li key={n} className="text-xs text-obd-text-muted">
-                {t(`connection.troubleshoot.tip${n}`)}
-              </li>
-            ))}
-          </ol>
-        </div>
+        <Troubleshooting onClose={() => setShowTroubleshoot(false)} />
       )}
 
       {/* Toast */}

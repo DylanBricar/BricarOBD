@@ -10,7 +10,8 @@ interface FreezeFrameProps {
 }
 
 export default function FreezeFrame({ data, isLoading, onLoad }: FreezeFrameProps) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
+  const locale = i18n.language === "fr" ? "fr-FR" : "en-US";
   const [selectedFrame, setSelectedFrame] = useState(0);
 
   // Clamp selectedFrame when data array shrinks (prevents out-of-bounds blank screen)
@@ -53,7 +54,7 @@ export default function FreezeFrame({ data, isLoading, onLoad }: FreezeFrameProp
           {/* Frame Selector (tabs) - only show if multiple frames */}
           {data.length > 1 && (
             <div className="flex gap-2 border-b border-white/10">
-              {data.map((frame, idx) => (
+              {data.map((_, idx) => (
                 <button
                   key={idx}
                   onClick={() => setSelectedFrame(idx)}
@@ -63,7 +64,7 @@ export default function FreezeFrame({ data, isLoading, onLoad }: FreezeFrameProp
                       : "border-transparent text-white/50 hover:text-white"
                   }`}
                 >
-                  {t("freezeFrame.frame", { n: idx })}
+                  {t("freezeFrame.frame", { n: idx + 1 })}
                 </button>
               ))}
             </div>
@@ -93,7 +94,7 @@ export default function FreezeFrame({ data, isLoading, onLoad }: FreezeFrameProp
                     <tr key={pid.pid} className="border-b border-white/5">
                       <td className="p-2.5 text-white">{pid.name}</td>
                       <td className="p-2.5 text-right font-mono text-white">
-                        {pid.value.toFixed(pid.unit === "RPM" ? 0 : 1)} <span className="text-white/40">{pid.unit}</span>
+                        {pid.value.toLocaleString(locale, { minimumFractionDigits: pid.unit === "RPM" ? 0 : 1, maximumFractionDigits: pid.unit === "RPM" ? 0 : 1 })} <span className="text-white/40">{pid.unit}</span>
                       </td>
                     </tr>
                   ))}

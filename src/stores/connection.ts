@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { devInfo, devWarn, devError } from "@/lib/devlog";
+import { devInfo, devError } from "@/lib/devlog";
 
 export type ConnectionStatus =
   | "disconnected"
@@ -87,7 +87,9 @@ export function useConnectionStore() {
         devInfo("ui", "Ports found: " + ports.length);
         globalState = { ...globalState, availablePorts: ports.map(p => p.name) };
         notify();
-      } catch {}
+      } catch (e) {
+        console.error("[BricarOBD] Failed to scan ports: " + String(e));
+      }
     },
     connect: async () => {
       devInfo("ui", "Connecting to " + globalState.port + " at " + globalState.baudRate);
@@ -114,13 +116,28 @@ export function useConnectionStore() {
       globalState = { ...globalState, vehicle };
       notify();
     },
+    connectWifi: async (host: string, port: number) => {
+      devInfo("ui", "WiFi connecting to " + host + ":" + port);
+      globalState = { ...globalState, status: "connecting", error: null };
+      notify();
+      try {
+        const vehicle = await invoke<VehicleInfo>("connect_wifi", { host, port });
+        devInfo("ui", "WiFi connected: " + vehicle.make + " " + vehicle.model);
+        globalState = { ...globalState, status: "connected", vehicle };
+        notify();
+      } catch (e) {
+        devError("ui", "WiFi connection error: " + String(e));
+        globalState = { ...globalState, status: "error", error: String(e) };
+        notify();
+      }
+    },
     connectDemo: async () => {
       devInfo("ui", "Demo mode activated");
       try {
         const vehicle = await invoke<VehicleInfo>("connect_demo");
         globalState = { ...globalState, status: "demo", vehicle, error: null };
       } catch {
-        globalState = { ...globalState, status: "demo", vehicle: { vin: "DEMO", make: "Peugeot", model: "207 (Démo)", year: 2018, protocol: "Demo", elmVersion: "Demo v1.0" }, error: null };
+        globalState = { ...globalState, status: "demo", vehicle: { vin: "DEMO", make: "Demo", model: "Demo Vehicle", year: 2018, protocol: "Demo", elmVersion: "Demo v1.0" }, error: null };
       }
       notify();
     },

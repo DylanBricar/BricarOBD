@@ -25,7 +25,7 @@ impl Database {
         .ok();
 
         // Create user tables if missing (operations/ecus are pre-built)
-        conn.execute_batch(
+        if let Err(e) = conn.execute_batch(
             "CREATE TABLE IF NOT EXISTS dtc_history (
                 id INTEGER PRIMARY KEY AUTOINCREMENT, code TEXT NOT NULL, description TEXT,
                 status TEXT NOT NULL, source TEXT, vehicle_vin TEXT,
@@ -37,8 +37,10 @@ impl Database {
                 timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
             );
             CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);",
-        )
-        .map_err(|e| tracing::error!("User tables creation failed: {}", e)).ok();
+        ) {
+            tracing::error!("User tables creation failed: {}", e);
+            return Err(format!("User tables creation failed: {}", e));
+        }
 
         let db = Self { conn };
         info!("Database opened: {}", path.display());

@@ -58,7 +58,7 @@ src-tauri/src/          # Rust backend
 - PRAGMA: `journal_mode=DELETE`, `synchronous=NORMAL`, `cache_size=-32000`
 - PID history buffer capped at 120 entries per PID
 - Dev log buffer capped at 5000 entries
-- Serial reads in 64-byte chunks (not byte-by-byte)
+- Serial reads in 256-byte chunks (not byte-by-byte)
 - 30ms inter-command delay for ELM327 recovery time
 
 ## Common Pitfalls to Avoid

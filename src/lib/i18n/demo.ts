@@ -1,0 +1,51 @@
+export const demo = {
+  fr: {
+    // Demo DTC descriptions
+    "demo.dtc.P0440": "Dysfonctionnement du système de contrôle des émissions par évaporation",
+    "demo.dtc.P0440.tips": "Vérifier le bouchon de réservoir, les durites EVAP et la vanne de purge.",
+    "demo.dtc.P0440.cause1": "Bouchon de réservoir desserré ou manquant",
+    "demo.dtc.P0440.cause2": "Durites EVAP endommagées ou mal raccordées",
+    "demo.dtc.P0440.cause3": "Vanne de purge défectueuse",
+    "demo.dtc.P0440.cause4": "Fuite du canister EVAP",
+    "demo.dtc.P0440.cause5": "Joint de pompe à carburant défaillant",
+    "demo.dtc.P0440.quickCheck": "Commencer par le bouchon de réservoir. Beaucoup de véhicules affichent ce code simplement à cause d'un bouchon mal serré. Si bien serré, inspecter les durites.",
+
+    "demo.dtc.P0500": "Dysfonctionnement du capteur de vitesse du véhicule",
+    "demo.dtc.P0500.tips": "Inspecter le capteur VSS, le câblage et les connecteurs.",
+    "demo.dtc.P0500.cause1": "Capteur de vitesse défectueux",
+    "demo.dtc.P0500.cause2": "Connecteurs desserrés ou corrodés",
+    "demo.dtc.P0500.cause3": "Faisceau de câbles endommagé",
+    "demo.dtc.P0500.cause4": "Problème de transmission",
+    "demo.dtc.P0500.cause5": "Dysfonctionnement du capteur ABS",
+    "demo.dtc.P0500.quickCheck": "Vérifier le capteur VSS situé sur la transmission. S'assurer que le câblage est bien fixé et nettoyer la corrosion si nécessaire.",
+
+    "demo.dtc.P0171": "Système trop pauvre (Banc 1)",
+    "demo.dtc.P0171.tips": "Vérifier le capteur MAF, les fuites de vide, la pression de carburant",
+    "demo.dtc.P0300": "Ratés d'allumage multiples/aléatoires détectés",
+    "demo.dtc.P0300.tips": "Vérifier les bougies, bobines d'allumage, injecteurs",
+  },
+  en: {
+    "demo.dtc.P0440": "Evaporative Emission Control System Malfunction",
+    "demo.dtc.P0440.tips": "Check fuel cap, EVAP hoses and purge valve.",
+    "demo.dtc.P0440.cause1": "Loose or missing fuel filler cap",
+    "demo.dtc.P0440.cause2": "Damaged EVAP hoses or connections",
+    "demo.dtc.P0440.cause3": "Faulty purge valve",
+    "demo.dtc.P0440.cause4": "EVAP canister leak",
+    "demo.dtc.P0440.cause5": "Fuel pump seal leaking",
+    "demo.dtc.P0440.quickCheck": "Start with the fuel cap. Many vehicles throw this code simply due to a loose cap. If tight, inspect hoses for cracks.",
+
+    "demo.dtc.P0500": "Vehicle Speed Sensor Malfunction",
+    "demo.dtc.P0500.tips": "Inspect VSS sensor, wiring and connectors.",
+    "demo.dtc.P0500.cause1": "Defective vehicle speed sensor",
+    "demo.dtc.P0500.cause2": "Loose or corroded connectors",
+    "demo.dtc.P0500.cause3": "Broken wiring harness",
+    "demo.dtc.P0500.cause4": "Transmission issue",
+    "demo.dtc.P0500.cause5": "ABS sensor malfunction",
+    "demo.dtc.P0500.quickCheck": "Check the VSS sensor located on the transmission. Verify wiring is secure and clean corrosion if needed.",
+
+    "demo.dtc.P0171": "System Too Lean (Bank 1)",
+    "demo.dtc.P0171.tips": "Check MAF sensor, vacuum leaks, fuel pressure",
+    "demo.dtc.P0300": "Random/Multiple Cylinder Misfire Detected",
+    "demo.dtc.P0300.tips": "Check spark plugs, ignition coils, fuel injectors",
+  },
+};

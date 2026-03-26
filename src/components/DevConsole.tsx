@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { X, Copy, Trash2, Pause, Play, Terminal, ChevronDown, ChevronUp, Maximize2, Minimize2 } from "lucide-react";
+import { X, Copy, Trash2, Pause, Play, Terminal, ChevronDown, Maximize2, Minimize2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { cn } from "@/lib/utils";
 
@@ -101,7 +101,7 @@ export default function DevConsole({ onClose }: { onClose: () => void }) {
       <div className="flex items-center justify-between px-3 py-1.5 bg-[#161B22] border-b border-[#30363D] flex-shrink-0">
         <div className="flex items-center gap-2">
           <Terminal size={14} className="text-[#58A6FF]" />
-          <span className="text-xs font-semibold text-[#58A6FF] font-mono">Dev Console</span>
+          <span className="text-xs font-semibold text-[#58A6FF] font-mono">{t("devConsole.title")}</span>
           <span className="text-[10px] text-[#8B949E] font-mono">{filteredLogs.length}</span>
         </div>
         <div className="flex items-center gap-1.5">
@@ -109,27 +109,27 @@ export default function DevConsole({ onClose }: { onClose: () => void }) {
             type="text"
             value={filter}
             onChange={(e) => setFilter(e.target.value)}
-            placeholder="Filter..."
+            placeholder={t("devConsole.filter")}
             className="h-6 px-2 rounded text-[10px] font-mono bg-[#0D1117] border border-[#30363D] text-[#C9D1D9] placeholder-[#484F58] focus:border-[#58A6FF] focus:outline-none w-36"
           />
           <button onClick={() => setPaused(!paused)}
             className={cn("h-6 px-2 rounded text-[10px] font-mono flex items-center gap-1",
               paused ? "bg-[#1F6FEB] text-white" : "bg-[#21262D] text-[#C9D1D9] hover:bg-[#30363D]"
             )}
-            aria-label={paused ? "Resume" : "Pause"}>
+            aria-label={paused ? t("devConsole.resume") : t("devConsole.pause")}>
             {paused ? <Play size={10} /> : <Pause size={10} />}
           </button>
           <button onClick={() => setAutoScroll(!autoScroll)}
             className={cn("h-6 px-2 rounded text-[10px] font-mono flex items-center gap-1",
               autoScroll ? "bg-[#238636] text-white" : "bg-[#21262D] text-[#C9D1D9]"
             )}
-            aria-label="Auto-scroll">
+            aria-label={t("devConsole.autoScroll")}>
             <ChevronDown size={10} />
           </button>
-          <button onClick={handleCopy} className="h-6 px-2 rounded text-[10px] font-mono bg-[#238636] text-white hover:bg-[#2EA043] flex items-center gap-1" aria-label="Copy logs">
+          <button onClick={handleCopy} className="h-6 px-2 rounded text-[10px] font-mono bg-[#238636] text-white hover:bg-[#2EA043] flex items-center gap-1" aria-label={t("devConsole.copyLogs")}>
             <Copy size={10} />
           </button>
-          <button onClick={handleClear} className="h-6 px-2 rounded text-[10px] font-mono bg-[#DA3633] text-white hover:bg-[#F85149] flex items-center gap-1" aria-label="Clear logs">
+          <button onClick={handleClear} className="h-6 px-2 rounded text-[10px] font-mono bg-[#DA3633] text-white hover:bg-[#F85149] flex items-center gap-1" aria-label={t("devConsole.clearLogs")}>
             <Trash2 size={10} />
           </button>
           <button onClick={() => setExpanded(!expanded)} className="h-6 px-2 rounded text-[10px] font-mono bg-[#21262D] text-[#8B949E] hover:bg-[#30363D] flex items-center" aria-label={t("common.toggle")}>
@@ -145,7 +145,7 @@ export default function DevConsole({ onClose }: { onClose: () => void }) {
       <div ref={scrollRef} className="flex-1 overflow-y-auto px-3 py-1 font-mono text-[11px] leading-[18px]">
         {filteredLogs.length === 0 ? (
           <div className="flex items-center justify-center h-full text-[#484F58] text-xs">
-            Waiting for logs...
+            {t("devConsole.waitingForLogs")}
           </div>
         ) : (
           filteredLogs.map((log, i) => (
@@ -165,8 +165,8 @@ export default function DevConsole({ onClose }: { onClose: () => void }) {
 
       {/* Status */}
       <div className="flex items-center justify-between px-3 py-0.5 bg-[#161B22] border-t border-[#30363D] text-[9px] text-[#484F58] font-mono flex-shrink-0">
-        <span>{logs.length} total / {filteredLogs.length} shown</span>
-        <span>{paused ? "⏸ PAUSED" : "● LIVE"}</span>
+        <span>{t("devConsole.statusTotal", { total: logs.length, shown: filteredLogs.length })}</span>
+        <span>{paused ? t("devConsole.paused") : t("devConsole.live")}</span>
       </div>
     </div>
   );

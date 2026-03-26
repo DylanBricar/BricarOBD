@@ -1,8 +1,8 @@
 import { useState, useMemo, useRef, useEffect, useCallback } from "react";
 import { useTranslation } from "react-i18next";
-import { Activity, Search, Download, TrendingUp, Circle, Play, Pause, Upload, ListChecks, Check, X } from "lucide-react";
-import { invoke } from "@tauri-apps/api/core";
+import { Activity, Search, Download, TrendingUp, Circle, Play, Pause, ListChecks, Check } from "lucide-react";
 import LiveChart from "@/components/charts/LiveChart";
+import { makeCSVFilename, saveCSVFile } from "@/lib/csv";
 import type { PidValue } from "@/stores/vehicle";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/useToast";
@@ -12,6 +12,7 @@ interface LiveDataProps {
   pidData: Map<number, PidValue>;
   isPolling: boolean;
   onStartPolling: (intervalMs: number) => void;
+  onPausePolling: () => void;
   onStopPolling: () => void;
   onChangeRefreshRate: (intervalMs: number) => void;
 }
@@ -22,6 +23,8 @@ const REFRESH_OPTIONS = [
   { label: "2s", value: 2000 },
   { label: "5s", value: 5000 },
 ];
+
+const TIME_RANGE_OPTIONS = ["30s", "1m", "5m", "all"] as const;
 
 function generateCSV(pidData: Map<number, PidValue>, buffer?: Array<{ timestamp: Date; snapshot: Record<number, number> }>): string {
   const rows: string[] = ["Timestamp,PID,Name,Value,Unit,Min,Max"];
@@ -47,18 +50,8 @@ function generateCSV(pidData: Map<number, PidValue>, buffer?: Array<{ timestamp:
   return rows.join("\n");
 }
 
-async function saveFile(content: string, filename: string): Promise<string> {
-  // Use Tauri backend to write the file to Desktop/BricarOBD_Exports/
-  const path = await invoke<string>("save_csv_file", { filename, content });
-  return path;
-}
 
-function makeFilename(prefix: string): string {
-  const now = new Date();
-  return `${prefix}_${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, "0")}${String(now.getDate()).padStart(2, "0")}_${String(now.getHours()).padStart(2, "0")}${String(now.getMinutes()).padStart(2, "0")}${String(now.getSeconds()).padStart(2, "0")}.csv`;
-}
-
-export default function LiveData({ pidData, isPolling, onStartPolling, onStopPolling, onChangeRefreshRate }: LiveDataProps) {
+export default function LiveData({ pidData, isPolling, onStartPolling, onPausePolling, onStopPolling, onChangeRefreshRate }: LiveDataProps) {
   const { t } = useTranslation();
   const [search, setSearch] = useState("");
   const [selectedPid, setSelectedPid] = useState<number | null>(null);
@@ -67,31 +60,53 @@ export default function LiveData({ pidData, isPolling, onStartPolling, onStopPol
   const [recordingDuration, setRecordingDuration] = useState(0);
   const [refreshRate, setRefreshRate] = useState(500);
   const [timeRange, setTimeRange] = useState<"30s" | "1m" | "5m" | "all">("all");
-  const [selectedPids, setSelectedPids] = useState<Set<number>>(new Set()); // empty = all
+  const [selectedPids, setSelectedPids] = useState<Set<number>>(() => {
+    try {
+      const saved = localStorage.getItem("bricarobd_selected_pids");
+      if (saved) return new Set(JSON.parse(saved) as number[]);
+    } catch {}
+    return new Set();
+  });
   const [showPidSelector, setShowPidSelector] = useState(false);
   const [isActive, setIsActive] = useState(false);
   const recordBufferRef = useRef<Array<{ timestamp: Date; snapshot: Record<number, number> }>>([]);
   const recordingStartRef = useRef<Date | null>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const fileReaderRef = useRef<FileReader | null>(null);
 
   // Reset selectedPids when data transitions from empty to populated (reconnect)
+  // If user had a saved selection, restore it; otherwise select all
   const prevSizeRef = useRef(0);
   useEffect(() => {
     if (pidData.size > 0 && prevSizeRef.current === 0) {
-      setSelectedPids(new Set(pidData.keys()));
+      try {
+        const saved = localStorage.getItem("bricarobd_selected_pids");
+        if (saved) {
+          const savedSet = new Set(JSON.parse(saved) as number[]);
+          // Only restore if at least some saved PIDs are in the new data
+          const intersection = new Set([...savedSet].filter(p => pidData.has(p)));
+          if (intersection.size > 0) {
+            setSelectedPids(intersection);
+          } else {
+            setSelectedPids(new Set(pidData.keys()));
+          }
+        } else {
+          setSelectedPids(new Set(pidData.keys()));
+        }
+      } catch {
+        setSelectedPids(new Set(pidData.keys()));
+      }
     }
     prevSizeRef.current = pidData.size;
   }, [pidData.size]);
 
-  // Cleanup FileReader on unmount
+  // Persist PID selection to localStorage
   useEffect(() => {
-    return () => {
-      if (fileReaderRef.current) {
-        fileReaderRef.current.abort();
-      }
-    };
-  }, []);
+    if (selectedPids.size > 0) {
+      try {
+        localStorage.setItem("bricarobd_selected_pids", JSON.stringify([...selectedPids]));
+      } catch {}
+    }
+  }, [selectedPids]);
+
 
   // Recording timer with cleanup
   useEffect(() => {
@@ -115,36 +130,44 @@ export default function LiveData({ pidData, isPolling, onStartPolling, onStopPol
     }
   }, [pidData, isRecording]);
 
-  const handleTogglePolling = () => {
-    setIsActive(!isActive);
-    // If polling isn't running yet, start it
-    if (!isActive && !isPolling) {
-      onStartPolling(refreshRate);
-    }
-  };
+  const handleTogglePolling = useCallback(() => {
+    setIsActive((prev) => {
+      if (!prev && !isPolling) {
+        onStartPolling(refreshRate);
+      } else if (prev) {
+        onPausePolling();
+      }
+      return !prev;
+    });
+  }, [isPolling, onStartPolling, onPausePolling, refreshRate]);
 
-  const handleRefreshRateChange = (ms: number) => {
+  const handleRefreshRateChange = useCallback((ms: number) => {
     setRefreshRate(ms);
-    onChangeRefreshRate(ms);
-  };
+    if (isActive) {
+      onStopPolling();
+      onChangeRefreshRate(ms);
+    } else {
+      onChangeRefreshRate(ms);
+    }
+  }, [isActive, onChangeRefreshRate, onStopPolling]);
 
-  const handleStartRecording = () => {
+  const handleStartRecording = useCallback(() => {
     recordBufferRef.current = [];
     recordingStartRef.current = new Date();
     setRecordingDuration(0);
     setIsRecording(true);
-  };
+  }, []);
 
   const { toast, showToast, dismissToast } = useToast();
 
-  const handleStopRecording = async () => {
+  const handleStopRecording = useCallback(async () => {
     setIsRecording(false);
     const snapshots = recordBufferRef.current.length;
     if (snapshots > 0) {
       try {
         const csv = generateCSV(pidData, recordBufferRef.current);
-        const filename = makeFilename("bricarobd_recording");
-        const path = await saveFile(csv, filename);
+        const filename = makeCSVFilename("bricarobd_recording");
+        const path = await saveCSVFile(csv, filename);
         showToast(`${t("liveData.exportSuccess")} : ${path}`);
       } catch (e) {
         showToast(`${t("common.error")}: ${e}`, "error");
@@ -152,43 +175,30 @@ export default function LiveData({ pidData, isPolling, onStartPolling, onStopPol
     } else {
       showToast(t("liveData.noRecordingData"), "error");
     }
-  };
+  }, [pidData, showToast, t]);
 
-  const handleExportCSV = async () => {
+  const handleExportCSV = useCallback(async () => {
     if (pidData.size === 0) {
       showToast(t("liveData.noExportData"), "error");
       return;
     }
     try {
       const csv = generateCSV(pidData);
-      const filename = makeFilename("bricarobd_snapshot");
-      const path = await saveFile(csv, filename);
+      const filename = makeCSVFilename("bricarobd_snapshot");
+      const path = await saveCSVFile(csv, filename);
       showToast(`${t("liveData.exportSuccess")} : ${path}`);
     } catch (e) {
       showToast(`${t("common.error")}: ${e}`, "error");
     }
-  };
+  }, [pidData, showToast, t]);
 
-  const handleImportCSV = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-    const reader = new FileReader();
-    fileReaderRef.current = reader;
-    reader.onload = (e) => {
-      const content = e.target?.result as string;
-      const lines = content.split("\n").filter(Boolean);
-      showToast(t("liveData.importSuccess", { count: lines.length - 1, file: file.name }));
-      fileReaderRef.current = null;
-    };
-    reader.readAsText(file);
-    event.target.value = "";
-  };
+  const historyRanges = useMemo(() => ({ "30s": 30, "1m": 60, "5m": 300, all: Infinity }), []);
 
+  const getFilteredHistory = useCallback((history: number[]) => {
+    return history.slice(-historyRanges[timeRange]);
+  }, [historyRanges, timeRange]);
 
-  const getFilteredHistory = (history: number[]) => {
-    const ranges = { "30s": 30, "1m": 60, "5m": 300, all: Infinity };
-    return history.slice(-ranges[timeRange]);
-  };
+  const sortedPidValues = useMemo(() => Array.from(pidData.values()).sort((a, b) => a.name.localeCompare(b.name)), [pidData]);
 
   const filteredPids = useMemo(() => {
     // Only show PIDs if polling is active
@@ -298,16 +308,6 @@ export default function LiveData({ pidData, isPolling, onStartPolling, onStopPol
             <Download size={14} />
             CSV
           </button>
-
-          {/* Import CSV */}
-          <button
-            onClick={() => fileInputRef.current?.click()}
-            className="h-[34px] px-3 rounded-lg text-xs font-medium flex items-center gap-1.5 border bg-obd-border/20 text-obd-text-muted border-obd-border/30 hover:bg-obd-border/40"
-            aria-label={t("liveData.import")}
-          >
-            <Upload size={14} />
-          </button>
-          <input ref={fileInputRef} type="file" accept=".csv" onChange={handleImportCSV} className="hidden" />
         </div>
       </div>
 
@@ -334,9 +334,7 @@ export default function LiveData({ pidData, isPolling, onStartPolling, onStopPol
             </div>
           </div>
           <div className="flex flex-wrap gap-1.5 max-h-28 overflow-y-auto">
-            {Array.from(pidData.values())
-              .sort((a, b) => a.name.localeCompare(b.name))
-              .map((pid) => {
+            {sortedPidValues.map((pid) => {
                 const isChecked = selectedPids.has(pid.pid);
                 return (
                   <button
@@ -434,7 +432,7 @@ export default function LiveData({ pidData, isPolling, onStartPolling, onStopPol
         {selectedData && (
           <div className="w-80 space-y-4">
             <div className="flex gap-1.5">
-              {(["30s", "1m", "5m", "all"] as const).map((range) => (
+              {TIME_RANGE_OPTIONS.map((range) => (
                 <button
                   key={range}
                   onClick={() => setTimeRange(range)}

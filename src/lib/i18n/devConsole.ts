@@ -1,0 +1,28 @@
+export const devConsole = {
+  fr: {
+    "devConsole.title": "Console Dev",
+    "devConsole.filter": "Filtrer...",
+    "devConsole.waitingForLogs": "En attente des logs...",
+    "devConsole.resume": "Reprendre",
+    "devConsole.pause": "Pause",
+    "devConsole.autoScroll": "Défilement auto",
+    "devConsole.copyLogs": "Copier les logs",
+    "devConsole.clearLogs": "Effacer les logs",
+    "devConsole.statusTotal": "{{total}} total / {{shown}} affichés",
+    "devConsole.paused": "⏸ EN PAUSE",
+    "devConsole.live": "● EN DIRECT",
+  },
+  en: {
+    "devConsole.title": "Dev Console",
+    "devConsole.filter": "Filter...",
+    "devConsole.waitingForLogs": "Waiting for logs...",
+    "devConsole.resume": "Resume",
+    "devConsole.pause": "Pause",
+    "devConsole.autoScroll": "Auto-scroll",
+    "devConsole.copyLogs": "Copy logs",
+    "devConsole.clearLogs": "Clear logs",
+    "devConsole.statusTotal": "{{total}} total / {{shown}} shown",
+    "devConsole.paused": "⏸ PAUSED",
+    "devConsole.live": "● LIVE",
+  },
+};
