@@ -154,74 +154,76 @@ fn read_ecu_dids(probe: &EcuProbe) -> (HashMap<String, String>, usize) {
 
 /// Scan all ECUs — probes standard OBD-II + manufacturer addresses with multi-method discovery
 #[command]
-pub fn scan_ecus() -> Vec<EcuInfo> {
-    if is_demo() {
-        dev_log::log_info("ecu", "Demo mode: returning simulated ECUs");
+pub async fn scan_ecus() -> Vec<EcuInfo> {
+    tokio::task::spawn_blocking(move || {
+        if is_demo() {
+            dev_log::log_info("ecu", "Demo mode: returning simulated ECUs");
+            let lang = get_user_lang();
+            return DemoConnection::get_ecus(&lang);
+        }
+
+        dev_log::log_info("ecu", "Real mode: starting ECU scan with multi-method discovery");
+
         let lang = get_user_lang();
-        return DemoConnection::get_ecus(&lang);
-    }
+        let probes = get_ecu_probes();
+        let mut ecus = Vec::new();
+        let mut found_addresses = std::collections::HashSet::new();
 
-    dev_log::log_info("ecu", "Real mode: starting ECU scan with multi-method discovery");
+        for probe in &probes {
+            // Skip broadcast address for individual ECU detection
+            if probe.tx_addr == "7DF" {
+                continue;
+            }
 
-    let lang = get_user_lang();
-    let probes = get_ecu_probes();
-    let mut ecus = Vec::new();
-    let mut found_addresses = std::collections::HashSet::new();
+            // Skip if we already found this address (avoids duplicates from overlapping ranges)
+            if found_addresses.contains(probe.tx_addr) {
+                continue;
+            }
 
-    for probe in &probes {
-        // Skip broadcast address for individual ECU detection
-        if probe.tx_addr == "7DF" {
-            continue;
+            dev_log::log_debug("ecu", &format!("Probing ECU at {}", probe.tx_addr));
+
+            // Set header to target this ECU
+            if with_real_connection(|conn| conn.set_ecu_header(probe.tx_addr)).is_err() {
+                continue;
+            }
+
+            if !probe_ecu_alive(probe) {
+                continue;
+            }
+
+            found_addresses.insert(probe.tx_addr);
+
+            // ECU is alive — now read DIDs to gather info
+            let (dids, dids_read) = read_ecu_dids(probe);
+
+            // Detect protocol for this ECU (might differ from main)
+            let ecu_protocol = with_real_connection(|conn| Ok(conn.protocol.clone()))
+                .unwrap_or_else(|_| "Unknown".to_string());
+
+            let probe_name = ecu_name(&lang, probe.name_fr, probe.name_en);
+            dev_log::log_info("ecu", &format!("ECU at {} ({}): {} DIDs read", probe.tx_addr, probe_name, dids_read));
+
+            ecus.push(EcuInfo {
+                name: probe_name,
+                address: format!("0x{}", probe.tx_addr),
+                protocol: ecu_protocol,
+                dids,
+            });
         }
 
-        // Skip if we already found this address (avoids duplicates from overlapping ranges)
-        if found_addresses.contains(probe.tx_addr) {
-            continue;
+        // Reset headers to broadcast
+        let _ = with_real_connection(|conn| conn.reset_headers());
+
+        if ecus.is_empty() {
+            dev_log::log_warn("ecu", "No ECUs found during scan — vehicle may need ignition on");
+            tracing::warn!("No ECUs found during real scan");
+        } else {
+            dev_log::log_info("ecu", &format!("ECU scan complete: {} ECUs found", ecus.len()));
+            tracing::info!("Found {} ECUs", ecus.len());
         }
 
-        dev_log::log_debug("ecu", &format!("Probing ECU at {}", probe.tx_addr));
-
-        // Set header to target this ECU
-        if with_real_connection(|conn| conn.set_ecu_header(probe.tx_addr)).is_err() {
-            continue;
-        }
-
-        if !probe_ecu_alive(probe) {
-            continue;
-        }
-
-        found_addresses.insert(probe.tx_addr);
-
-        // ECU is alive — now read DIDs to gather info
-        let (dids, dids_read) = read_ecu_dids(probe);
-
-        // Detect protocol for this ECU (might differ from main)
-        let ecu_protocol = with_real_connection(|conn| Ok(conn.protocol.clone()))
-            .unwrap_or_else(|_| "Unknown".to_string());
-
-        let probe_name = ecu_name(&lang, probe.name_fr, probe.name_en);
-        dev_log::log_info("ecu", &format!("ECU at {} ({}): {} DIDs read", probe.tx_addr, probe_name, dids_read));
-
-        ecus.push(EcuInfo {
-            name: probe_name,
-            address: format!("0x{}", probe.tx_addr),
-            protocol: ecu_protocol,
-            dids,
-        });
-    }
-
-    // Reset headers to broadcast
-    let _ = with_real_connection(|conn| conn.reset_headers());
-
-    if ecus.is_empty() {
-        dev_log::log_warn("ecu", "No ECUs found during scan — vehicle may need ignition on");
-        tracing::warn!("No ECUs found during real scan");
-    } else {
-        dev_log::log_info("ecu", &format!("ECU scan complete: {} ECUs found", ecus.len()));
-        tracing::info!("Found {} ECUs", ecus.len());
-    }
-
-    ecus
+        ecus
+    }).await.unwrap_or_default()
 }
 
 /// Check if a response indicates the ECU is alive (not NO DATA, not empty, not error)

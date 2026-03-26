@@ -109,6 +109,10 @@ export default function LiveData({ pidData, isPolling, onStartPolling, onStopPol
     const snapshot: Record<number, number> = {};
     pidData.forEach((pid) => { snapshot[pid.pid] = pid.value; });
     recordBufferRef.current.push({ timestamp: new Date(), snapshot });
+    // Cap recording buffer at 36000 entries (~10h at 1/s) to prevent memory leak
+    if (recordBufferRef.current.length > 36000) {
+      recordBufferRef.current = recordBufferRef.current.slice(-36000);
+    }
   }, [pidData, isRecording]);
 
   const handleTogglePolling = () => {

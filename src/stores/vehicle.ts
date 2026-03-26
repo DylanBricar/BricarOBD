@@ -282,11 +282,19 @@ export function useVehicleData() {
       return [...prev, ...pastDtcs];
     });
 
-    intervalRef.current = window.setInterval(() => {
-      const data = generateDemoData();
-      demoDataCache = data;
-      setPidData(new Map(data));
-    }, intervalMs);
+    const pollFn = async () => {
+      try {
+        const data = await invoke<PidValue[]>("get_pid_data");
+        const map = new Map<number, PidValue>();
+        data.forEach(p => map.set(p.pid, p));
+        setPidData(map);
+      } catch (e) {
+        devDebug("ui", `Demo poll error: ${String(e)}`);
+      }
+    };
+
+    pollFn(); // First poll immediately
+    intervalRef.current = window.setInterval(pollFn, intervalMs);
   }, []);
 
   const startRealPolling = useCallback((intervalMs: number = 1000, manufacturer: string = "", skipEcuScan: boolean = false) => {
@@ -374,11 +382,17 @@ export function useVehicleData() {
         const pollFn = createRealPollFn(manufacturerRef.current, setPidData);
         intervalRef.current = window.setInterval(pollFn, intervalMs);
       } else {
-        intervalRef.current = window.setInterval(() => {
-          const data = generateDemoData();
-          demoDataCache = data;
-          setPidData(new Map(data));
-        }, intervalMs);
+        const pollFn = async () => {
+          try {
+            const data = await invoke<PidValue[]>("get_pid_data");
+            const map = new Map<number, PidValue>();
+            data.forEach(p => map.set(p.pid, p));
+            setPidData(map);
+          } catch (e) {
+            devDebug("ui", `Demo poll error: ${String(e)}`);
+          }
+        };
+        intervalRef.current = window.setInterval(pollFn, intervalMs);
       }
     }
   }, []);

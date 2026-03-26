@@ -173,243 +173,249 @@ fn parse_mode06_results(response: &str, lang: &str) -> Vec<Mode06Result> {
 
 /// Get Mode 06 On-Board Monitoring Test Results
 #[command]
-pub fn get_mode06_results(lang: Option<String>) -> Vec<Mode06Result> {
-    let lang = lang.as_deref().unwrap_or("en");
+pub async fn get_mode06_results(lang: Option<String>) -> Vec<Mode06Result> {
+    tokio::task::spawn_blocking(move || {
+        let lang = lang.as_deref().unwrap_or("en");
 
-    if is_demo() {
-        dev_log::log_info("diagnostic", "Demo mode: returning simulated Mode 06 results");
-        return DemoConnection::get_mode06_results(lang);
-    }
-
-    dev_log::log_info("diagnostic", "Real mode: reading Mode 06 test results");
-
-    // Step 1: Query supported TIDs via "0600"
-    let bitmap_response = match with_real_connection(|conn| conn.send_command_timeout("0600", 5000)) {
-        Ok(r) => r,
-        Err(e) => {
-            dev_log::log_warn("diagnostic", &format!("Mode 06 bitmap query failed: {}", e));
-            return Vec::new();
-        }
-    };
-
-    if bitmap_response.contains("NO DATA") || bitmap_response.is_empty() {
-        dev_log::log_warn("diagnostic", "Mode 06 not supported by this vehicle");
-        return Vec::new();
-    }
-
-    let supported_tids = parse_mode06_bitmap(&bitmap_response);
-    dev_log::log_info("diagnostic", &format!("Mode 06: {} supported TIDs found", supported_tids.len()));
-
-    if supported_tids.is_empty() {
-        return Vec::new();
-    }
-
-    // Step 2: Query each supported TID
-    let mut all_results = Vec::new();
-
-    for tid in &supported_tids {
-        let cmd = format!("06{:02X}", tid);
-        match with_real_connection(|conn| conn.send_command_timeout(&cmd, 5000)) {
-            Ok(response) => {
-                if response.contains("NO DATA") || response.is_empty() {
-                    continue;
-                }
-                let results = parse_mode06_results(&response, lang);
-                if !results.is_empty() {
-                    dev_log::log_debug("diagnostic", &format!("TID {:02X}: {} results", tid, results.len()));
-                    all_results.extend(results);
-                }
-            }
-            Err(e) => {
-                dev_log::log_debug("diagnostic", &format!("TID {:02X} failed: {}", tid, e));
-                continue;
-            }
+        if is_demo() {
+            dev_log::log_info("diagnostic", "Demo mode: returning simulated Mode 06 results");
+            return DemoConnection::get_mode06_results(lang);
         }
 
-        // Small delay between TID queries to avoid buffer overflow on clone adapters
-        std::thread::sleep(std::time::Duration::from_millis(50));
-    }
+        dev_log::log_info("diagnostic", "Real mode: reading Mode 06 test results");
 
-    dev_log::log_info("diagnostic", &format!("Mode 06 complete: {} test results", all_results.len()));
-    all_results
-}
-
-/// Get Mode 02 Freeze Frame data — reads frames 0 through 3
-#[command]
-pub fn get_freeze_frame(lang: Option<String>) -> Vec<FreezeFrameData> {
-    let lang = lang.as_deref().unwrap_or("en");
-
-    if is_demo() {
-        dev_log::log_info("diagnostic", "Demo mode: returning simulated freeze frame");
-        return DemoConnection::get_freeze_frame(lang).into_iter().collect();
-    }
-
-    dev_log::log_info("diagnostic", "Real mode: reading Mode 02 freeze frames (0-3)");
-
-    let definitions = pid::get_pid_definitions(lang);
-    let key_pids: Vec<u16> = vec![
-        0x04, 0x05, 0x06, 0x07, 0x0B, 0x0C, 0x0D, 0x0E, 0x0F, 0x10,
-        0x11, 0x2F, 0x33, 0x42, 0x44, 0x46, 0x5C, 0x5E,
-    ];
-    let now = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_millis() as u64;
-
-    let mut frames = Vec::new();
-    let scan_start = std::time::Instant::now();
-    const MAX_SCAN_DURATION: std::time::Duration = std::time::Duration::from_secs(30);
-
-    for frame_num in 0u8..4 {
-        // Overall timeout guard — abort after 30s to prevent UI hang
-        if scan_start.elapsed() > MAX_SCAN_DURATION {
-            dev_log::log_warn("diagnostic", &format!("Freeze frame scan timeout after {}s — returning {} frames", scan_start.elapsed().as_secs(), frames.len()));
-            break;
-        }
-
-        // Step 1: Read the DTC that triggered this frame
-        let dtc_cmd = format!("0202{:02X}", frame_num);
-        let dtc_response = match with_real_connection(|conn| conn.send_command_timeout(&dtc_cmd, 3000)) {
+        // Step 1: Query supported TIDs via "0600"
+        let bitmap_response = match with_real_connection(|conn| conn.send_command_timeout("0600", 5000)) {
             Ok(r) => r,
             Err(e) => {
-                dev_log::log_debug("diagnostic", &format!("Frame {} DTC query failed: {}", frame_num, e));
-                continue;
+                dev_log::log_warn("diagnostic", &format!("Mode 06 bitmap query failed: {}", e));
+                return Vec::new();
             }
         };
 
-        if dtc_response.contains("NO DATA") || dtc_response.is_empty() {
-            dev_log::log_debug("diagnostic", &format!("No freeze frame stored for frame {}", frame_num));
-            continue;
+        if bitmap_response.contains("NO DATA") || bitmap_response.is_empty() {
+            dev_log::log_warn("diagnostic", "Mode 06 not supported by this vehicle");
+            return Vec::new();
         }
 
-        // Parse DTC from "42 02 XX XX" response
-        let dtc_bytes: Vec<u8> = dtc_response.split_whitespace()
-            .filter_map(|s| u8::from_str_radix(s, 16).ok())
-            .collect();
+        let supported_tids = parse_mode06_bitmap(&bitmap_response);
+        dev_log::log_info("diagnostic", &format!("Mode 06: {} supported TIDs found", supported_tids.len()));
 
-        let dtc_code = if let Some(pos) = dtc_bytes.windows(2).position(|w| w[0] == 0x42 && w[1] == 0x02) {
-            if pos + 4 <= dtc_bytes.len() {
-                dtc::decode_dtc_bytes(dtc_bytes[pos + 2], dtc_bytes[pos + 3])
-            } else {
-                "Unknown".to_string()
-            }
-        } else {
-            "Unknown".to_string()
-        };
+        if supported_tids.is_empty() {
+            return Vec::new();
+        }
 
-        dev_log::log_info("diagnostic", &format!("Frame {}: triggered by DTC {}", frame_num, dtc_code));
+        // Step 2: Query each supported TID
+        let mut all_results = Vec::new();
 
-        // Step 2: Read key PIDs for this frame
-        let mut pids = Vec::new();
-
-        for def in &definitions {
-            if scan_start.elapsed() > MAX_SCAN_DURATION { break; }
-            if !key_pids.contains(&def.pid) {
-                continue;
-            }
-
-            let pid_u8 = def.pid as u8;
-            let cmd = format!("02{:02X}{:02X}", pid_u8, frame_num);
-
-            match with_real_connection(|conn| conn.send_command_timeout(&cmd, 2000)) {
+        for tid in &supported_tids {
+            let cmd = format!("06{:02X}", tid);
+            match with_real_connection(|conn| conn.send_command_timeout(&cmd, 5000)) {
                 Ok(response) => {
                     if response.contains("NO DATA") || response.is_empty() {
                         continue;
                     }
-
-                    let tokens: Vec<&str> = response.split_whitespace().collect();
-                    let prefix_42 = format!("{:02X}", 0x42);
-                    let prefix_pid = format!("{:02X}", pid_u8);
-
-                    if let Some(pos) = tokens.windows(2).position(|w| w[0].eq_ignore_ascii_case(&prefix_42) && w[1].eq_ignore_ascii_case(&prefix_pid)) {
-                        let data_bytes: Vec<u8> = tokens[pos+2..]
-                            .iter()
-                            .filter_map(|s| u8::from_str_radix(s, 16).ok())
-                            .collect();
-
-                        if let Some(value) = pid::decode_pid(def.pid, &data_bytes) {
-                            pids.push(PidValue {
-                                pid: def.pid,
-                                name: def.name.clone(),
-                                value,
-                                unit: def.unit.clone(),
-                                min: def.min,
-                                max: def.max,
-                                history: vec![],
-                                timestamp: now,
-                            });
-                        }
+                    let results = parse_mode06_results(&response, lang);
+                    if !results.is_empty() {
+                        dev_log::log_debug("diagnostic", &format!("TID {:02X}: {} results", tid, results.len()));
+                        all_results.extend(results);
                     }
                 }
-                Err(_) => continue,
+                Err(e) => {
+                    dev_log::log_debug("diagnostic", &format!("TID {:02X} failed: {}", tid, e));
+                    continue;
+                }
+            }
+
+            // Small delay between TID queries to avoid buffer overflow on clone adapters
+            std::thread::sleep(std::time::Duration::from_millis(50));
+        }
+
+        dev_log::log_info("diagnostic", &format!("Mode 06 complete: {} test results", all_results.len()));
+        all_results
+    }).await.unwrap_or_default()
+}
+
+/// Get Mode 02 Freeze Frame data — reads frames 0 through 3
+#[command]
+pub async fn get_freeze_frame(lang: Option<String>) -> Vec<FreezeFrameData> {
+    tokio::task::spawn_blocking(move || {
+        let lang = lang.as_deref().unwrap_or("en");
+
+        if is_demo() {
+            dev_log::log_info("diagnostic", "Demo mode: returning simulated freeze frame");
+            return DemoConnection::get_freeze_frame(lang).into_iter().collect();
+        }
+
+        dev_log::log_info("diagnostic", "Real mode: reading Mode 02 freeze frames (0-3)");
+
+        let definitions = pid::get_pid_definitions(lang);
+        let key_pids: Vec<u16> = vec![
+            0x04, 0x05, 0x06, 0x07, 0x0B, 0x0C, 0x0D, 0x0E, 0x0F, 0x10,
+            0x11, 0x2F, 0x33, 0x42, 0x44, 0x46, 0x5C, 0x5E,
+        ];
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_millis() as u64;
+
+        let mut frames = Vec::new();
+        let scan_start = std::time::Instant::now();
+        const MAX_SCAN_DURATION: std::time::Duration = std::time::Duration::from_secs(30);
+
+        for frame_num in 0u8..4 {
+            // Overall timeout guard — abort after 30s to prevent UI hang
+            if scan_start.elapsed() > MAX_SCAN_DURATION {
+                dev_log::log_warn("diagnostic", &format!("Freeze frame scan timeout after {}s — returning {} frames", scan_start.elapsed().as_secs(), frames.len()));
+                break;
+            }
+
+            // Step 1: Read the DTC that triggered this frame
+            let dtc_cmd = format!("0202{:02X}", frame_num);
+            let dtc_response = match with_real_connection(|conn| conn.send_command_timeout(&dtc_cmd, 3000)) {
+                Ok(r) => r,
+                Err(e) => {
+                    dev_log::log_debug("diagnostic", &format!("Frame {} DTC query failed: {}", frame_num, e));
+                    continue;
+                }
+            };
+
+            if dtc_response.contains("NO DATA") || dtc_response.is_empty() {
+                dev_log::log_debug("diagnostic", &format!("No freeze frame stored for frame {}", frame_num));
+                continue;
+            }
+
+            // Parse DTC from "42 02 XX XX" response
+            let dtc_bytes: Vec<u8> = dtc_response.split_whitespace()
+                .filter_map(|s| u8::from_str_radix(s, 16).ok())
+                .collect();
+
+            let dtc_code = if let Some(pos) = dtc_bytes.windows(2).position(|w| w[0] == 0x42 && w[1] == 0x02) {
+                if pos + 4 <= dtc_bytes.len() {
+                    dtc::decode_dtc_bytes(dtc_bytes[pos + 2], dtc_bytes[pos + 3])
+                } else {
+                    "Unknown".to_string()
+                }
+            } else {
+                "Unknown".to_string()
+            };
+
+            dev_log::log_info("diagnostic", &format!("Frame {}: triggered by DTC {}", frame_num, dtc_code));
+
+            // Step 2: Read key PIDs for this frame
+            let mut pids = Vec::new();
+
+            for def in &definitions {
+                if scan_start.elapsed() > MAX_SCAN_DURATION { break; }
+                if !key_pids.contains(&def.pid) {
+                    continue;
+                }
+
+                let pid_u8 = def.pid as u8;
+                let cmd = format!("02{:02X}{:02X}", pid_u8, frame_num);
+
+                match with_real_connection(|conn| conn.send_command_timeout(&cmd, 2000)) {
+                    Ok(response) => {
+                        if response.contains("NO DATA") || response.is_empty() {
+                            continue;
+                        }
+
+                        let tokens: Vec<&str> = response.split_whitespace().collect();
+                        let prefix_42 = format!("{:02X}", 0x42);
+                        let prefix_pid = format!("{:02X}", pid_u8);
+
+                        if let Some(pos) = tokens.windows(2).position(|w| w[0].eq_ignore_ascii_case(&prefix_42) && w[1].eq_ignore_ascii_case(&prefix_pid)) {
+                            let data_bytes: Vec<u8> = tokens[pos+2..]
+                                .iter()
+                                .filter_map(|s| u8::from_str_radix(s, 16).ok())
+                                .collect();
+
+                            if let Some(value) = pid::decode_pid(def.pid, &data_bytes) {
+                                pids.push(PidValue {
+                                    pid: def.pid,
+                                    name: def.name.clone(),
+                                    value,
+                                    unit: def.unit.clone(),
+                                    min: def.min,
+                                    max: def.max,
+                                    history: vec![],
+                                    timestamp: now,
+                                });
+                            }
+                        }
+                    }
+                    Err(_) => continue,
+                }
+            }
+
+            if !pids.is_empty() || dtc_code != "Unknown" {
+                dev_log::log_info("diagnostic", &format!("Frame {}: {} PIDs read for DTC {}", frame_num, pids.len(), dtc_code));
+                frames.push(FreezeFrameData {
+                    dtc_code,
+                    frame_number: frame_num,
+                    pids,
+                });
             }
         }
 
-        if !pids.is_empty() || dtc_code != "Unknown" {
-            dev_log::log_info("diagnostic", &format!("Frame {}: {} PIDs read for DTC {}", frame_num, pids.len(), dtc_code));
-            frames.push(FreezeFrameData {
-                dtc_code,
-                frame_number: frame_num,
-                pids,
-            });
-        }
-    }
-
-    dev_log::log_info("diagnostic", &format!("Freeze frame scan complete: {} frames found", frames.len()));
-    frames
+        dev_log::log_info("diagnostic", &format!("Freeze frame scan complete: {} frames found", frames.len()));
+        frames
+    }).await.unwrap_or_default()
 }
 
 /// Discover which manufacturer DIDs the vehicle actually supports
 /// Scans the given DID list and returns only the ones that respond
 #[command]
-pub fn discover_vehicle_dids(manufacturer: String) -> Vec<(String, String)> {
-    if is_demo() {
-        dev_log::log_info("diagnostic", "Demo mode: returning full manufacturer DID list as supported");
-        let dids = crate::obd::ecu_profiles::get_dids_for_manufacturer(&manufacturer);
-        // In demo, return a representative subset
-        return dids.into_iter().take(30).collect();
-    }
-
-    dev_log::log_info("diagnostic", &format!("Discovering supported DIDs for {}", manufacturer));
-
-    let all_dids = crate::obd::ecu_profiles::get_dids_for_manufacturer(&manufacturer);
-    if all_dids.is_empty() {
-        dev_log::log_warn("diagnostic", "No known DIDs for this manufacturer");
-        return Vec::new();
-    }
-
-    dev_log::log_info("diagnostic", &format!("Testing {} candidate DIDs", all_dids.len()));
-
-    let mut supported: Vec<(String, String)> = Vec::new();
-    let mut consecutive_failures = 0;
-
-    for (did_hex, did_name) in &all_dids {
-        // If too many consecutive failures, the ECU likely doesn't support extended DIDs
-        if consecutive_failures >= 10 {
-            dev_log::log_warn("diagnostic", "10 consecutive DID failures — stopping discovery");
-            break;
+pub async fn discover_vehicle_dids(manufacturer: String) -> Vec<(String, String)> {
+    tokio::task::spawn_blocking(move || {
+        if is_demo() {
+            dev_log::log_info("diagnostic", "Demo mode: returning full manufacturer DID list as supported");
+            let dids = crate::obd::ecu_profiles::get_dids_for_manufacturer(&manufacturer);
+            // In demo, return a representative subset
+            return dids.into_iter().take(30).collect();
         }
 
-        let cmd = format!("22{}", did_hex);
-        match with_real_connection(|conn| conn.send_command_timeout(&cmd, 2000)) {
-            Ok(response) => {
-                if response.contains("62") && !response.contains("7F") && !response.contains("NO DATA") {
-                    supported.push((did_hex.clone(), did_name.clone()));
-                    consecutive_failures = 0;
-                    dev_log::log_debug("diagnostic", &format!("DID {} supported: {}", did_hex, did_name));
-                } else {
+        dev_log::log_info("diagnostic", &format!("Discovering supported DIDs for {}", manufacturer));
+
+        let all_dids = crate::obd::ecu_profiles::get_dids_for_manufacturer(&manufacturer);
+        if all_dids.is_empty() {
+            dev_log::log_warn("diagnostic", "No known DIDs for this manufacturer");
+            return Vec::new();
+        }
+
+        dev_log::log_info("diagnostic", &format!("Testing {} candidate DIDs", all_dids.len()));
+
+        let mut supported: Vec<(String, String)> = Vec::new();
+        let mut consecutive_failures = 0;
+
+        for (did_hex, did_name) in &all_dids {
+            // If too many consecutive failures, the ECU likely doesn't support extended DIDs
+            if consecutive_failures >= 10 {
+                dev_log::log_warn("diagnostic", "10 consecutive DID failures — stopping discovery");
+                break;
+            }
+
+            let cmd = format!("22{}", did_hex);
+            match with_real_connection(|conn| conn.send_command_timeout(&cmd, 2000)) {
+                Ok(response) => {
+                    if response.contains("62") && !response.contains("7F") && !response.contains("NO DATA") {
+                        supported.push((did_hex.clone(), did_name.clone()));
+                        consecutive_failures = 0;
+                        dev_log::log_debug("diagnostic", &format!("DID {} supported: {}", did_hex, did_name));
+                    } else {
+                        consecutive_failures += 1;
+                    }
+                }
+                Err(_) => {
                     consecutive_failures += 1;
                 }
             }
-            Err(_) => {
-                consecutive_failures += 1;
-            }
+
+            // Small delay to avoid overwhelming the adapter
+            std::thread::sleep(std::time::Duration::from_millis(30));
         }
 
-        // Small delay to avoid overwhelming the adapter
-        std::thread::sleep(std::time::Duration::from_millis(30));
-    }
-
-    dev_log::log_info("diagnostic", &format!("DID discovery complete: {}/{} supported", supported.len(), all_dids.len()));
-    supported
+        dev_log::log_info("diagnostic", &format!("DID discovery complete: {}/{} supported", supported.len(), all_dids.len()));
+        supported
+    }).await.unwrap_or_default()
 }

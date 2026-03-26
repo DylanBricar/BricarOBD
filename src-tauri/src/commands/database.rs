@@ -5,7 +5,7 @@ use crate::db::Database;
 
 static DB: Mutex<Option<Database>> = Mutex::new(None);
 
-fn with_db<F, R>(f: F) -> Result<R, String>
+pub fn with_db<F, R>(f: F) -> Result<R, String>
 where
     F: FnOnce(&Database) -> Result<R, String>,
 {

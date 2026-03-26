@@ -90,7 +90,13 @@ pub fn get_dtc_description(code: &str, lang: &str) -> String {
     DTC_DESCRIPTIONS
         .get(code)
         .cloned()
-        .unwrap_or_else(|| format!("Code {} — description non disponible", code))
+        .unwrap_or_else(|| {
+            if lang == "fr" {
+                format!("Code {} — description non disponible", code)
+            } else {
+                format!("Code {} — description not available", code)
+            }
+        })
 }
 
 /// Get repair tips for DTC from embedded JSON database (language-aware)

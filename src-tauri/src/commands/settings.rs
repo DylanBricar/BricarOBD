@@ -7,12 +7,17 @@ use crate::obd::dev_log;
 #[command]
 pub fn get_settings() -> AppSettings {
     dev_log::log_debug("settings", "Getting application settings");
-    AppSettings::default()
+    super::database::with_db(|db| Ok(db.get_settings())).unwrap_or_default()
 }
 
 /// Save application settings
 #[command]
 pub fn save_settings(settings: AppSettings) -> Result<(), String> {
+    super::database::with_db(|db| {
+        db.save_setting("language", &settings.language)?;
+        db.save_setting("default_baud_rate", &settings.default_baud_rate.to_string())?;
+        Ok(())
+    })?;
     dev_log::log_info("settings", &format!("Settings saved: lang={}, baud={}", settings.language, settings.default_baud_rate));
     Ok(())
 }

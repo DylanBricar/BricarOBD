@@ -7,112 +7,114 @@ use crate::commands::connection::{is_demo, with_real_connection};
 
 /// Read all DTCs — Mode 03 (active), Mode 07 (pending), Mode 0A (permanent) + UDS 0x19
 #[command]
-pub fn read_all_dtcs(lang: Option<String>) -> Vec<DtcCode> {
-    let lang = lang.as_deref().unwrap_or("en");
-    if is_demo() {
-        dev_log::log_info("dtc", "Demo mode: returning simulated DTCs");
-        return DemoConnection::get_dtcs(lang);
-    }
-
-    dev_log::log_info("dtc", "Real mode: starting DTC scan");
-
-    let mut all_dtcs: Vec<DtcCode> = Vec::new();
-
-    // ====== OBD-II Standard Modes ======
-
-    // Mode 03 — Confirmed/Active DTCs (with retry)
-    match read_dtc_mode_with_retry("03", DtcStatus::Active, "OBD Mode 03", lang) {
-        Ok(dtcs) => {
-            dev_log::log_info("dtc", &format!("Mode 03 (Active): {} DTCs", dtcs.len()));
-            all_dtcs.extend(dtcs);
-        }
-        Err(e) => dev_log::log_warn("dtc", &format!("Mode 03 failed: {}", e)),
-    }
-
-    // Mode 07 — Pending DTCs
-    match read_dtc_mode_with_retry("07", DtcStatus::Pending, "OBD Mode 07", lang) {
-        Ok(dtcs) => {
-            dev_log::log_info("dtc", &format!("Mode 07 (Pending): {} DTCs", dtcs.len()));
-            all_dtcs.extend(dtcs);
-        }
-        Err(e) => dev_log::log_warn("dtc", &format!("Mode 07 failed: {}", e)),
-    }
-
-    // Mode 0A — Permanent DTCs (not all vehicles support this)
-    match read_dtc_mode_with_retry("0A", DtcStatus::Permanent, "OBD Mode 0A", lang) {
-        Ok(dtcs) => {
-            dev_log::log_info("dtc", &format!("Mode 0A (Permanent): {} DTCs", dtcs.len()));
-            all_dtcs.extend(dtcs);
-        }
-        Err(e) => dev_log::log_debug("dtc", &format!("Mode 0A not supported: {}", e)),
-    }
-
-    // ====== UDS 0x19 — Read DTC by Status Mask ======
-    // Try on standard + extended ECU addresses
-    let uds_addresses = ["7E0", "7E1", "7E2", "7E3", "7E4", "75D"];
-
-    for addr in uds_addresses {
-        dev_log::log_debug("dtc", &format!("Probing UDS DTC at {}", addr));
-
-        // Set header to target specific ECU
-        if with_real_connection(|conn| {
-            conn.set_ecu_header(addr)
-        }).is_err() {
-            continue;
+pub async fn read_all_dtcs(lang: Option<String>) -> Vec<DtcCode> {
+    tokio::task::spawn_blocking(move || {
+        let lang = lang.as_deref().unwrap_or("en");
+        if is_demo() {
+            dev_log::log_info("dtc", "Demo mode: returning simulated DTCs");
+            return DemoConnection::get_dtcs(lang);
         }
 
-        // UDS 0x19 02 FF — Read all DTCs by status mask (all statuses)
-        if let Ok(response) = with_real_connection(|conn| conn.send_command_timeout("1902FF", 5000)) {
-            if response.contains("59 02") || response.contains("5902") {
-                let uds_dtcs = parse_uds_dtc_response(&response, addr, lang);
-                if !uds_dtcs.is_empty() {
-                    dev_log::log_info("dtc", &format!("UDS 0x19 at {}: {} DTCs", addr, uds_dtcs.len()));
-                    all_dtcs.extend(uds_dtcs);
+        dev_log::log_info("dtc", "Real mode: starting DTC scan");
+
+        let mut all_dtcs: Vec<DtcCode> = Vec::new();
+
+        // ====== OBD-II Standard Modes ======
+
+        // Mode 03 — Confirmed/Active DTCs (with retry)
+        match read_dtc_mode_with_retry("03", DtcStatus::Active, "OBD Mode 03", lang) {
+            Ok(dtcs) => {
+                dev_log::log_info("dtc", &format!("Mode 03 (Active): {} DTCs", dtcs.len()));
+                all_dtcs.extend(dtcs);
+            }
+            Err(e) => dev_log::log_warn("dtc", &format!("Mode 03 failed: {}", e)),
+        }
+
+        // Mode 07 — Pending DTCs
+        match read_dtc_mode_with_retry("07", DtcStatus::Pending, "OBD Mode 07", lang) {
+            Ok(dtcs) => {
+                dev_log::log_info("dtc", &format!("Mode 07 (Pending): {} DTCs", dtcs.len()));
+                all_dtcs.extend(dtcs);
+            }
+            Err(e) => dev_log::log_warn("dtc", &format!("Mode 07 failed: {}", e)),
+        }
+
+        // Mode 0A — Permanent DTCs (not all vehicles support this)
+        match read_dtc_mode_with_retry("0A", DtcStatus::Permanent, "OBD Mode 0A", lang) {
+            Ok(dtcs) => {
+                dev_log::log_info("dtc", &format!("Mode 0A (Permanent): {} DTCs", dtcs.len()));
+                all_dtcs.extend(dtcs);
+            }
+            Err(e) => dev_log::log_debug("dtc", &format!("Mode 0A not supported: {}", e)),
+        }
+
+        // ====== UDS 0x19 — Read DTC by Status Mask ======
+        // Try on standard + extended ECU addresses
+        let uds_addresses = ["7E0", "7E1", "7E2", "7E3", "7E4", "75D"];
+
+        for addr in uds_addresses {
+            dev_log::log_debug("dtc", &format!("Probing UDS DTC at {}", addr));
+
+            // Set header to target specific ECU
+            if with_real_connection(|conn| {
+                conn.set_ecu_header(addr)
+            }).is_err() {
+                continue;
+            }
+
+            // UDS 0x19 02 FF — Read all DTCs by status mask (all statuses)
+            if let Ok(response) = with_real_connection(|conn| conn.send_command_timeout("1902FF", 5000)) {
+                if response.contains("59 02") || response.contains("5902") {
+                    let uds_dtcs = parse_uds_dtc_response(&response, addr, lang);
+                    if !uds_dtcs.is_empty() {
+                        dev_log::log_info("dtc", &format!("UDS 0x19 at {}: {} DTCs", addr, uds_dtcs.len()));
+                        all_dtcs.extend(uds_dtcs);
+                    }
                 }
             }
-        }
 
-        // Also try 0x19 0F FF (mirror memory DTCs) — some ECUs store extra codes here
-        if let Ok(response) = with_real_connection(|conn| conn.send_command_timeout("190FFF", 3000)) {
-            if response.contains("59 0F") || response.contains("590F") {
-                let mirror_dtcs = parse_uds_dtc_response(&response, addr, lang);
-                if !mirror_dtcs.is_empty() {
-                    dev_log::log_info("dtc", &format!("UDS 0x19 0F at {}: {} mirror DTCs", addr, mirror_dtcs.len()));
-                    for mut d in mirror_dtcs {
-                        d.status = DtcStatus::Pending; // Mirror = historical
-                        d.source = format!("UDS 0x19 0F ({})", addr);
-                        all_dtcs.push(d);
+            // Also try 0x19 0F FF (mirror memory DTCs) — some ECUs store extra codes here
+            if let Ok(response) = with_real_connection(|conn| conn.send_command_timeout("190FFF", 3000)) {
+                if response.contains("59 0F") || response.contains("590F") {
+                    let mirror_dtcs = parse_uds_dtc_response(&response, addr, lang);
+                    if !mirror_dtcs.is_empty() {
+                        dev_log::log_info("dtc", &format!("UDS 0x19 0F at {}: {} mirror DTCs", addr, mirror_dtcs.len()));
+                        for mut d in mirror_dtcs {
+                            d.status = DtcStatus::Pending; // Mirror = historical
+                            d.source = format!("UDS 0x19 0F ({})", addr);
+                            all_dtcs.push(d);
+                        }
                     }
                 }
             }
         }
-    }
 
-    // Reset headers to broadcast
-    let _ = with_real_connection(|conn| conn.reset_headers());
+        // Reset headers to broadcast
+        let _ = with_real_connection(|conn| conn.reset_headers());
 
-    // ====== Deduplicate ======
-    let mut seen = std::collections::HashSet::new();
-    all_dtcs.retain(|d| seen.insert(format!("{}:{:?}", d.code, d.status)));
+        // ====== Deduplicate ======
+        let mut seen = std::collections::HashSet::new();
+        all_dtcs.retain(|d| seen.insert(format!("{}:{:?}", d.code, d.status)));
 
-    // ====== Enrich DTCs with ECU context ======
-    for dtc in &mut all_dtcs {
-        if dtc.ecu_context.is_none() {
-            dtc.ecu_context = match dtc.source.as_str() {
-                s if s.contains("7E0") => Some("Engine (ECM)".to_string()),
-                s if s.contains("7E1") => Some("Transmission (TCM)".to_string()),
-                s if s.contains("7E2") => Some("ABS / ESP".to_string()),
-                s if s.contains("7E3") => Some("Airbag (SRS)".to_string()),
-                s if s.contains("7E4") => Some("Climate / HVAC".to_string()),
-                s if s.contains("75D") => Some("BSI / BCM".to_string()),
-                _ => None,
-            };
+        // ====== Enrich DTCs with ECU context ======
+        for dtc in &mut all_dtcs {
+            if dtc.ecu_context.is_none() {
+                dtc.ecu_context = match dtc.source.as_str() {
+                    s if s.contains("7E0") => Some("Engine (ECM)".to_string()),
+                    s if s.contains("7E1") => Some("Transmission (TCM)".to_string()),
+                    s if s.contains("7E2") => Some("ABS / ESP".to_string()),
+                    s if s.contains("7E3") => Some("Airbag (SRS)".to_string()),
+                    s if s.contains("7E4") => Some("Climate / HVAC".to_string()),
+                    s if s.contains("75D") => Some("BSI / BCM".to_string()),
+                    _ => None,
+                };
+            }
         }
-    }
 
-    dev_log::log_info("dtc", &format!("DTC scan complete: {} unique DTCs found", all_dtcs.len()));
-    tracing::info!("Read {} DTCs from vehicle", all_dtcs.len());
-    all_dtcs
+        dev_log::log_info("dtc", &format!("DTC scan complete: {} unique DTCs found", all_dtcs.len()));
+        tracing::info!("Read {} DTCs from vehicle", all_dtcs.len());
+        all_dtcs
+    }).await.unwrap_or_default()
 }
 
 /// Read DTCs from a specific OBD mode with retry logic
