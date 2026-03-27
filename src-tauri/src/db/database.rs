@@ -77,11 +77,12 @@ impl Database {
              LEFT JOIN names n ON o.name_id = n.id
              LEFT JOIN ecu_names e ON o.ecu_name_id = e.id
              LEFT JOIN vehicles v ON o.vehicle_id = v.id
-             WHERE n.name LIKE ?1 OR e.name LIKE ?1 OR o.did LIKE ?1 OR o.sentbytes LIKE ?1
+             WHERE n.name LIKE ?1 ESCAPE '\\' OR e.name LIKE ?1 ESCAPE '\\' OR o.did LIKE ?1 ESCAPE '\\' OR o.sentbytes LIKE ?1 ESCAPE '\\'
              LIMIT ?2"
         ).map_err(|e| format!("Query failed: {}", e))?;
 
-        let pattern = format!("%{}%", query);
+        let escaped_query = query.replace('%', "\\%").replace('_', "\\_");
+        let pattern = format!("%{}%", escaped_query);
         let rows = stmt.query_map(params![pattern, limit], |row| {
             Ok(serde_json::json!({
                 "id": row.get::<_, String>(0).unwrap_or_default(),
@@ -110,11 +111,12 @@ impl Database {
              FROM operations o
              LEFT JOIN names n ON o.name_id = n.id
              LEFT JOIN ecu_names e ON o.ecu_name_id = e.id
-             JOIN vehicles v ON o.vehicle_id = v.id AND v.name LIKE ?1
+             JOIN vehicles v ON o.vehicle_id = v.id AND v.name LIKE ?1 ESCAPE '\\'
              LIMIT ?2"
         ).map_err(|e| format!("Query failed: {}", e))?;
 
-        let pattern = format!("%{}%", vehicle);
+        let escaped_vehicle = vehicle.replace('%', "\\%").replace('_', "\\_");
+        let pattern = format!("%{}%", escaped_vehicle);
         let rows = stmt.query_map(params![pattern, limit], |row| {
             Ok(serde_json::json!({
                 "id": row.get::<_, String>(0).unwrap_or_default(),
@@ -140,14 +142,16 @@ impl Database {
             "SELECT o.id, n.name, o.name_fr, o.sentbytes, o.did, o.ecu_tx, o.ecu_rx
              FROM operations o
              LEFT JOIN names n ON o.name_id = n.id
-             JOIN ecu_names e ON o.ecu_name_id = e.id AND e.name LIKE ?1
-             JOIN vehicles v ON o.vehicle_id = v.id AND v.name LIKE ?2
+             JOIN ecu_names e ON o.ecu_name_id = e.id AND e.name LIKE ?1 ESCAPE '\\'
+             JOIN vehicles v ON o.vehicle_id = v.id AND v.name LIKE ?2 ESCAPE '\\'
              WHERE o.op_type = 'read'
              LIMIT 500"
         ).map_err(|e| format!("Query failed: {}", e))?;
 
-        let ecu_pat = format!("%{}%", ecu_name);
-        let veh_pat = format!("%{}%", vehicle);
+        let escaped_ecu = ecu_name.replace('%', "\\%").replace('_', "\\_");
+        let escaped_vehicle = vehicle.replace('%', "\\%").replace('_', "\\_");
+        let ecu_pat = format!("%{}%", escaped_ecu);
+        let veh_pat = format!("%{}%", escaped_vehicle);
         let rows = stmt.query_map(params![ecu_pat, veh_pat], |row| {
             Ok(serde_json::json!({
                 "id": row.get::<_, String>(0).unwrap_or_default(),
@@ -169,14 +173,16 @@ impl Database {
             "SELECT o.id, n.name, o.name_fr, o.sentbytes, o.did, o.ecu_tx, o.ecu_rx, o.risk
              FROM operations o
              LEFT JOIN names n ON o.name_id = n.id
-             JOIN ecu_names e ON o.ecu_name_id = e.id AND e.name LIKE ?1
-             JOIN vehicles v ON o.vehicle_id = v.id AND v.name LIKE ?2
+             JOIN ecu_names e ON o.ecu_name_id = e.id AND e.name LIKE ?1 ESCAPE '\\'
+             JOIN vehicles v ON o.vehicle_id = v.id AND v.name LIKE ?2 ESCAPE '\\'
              WHERE o.op_type = 'write'
              LIMIT 500"
         ).map_err(|e| format!("Query failed: {}", e))?;
 
-        let ecu_pat = format!("%{}%", ecu_name);
-        let veh_pat = format!("%{}%", vehicle);
+        let escaped_ecu = ecu_name.replace('%', "\\%").replace('_', "\\_");
+        let escaped_vehicle = vehicle.replace('%', "\\%").replace('_', "\\_");
+        let ecu_pat = format!("%{}%", escaped_ecu);
+        let veh_pat = format!("%{}%", escaped_vehicle);
         let rows = stmt.query_map(params![ecu_pat, veh_pat], |row| {
             Ok(serde_json::json!({
                 "id": row.get::<_, String>(0).unwrap_or_default(),
@@ -228,10 +234,11 @@ impl Database {
     pub fn search_ecu_catalog(&self, query: &str, limit: u32) -> Result<Vec<serde_json::Value>, String> {
         let mut stmt = self.conn.prepare(
             "SELECT filename, ecuname, address, group_name, protocol, projects
-             FROM ecu_catalog WHERE ecuname LIKE ?1 OR group_name LIKE ?1 LIMIT ?2"
+             FROM ecu_catalog WHERE ecuname LIKE ?1 ESCAPE '\\' OR group_name LIKE ?1 ESCAPE '\\' LIMIT ?2"
         ).map_err(|e| format!("Query failed: {}", e))?;
 
-        let pattern = format!("%{}%", query);
+        let escaped_query = query.replace('%', "\\%").replace('_', "\\_");
+        let pattern = format!("%{}%", escaped_query);
         let rows = stmt.query_map(params![pattern, limit], |row| {
             Ok(serde_json::json!({
                 "filename": row.get::<_, String>(0).unwrap_or_default(),
@@ -332,19 +339,10 @@ impl Database {
         Ok(())
     }
 
-    /// Find the best matching vehicle profile name for a given make
-    pub fn find_vehicle_model(&self, make: &str) -> Option<String> {
-        if make.is_empty() {
-            return None;
-        }
-        let pattern = format!("%{}%", make);
-        self.conn
-            .query_row(
-                "SELECT DISTINCT v.name FROM vehicles v WHERE v.name LIKE ?1 LIMIT 1",
-                params![pattern],
-                |row| row.get(0),
-            )
-            .ok()
+    /// VIN alone cannot reliably determine the exact vehicle model.
+    /// The make (from WMI) is sufficient for display — returns None always.
+    pub fn find_vehicle_model(&self, _make: &str) -> Option<String> {
+        None
     }
 
     /// Look up DID info from the database for a specific vehicle
@@ -353,14 +351,15 @@ impl Database {
         if did.is_empty() || vehicle.is_empty() {
             return None;
         }
-        let veh_pattern = format!("%{}%", vehicle);
+        let escaped_vehicle = vehicle.replace('%', "\\%").replace('_', "\\_");
+        let veh_pattern = format!("%{}%", escaped_vehicle);
         self.conn
             .query_row(
                 "SELECT n.name, o.name_fr, e.name
                  FROM operations o
                  LEFT JOIN names n ON o.name_id = n.id
                  LEFT JOIN ecu_names e ON o.ecu_name_id = e.id
-                 JOIN vehicles v ON o.vehicle_id = v.id AND v.name LIKE ?2
+                 JOIN vehicles v ON o.vehicle_id = v.id AND v.name LIKE ?2 ESCAPE '\\'
                  WHERE o.service = '22' AND o.did = ?1 AND o.op_type = 'read'
                  LIMIT 1",
                 params![did, veh_pattern],
@@ -379,13 +378,14 @@ impl Database {
         if vehicle.is_empty() {
             return Vec::new();
         }
-        let veh_pattern = format!("%{}%", vehicle);
+        let escaped_vehicle = vehicle.replace('%', "\\%").replace('_', "\\_");
+        let veh_pattern = format!("%{}%", escaped_vehicle);
         let mut stmt = match self.conn.prepare(
             "SELECT DISTINCT n.name, o.name_fr, e.name
              FROM operations o
              LEFT JOIN names n ON o.name_id = n.id
              LEFT JOIN ecu_names e ON o.ecu_name_id = e.id
-             JOIN vehicles v ON o.vehicle_id = v.id AND v.name LIKE ?1
+             JOIN vehicles v ON o.vehicle_id = v.id AND v.name LIKE ?1 ESCAPE '\\'
              WHERE o.service = '19'
              LIMIT 50"
         ) {

@@ -1,10 +1,12 @@
 pub mod connection;
 pub mod connection_helpers;
+pub mod connection_ble;
 pub mod connection_wifi_vin;
 pub mod dashboard;
 pub mod dashboard_did;
 pub mod dashboard_discovery;
 pub mod dtc;
+pub mod dtc_clear;
 pub mod ecu;
 pub mod ecu_scan;
 pub mod database;

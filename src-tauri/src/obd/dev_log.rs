@@ -1,5 +1,5 @@
 use std::sync::Mutex;
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicU64, Ordering::Relaxed};
 use std::collections::VecDeque;
 use std::io::Write;
 use serde::{Serialize, Deserialize};
@@ -92,7 +92,7 @@ fn push(entry: LogEntry) {
     let buf = guard.get_or_insert_with(|| VecDeque::with_capacity(MAX_ENTRIES));
     if buf.len() >= MAX_ENTRIES {
         buf.pop_front();
-        EVICTED_COUNT.fetch_add(1, Ordering::SeqCst);
+        EVICTED_COUNT.fetch_add(1, Relaxed);
     }
 
     // Write to file if available
@@ -114,14 +114,19 @@ pub fn get_all_logs() -> Vec<LogEntry> {
 /// Get logs since a given index (for incremental polling)
 pub fn get_logs_since(since_index: usize) -> Vec<LogEntry> {
     let guard = get_buffer();
-    let evicted = EVICTED_COUNT.load(Ordering::SeqCst) as usize;
+    let evicted = EVICTED_COUNT.load(Relaxed) as usize;
     let adjusted_index = if since_index > evicted {
         since_index - evicted
     } else {
         0
     };
     guard.as_ref()
-        .map(|b| b.iter().skip(adjusted_index).cloned().collect())
+        .map(|b| {
+            b.iter()
+                .skip(adjusted_index)
+                .cloned()
+                .collect()
+        })
         .unwrap_or_default()
 }
 

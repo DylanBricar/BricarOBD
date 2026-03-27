@@ -145,7 +145,7 @@ describe("ConnectionTypeSelector", () => {
     );
 
     const buttons = container.querySelectorAll("button");
-    expect(buttons.length).toBe(3);
+    expect(buttons.length).toBe(4);
   });
 
   it("hides Android USB button when isAndroid is false", () => {

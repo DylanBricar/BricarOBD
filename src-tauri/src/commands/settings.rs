@@ -14,11 +14,12 @@ pub fn get_settings() -> AppSettings {
 #[command]
 pub fn save_settings(settings: AppSettings) -> Result<(), String> {
     super::database::with_db(|db| {
-        db.save_setting("language", &settings.language)?;
-        db.save_setting("default_baud_rate", &settings.default_baud_rate.to_string())?;
-        db.save_setting("theme", &settings.theme)?;
-        db.save_setting("auto_connect", &settings.auto_connect.to_string())?;
-        Ok(())
+        db.save_settings_batch(vec![
+            ("language", &settings.language),
+            ("default_baud_rate", &settings.default_baud_rate.to_string()),
+            ("theme", &settings.theme),
+            ("auto_connect", &settings.auto_connect.to_string()),
+        ])
     })?;
     dev_log::log_info("settings", &format!("Settings saved: lang={}, baud={}, theme={}, auto_connect={}", settings.language, settings.default_baud_rate, settings.theme, settings.auto_connect));
     Ok(())
@@ -80,7 +81,16 @@ pub fn read_csv_file(path: String) -> Result<String, String> {
         dev_log::log_warn("settings", &format!("Access denied for path outside exports directory: {}", path));
         return Err(crate::commands::connection::err_msg("Accès refusé : chemin en dehors du répertoire d'exports", "Access denied: path outside exports directory"));
     }
-    dev_log::log_info("settings", &format!("CSV file access allowed: {}", canonical.to_string_lossy()));
+
+    // Check file size (reject > 50MB)
+    let metadata = std::fs::metadata(&canonical).map_err(|e| format!("Cannot read file metadata: {}", e))?;
+    const MAX_FILE_SIZE: u64 = 50 * 1024 * 1024; // 50MB
+    if metadata.len() > MAX_FILE_SIZE {
+        dev_log::log_warn("settings", &format!("File too large: {} bytes", metadata.len()));
+        return Err(crate::commands::connection::err_msg("Fichier trop volumineux (max 50MB)", "File too large (max 50MB)"));
+    }
+
+    dev_log::log_info("settings", &format!("CSV file access allowed: {} (size: {} bytes)", canonical.to_string_lossy(), metadata.len()));
     std::fs::read_to_string(&canonical).map_err(|e| format!("Cannot read file: {}", e))
 }
 
@@ -188,7 +198,7 @@ pub struct BatchLogEntry {
 
 #[command]
 pub fn add_dev_logs_batch(logs: Vec<BatchLogEntry>) {
-    for entry in logs {
+    for entry in logs.into_iter().take(500) {
         let source: String = entry.source.chars().take(64).collect();
         let message: String = entry.message.chars().take(512).collect();
         match entry.level.to_lowercase().as_str() {

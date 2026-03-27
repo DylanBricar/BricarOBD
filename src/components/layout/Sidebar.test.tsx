@@ -17,24 +17,18 @@ vi.mock("@/stores/theme", () => ({
   }),
 }));
 
-vi.mock("@/lib/units", () => ({
-  useUnitSystem: () => ({
-    system: "metric" as const,
-    setUnitSystem: vi.fn(),
-  }),
-}));
+const defaultProps = {
+  activePage: "connection",
+  onNavigate: vi.fn(),
+  connectionStatus: "disconnected" as const,
+  canNavigate: false,
+  discoveryProgress: 0,
+  hasVin: false,
+};
 
 describe("Sidebar", () => {
   it("renders navigation items", () => {
-    const onNavigate = vi.fn();
-
-    render(
-      <Sidebar
-        activePage="dashboard"
-        onNavigate={onNavigate}
-        connectionStatus="disconnected"
-      />
-    );
+    render(<Sidebar {...defaultProps} activePage="dashboard" />);
 
     expect(screen.getByText("nav.connection")).toBeInTheDocument();
     expect(screen.getByText("nav.dashboard")).toBeInTheDocument();
@@ -42,14 +36,8 @@ describe("Sidebar", () => {
   });
 
   it("highlights active page", () => {
-    const onNavigate = vi.fn();
-
     const { container } = render(
-      <Sidebar
-        activePage="dashboard"
-        onNavigate={onNavigate}
-        connectionStatus="connected"
-      />
+      <Sidebar {...defaultProps} activePage="dashboard" connectionStatus="connected" canNavigate={true} hasVin={true} discoveryProgress={100} />
     );
 
     const activeButton = Array.from(container.querySelectorAll("button")).find(
@@ -64,11 +52,7 @@ describe("Sidebar", () => {
     const user = userEvent.setup();
 
     render(
-      <Sidebar
-        activePage="dashboard"
-        onNavigate={onNavigate}
-        connectionStatus="connected"
-      />
+      <Sidebar {...defaultProps} activePage="dashboard" onNavigate={onNavigate} connectionStatus="connected" canNavigate={true} hasVin={true} discoveryProgress={100} />
     );
 
     const liveDataButton = screen.getByText("nav.liveData");
@@ -77,16 +61,8 @@ describe("Sidebar", () => {
     expect(onNavigate).toHaveBeenCalledWith("liveData");
   });
 
-  it("disables pages when disconnected (except connection and history)", () => {
-    const onNavigate = vi.fn();
-
-    render(
-      <Sidebar
-        activePage="connection"
-        onNavigate={onNavigate}
-        connectionStatus="disconnected"
-      />
-    );
+  it("disables pages when disconnected (except connection)", () => {
+    render(<Sidebar {...defaultProps} />);
 
     const liveDataButton = Array.from(screen.getAllByRole("button")).find(
       (btn) => btn.textContent?.includes("nav.liveData")
@@ -95,15 +71,9 @@ describe("Sidebar", () => {
     expect(liveDataButton.disabled).toBe(true);
   });
 
-  it("enables navigation when connected", () => {
-    const onNavigate = vi.fn();
-
+  it("enables navigation when connected with VIN and discovery complete", () => {
     render(
-      <Sidebar
-        activePage="connection"
-        onNavigate={onNavigate}
-        connectionStatus="connected"
-      />
+      <Sidebar {...defaultProps} connectionStatus="connected" canNavigate={true} hasVin={true} discoveryProgress={100} />
     );
 
     const liveDataButton = Array.from(screen.getAllByRole("button")).find(
@@ -113,33 +83,46 @@ describe("Sidebar", () => {
     expect(liveDataButton.disabled).toBe(false);
   });
 
-  it("displays DTC badge when dtcCount is provided", () => {
-    const onNavigate = vi.fn();
+  it("shows VIN required warning when connected without VIN", () => {
+    render(
+      <Sidebar {...defaultProps} connectionStatus="connected" canNavigate={false} hasVin={false} />
+    );
 
+    const liveDataButton = Array.from(screen.getAllByRole("button")).find(
+      (btn) => btn.textContent?.includes("nav.liveData")
+    ) as HTMLButtonElement;
+
+    expect(liveDataButton.disabled).toBe(true);
+    expect(screen.getByText("nav.tabsLocked")).toBeInTheDocument();
+  });
+
+  it("shows discovery progress when connected with VIN but discovery not complete", () => {
+    render(
+      <Sidebar {...defaultProps} connectionStatus="connected" canNavigate={false} hasVin={true} discoveryProgress={45} />
+    );
+
+    const liveDataButton = Array.from(screen.getAllByRole("button")).find(
+      (btn) => btn.textContent?.includes("nav.liveData")
+    ) as HTMLButtonElement;
+
+    expect(liveDataButton.disabled).toBe(true);
+    expect(screen.getByText("nav.tabsLockedDiscovery")).toBeInTheDocument();
+  });
+
+  it("displays DTC badge when dtcCount is provided", () => {
     const { container } = render(
-      <Sidebar
-        activePage="dtc"
-        onNavigate={onNavigate}
-        connectionStatus="connected"
-        dtcCount={5}
-      />
+      <Sidebar {...defaultProps} activePage="dtc" connectionStatus="connected" canNavigate={true} hasVin={true} discoveryProgress={100} dtcCount={5} />
     );
 
     expect(container.textContent).toContain("5");
   });
 
   it("calls onToggleDevConsole when dev console button is clicked", async () => {
-    const onNavigate = vi.fn();
     const onToggleDevConsole = vi.fn();
     const user = userEvent.setup();
 
     render(
-      <Sidebar
-        activePage="dashboard"
-        onNavigate={onNavigate}
-        connectionStatus="connected"
-        onToggleDevConsole={onToggleDevConsole}
-      />
+      <Sidebar {...defaultProps} activePage="dashboard" connectionStatus="connected" canNavigate={true} hasVin={true} discoveryProgress={100} onToggleDevConsole={onToggleDevConsole} />
     );
 
     const devConsoleButton = screen.getByText("nav.devConsole");
@@ -149,14 +132,8 @@ describe("Sidebar", () => {
   });
 
   it("renders logo", () => {
-    const onNavigate = vi.fn();
-
     const { container } = render(
-      <Sidebar
-        activePage="dashboard"
-        onNavigate={onNavigate}
-        connectionStatus="connected"
-      />
+      <Sidebar {...defaultProps} connectionStatus="connected" canNavigate={true} hasVin={true} discoveryProgress={100} />
     );
 
     expect(container.textContent).toContain("BricarOBD");

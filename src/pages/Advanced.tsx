@@ -181,6 +181,19 @@ export default function Advanced() {
     }
   }, [pendingOperation, ecuAddress, customEcuAddress, i18n.language, t]);
 
+  const handleCancelDialog = () => {
+    setShowConfirmDialog(false);
+    setPendingOperation(null);
+  };
+
+  const handleConfirmDialog = () => {
+    if (pendingOperation?.type === "operation") {
+      confirmOperation();
+    } else if (pendingOperation?.type === "raw") {
+      confirmRawCommand();
+    }
+  };
+
   return (
     <div className="p-6 space-y-6 animate-slide-in h-full flex flex-col">
       {/* Header + Warning */}
@@ -345,17 +358,8 @@ export default function Advanced() {
       <ConfirmDialog
         show={showConfirmDialog}
         pendingOperation={pendingOperation}
-        onCancel={useCallback(() => {
-          setShowConfirmDialog(false);
-          setPendingOperation(null);
-        }, [])}
-        onConfirm={useCallback(() => {
-          if (pendingOperation?.type === "operation") {
-            confirmOperation();
-          } else if (pendingOperation?.type === "raw") {
-            confirmRawCommand();
-          }
-        }, [pendingOperation, confirmOperation, confirmRawCommand])}
+        onCancel={handleCancelDialog}
+        onConfirm={handleConfirmDialog}
         t={t}
       />
     </div>

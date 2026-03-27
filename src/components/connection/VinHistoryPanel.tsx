@@ -1,4 +1,4 @@
-import { Clock, Car, Trash2 } from "lucide-react";
+import { Clock, Car, Trash2, X } from "lucide-react";
 import { invoke } from "@tauri-apps/api/core";
 import { cn } from "@/lib/utils";
 
@@ -14,6 +14,7 @@ interface VinHistoryPanelProps {
   vinHistory: VinHistoryEntry[];
   onSelectVin: (vin: string) => void;
   onRemoveFromHistory: (vin: string) => void;
+  onCacheCleared?: () => void;
   isClearing: boolean;
   t: (key: string) => string;
   language: string;
@@ -23,17 +24,23 @@ export default function VinHistoryPanel({
   vinHistory,
   onSelectVin,
   onRemoveFromHistory,
+  onCacheCleared,
   isClearing,
   t,
   language,
 }: VinHistoryPanelProps) {
-  const handleRemoveClick = async (e: React.MouseEvent, vin: string) => {
+  const handleClearCache = async (e: React.MouseEvent, vin: string) => {
     e.stopPropagation();
     try {
       await invoke("clear_vin_cache", { vin });
+      onCacheCleared?.();
     } catch (_) {
       // Non-critical
     }
+  };
+
+  const handleRemoveEntry = (e: React.MouseEvent, vin: string) => {
+    e.stopPropagation();
     onRemoveFromHistory(vin);
   };
 
@@ -53,7 +60,7 @@ export default function VinHistoryPanel({
             <Car size={14} className="text-obd-accent flex-shrink-0" />
             <div className="flex-1 min-w-0">
               <p className="text-xs font-medium text-obd-text">
-                {entry.make} {entry.model} <span className="text-obd-text-muted">({entry.year})</span>
+                {entry.make}{entry.model ? ` ${entry.model}` : ""} {entry.year > 0 && <span className="text-obd-text-muted">({entry.year})</span>}
               </p>
               <p className="text-[10px] font-mono text-obd-text-muted truncate">{entry.vin}</p>
             </div>
@@ -61,12 +68,20 @@ export default function VinHistoryPanel({
               {new Date(entry.lastSeen).toLocaleDateString(language === "fr" ? "fr-FR" : "en-US")}
             </span>
             <button
-              onClick={(e) => handleRemoveClick(e, entry.vin)}
+              onClick={(e) => handleClearCache(e, entry.vin)}
               disabled={isClearing}
-              className={cn("p-1 rounded hover:bg-obd-danger/10 text-obd-text-muted hover:text-obd-danger transition-colors opacity-0 group-hover:opacity-100", isClearing && "opacity-50")}
-              aria-label={t("common.delete")}
+              className={cn("p-1 rounded hover:bg-obd-warning/10 text-obd-text-muted hover:text-obd-warning transition-colors opacity-0 group-hover:opacity-100", isClearing && "opacity-50")}
+              title={t("connection.clearCache")}
             >
               <Trash2 size={12} />
+            </button>
+            <button
+              onClick={(e) => handleRemoveEntry(e, entry.vin)}
+              disabled={isClearing}
+              className={cn("p-1 rounded hover:bg-obd-danger/10 text-obd-text-muted hover:text-obd-danger transition-colors opacity-0 group-hover:opacity-100", isClearing && "opacity-50")}
+              title={t("connection.removeFromHistory")}
+            >
+              <X size={12} />
             </button>
           </div>
         ))}

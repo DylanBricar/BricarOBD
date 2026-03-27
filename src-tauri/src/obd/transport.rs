@@ -136,7 +136,9 @@ impl WiFiTransport {
         })?;
 
         stream.set_read_timeout(Some(Duration::from_millis(timeout_ms)))
-            .map_err(|e| format!("Set timeout: {}", e))?;
+            .map_err(|e| format!("Set read timeout: {}", e))?;
+        stream.set_write_timeout(Some(Duration::from_millis(timeout_ms)))
+            .map_err(|e| format!("Set write timeout: {}", e))?;
         stream.set_nodelay(true).ok();
 
         dev_log::log_info("transport", "WiFi connected");
@@ -195,17 +197,43 @@ pub fn default_wifi_endpoints() -> Vec<(String, u16)> {
     ]
 }
 
-/// Try to connect via WiFi by probing common addresses
+/// Try to connect via WiFi by probing common addresses in parallel
 pub fn auto_connect_wifi(timeout_ms: u64) -> Result<WiFiTransport, String> {
-    for (host, port) in default_wifi_endpoints() {
-        dev_log::log_debug("transport", &format!("Probing WiFi {}:{}", host, port));
-        match WiFiTransport::new(&host, port, timeout_ms.min(2000)) {
-            Ok(transport) => {
-                dev_log::log_info("transport", &format!("WiFi connected at {}:{}", host, port));
-                return Ok(transport);
-            }
-            Err(_) => continue,
+    use std::sync::{Mutex, Arc};
+    let endpoints = default_wifi_endpoints();
+    let found: Arc<Mutex<Option<(String, u16)>>> = Arc::new(Mutex::new(None));
+
+    std::thread::scope(|s| {
+        let mut handles = vec![];
+        for (host, port) in endpoints {
+            let found = Arc::clone(&found);
+            let handle = s.spawn(move || {
+                dev_log::log_debug("transport", &format!("Probing WiFi {}:{}", host, port));
+                if let Ok(transport) = WiFiTransport::new(&host, port, timeout_ms.min(2000)) {
+                    let mut result = found.lock().unwrap_or_else(|e| e.into_inner());
+                    if result.is_none() {
+                        *result = Some((host, port));
+                    }
+                    return Some(transport);
+                }
+                None
+            });
+            handles.push(handle);
         }
+
+        for handle in handles {
+            if let Ok(Some(_transport)) = handle.join() {
+                return;
+            }
+        }
+    });
+
+    let result = found.lock().unwrap_or_else(|e| e.into_inner());
+    match result.as_ref() {
+        Some((host, port)) => {
+            dev_log::log_info("transport", &format!("WiFi connected at {}:{}", host, port));
+            WiFiTransport::new(host, *port, timeout_ms.min(2000))
+        }
+        None => Err("No WiFi ELM327 found at common addresses".to_string())
     }
-    Err("No WiFi ELM327 found at common addresses".to_string())
 }

@@ -35,9 +35,11 @@ export function useConnectionEffects(
   const [isDiscoveryComplete, setIsDiscoveryComplete] = useState(false);
   const [hasVinCache, setHasVinCache] = useState(false);
   const discoveryPollRef = useRef<number | null>(null);
+  const progressIntervalRef = useRef<number | null>(null);
 
   const handleClearDiscoveryTimeout = useCallback(() => {
     if (discoveryPollRef.current) clearTimeout(discoveryPollRef.current);
+    if (progressIntervalRef.current) clearInterval(progressIntervalRef.current);
   }, []);
 
   useEffect(() => {
@@ -47,7 +49,7 @@ export function useConnectionEffects(
     if (status === "demo") {
       devInfo("ui", "Demo polling started");
       setIsDiscoveryComplete(true);
-      if (!cancelled) invoke("discover_vehicle_params", { manufacturer: "Peugeot" }).catch(() => {});
+      if (!cancelled) invoke("discover_vehicle_params", { manufacturer: "Peugeot", vin: "" }).catch(() => {});
       vehicleActions.startDemoPolling();
     } else if (status === "connected") {
       setIsDiscoveryComplete(false);
@@ -64,11 +66,25 @@ export function useConnectionEffects(
         })
         .catch(() => {});
 
+      // Simulate progressive loading while waiting for discovery
+      let simulatedProgress = 5;
+      setDiscoveryProgress(simulatedProgress);
+      const progressInterval = window.setInterval(() => {
+        if (simulatedProgress < 90) {
+          simulatedProgress += Math.random() * 8 + 2;
+          if (simulatedProgress > 90) simulatedProgress = 90;
+          setDiscoveryProgress(Math.round(simulatedProgress));
+        }
+      }, 600);
+      progressIntervalRef.current = progressInterval;
+
       const pollDiscoveryProgress = async () => {
         try {
-          const result = await invoke<{ standardPids: number; manufacturerDids: number; current?: number; total?: number }>("discover_vehicle_params", { manufacturer: make });
+          const result = await invoke<{ standardPids: number; manufacturerDids: number; fromCache?: boolean }>("discover_vehicle_params", { manufacturer: make, vin: vehicle?.vin || "" });
           if (cancelled) return;
           devInfo("ui", `Discovery: ${result.standardPids} PIDs + ${result.manufacturerDids} DIDs`);
+          clearInterval(progressInterval);
+          progressIntervalRef.current = null;
           setDiscoveryProgress(100);
           setIsDiscoveryComplete(true);
           setHasVinCache(true);
@@ -77,6 +93,9 @@ export function useConnectionEffects(
         } catch (e) {
           if (cancelled) return;
           devInfo("ui", "Discovery failed: " + String(e));
+          clearInterval(progressInterval);
+          progressIntervalRef.current = null;
+          setDiscoveryProgress(100);
           setIsDiscoveryComplete(true);
         }
       };

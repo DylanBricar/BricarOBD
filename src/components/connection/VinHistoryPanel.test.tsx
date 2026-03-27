@@ -162,7 +162,7 @@ describe("VinHistoryPanel", () => {
     expect(deleteButtons.length).toBeGreaterThanOrEqual(vinHistory.length);
   });
 
-  it("calls invoke with clear_vin_cache and onRemoveFromHistory when delete button clicked", async () => {
+  it("calls invoke with clear_vin_cache when cache button clicked", async () => {
     const user = userEvent.setup();
     render(
       <VinHistoryPanel
@@ -174,11 +174,25 @@ describe("VinHistoryPanel", () => {
         language="en"
       />
     );
-    const deleteButtons = screen.getAllByRole("button").filter((btn) =>
-      btn.querySelector("svg")
-    );
-    await user.click(deleteButtons[0]);
+    const cacheButtons = screen.getAllByTitle("connection.clearCache");
+    await user.click(cacheButtons[0]);
     expect(invoke).toHaveBeenCalledWith("clear_vin_cache", { vin: "1HGCM82633A123456" });
+  });
+
+  it("calls onRemoveFromHistory when remove button clicked", async () => {
+    const user = userEvent.setup();
+    render(
+      <VinHistoryPanel
+        vinHistory={vinHistory}
+        onSelectVin={mockOnSelectVin}
+        onRemoveFromHistory={mockOnRemoveFromHistory}
+        isClearing={false}
+        t={mockT}
+        language="en"
+      />
+    );
+    const removeButtons = screen.getAllByTitle("connection.removeFromHistory");
+    await user.click(removeButtons[0]);
     expect(mockOnRemoveFromHistory).toHaveBeenCalledWith("1HGCM82633A123456");
   });
 

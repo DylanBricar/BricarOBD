@@ -1,4 +1,5 @@
 import { useSyncExternalStore } from "react";
+import i18n from "i18next";
 
 export type UnitSystem = "metric" | "imperial";
 
@@ -25,20 +26,26 @@ export function convertValue(value: number, unit: string, system: UnitSystem): {
   return { value: rule.convert(value), unit: rule.toUnit };
 }
 
-// --- useSyncExternalStore-based reactive state ---
+// --- Unit system derived from language ---
 
-let currentSystem: UnitSystem = (localStorage.getItem("bricarobd_unit_system") as UnitSystem) || "metric";
+const imperialLanguages = ["en"];
+
+function getSystemFromLanguage(): UnitSystem {
+  return imperialLanguages.some(l => i18n.language?.startsWith(l)) ? "imperial" : "metric";
+}
+
+let currentSystem: UnitSystem = getSystemFromLanguage();
 const listeners = new Set<() => void>();
 
 function emitChange() {
   listeners.forEach((l) => l());
 }
 
-export function setUnitSystem(system: UnitSystem) {
-  currentSystem = system;
-  localStorage.setItem("bricarobd_unit_system", system);
+// Sync unit system when language changes
+i18n.on("languageChanged", () => {
+  currentSystem = getSystemFromLanguage();
   emitChange();
-}
+});
 
 function subscribe(callback: () => void): () => void {
   listeners.add(callback);
@@ -51,5 +58,5 @@ function getSnapshot(): UnitSystem {
 
 export function useUnitSystem() {
   const system = useSyncExternalStore(subscribe, getSnapshot);
-  return { system, setUnitSystem };
+  return { system };
 }

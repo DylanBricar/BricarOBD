@@ -17,8 +17,8 @@ export const nav = {
     "nav.theme.dark": "Sombre",
     "nav.theme.light": "Clair",
     "nav.polling": "Acquisition",
-    "nav.metric": "Métrique",
-    "nav.imperial": "Impérial",
+    "nav.tabsLocked": "Onglets verrouillés — VIN requis",
+    "nav.tabsLockedDiscovery": "Analyse en cours…",
   },
   en: {
     "nav.connection": "Connection",
@@ -38,7 +38,7 @@ export const nav = {
     "nav.theme.dark": "Dark",
     "nav.theme.light": "Light",
     "nav.polling": "Polling",
-    "nav.metric": "Metric",
-    "nav.imperial": "Imperial",
+    "nav.tabsLocked": "Tabs locked — VIN required",
+    "nav.tabsLockedDiscovery": "Analyzing parameters…",
   },
 };

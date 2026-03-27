@@ -33,51 +33,6 @@ function createRealPollFn(
   };
 }
 
-// External store for vehicle state (survives component unmounts)
-interface VehicleState {
-  pidData: Map<number, PidValue>;
-  dtcs: DtcCode[];
-  dtcHistory: DtcHistoryEntry[];
-  ecus: EcuInfo[];
-  monitors: MonitorStatus[];
-  mode06Results: Mode06Result[];
-  freezeFrame: FreezeFrameData[];
-  isLoadingMode06: boolean;
-  isLoadingFreezeFrame: boolean;
-  isPolling: boolean;
-  vehicleOps: VehicleOperation[];
-  vehicleWriteOps: WriteOperation[];
-  dbStats: { operations: number; profiles: number; ecus: number } | null;
-}
-
-const initialVehicleState: VehicleState = {
-  pidData: new Map(),
-  dtcs: [],
-  dtcHistory: (() => {
-    try {
-      const saved = localStorage.getItem("bricarobd_dtc_history");
-      return saved ? JSON.parse(saved) : [];
-    } catch { return []; }
-  })(),
-  ecus: [],
-  monitors: [],
-  mode06Results: [],
-  freezeFrame: [],
-  isLoadingMode06: false,
-  isLoadingFreezeFrame: false,
-  isPolling: false,
-  vehicleOps: [],
-  vehicleWriteOps: [],
-  dbStats: null,
-};
-
-let vehicleState: VehicleState = { ...initialVehicleState };
-const vehicleListeners = new Set<() => void>();
-
-function emitVehicleChange() {
-  vehicleListeners.forEach((l) => l());
-}
-
 export function useVehicleData() {
   const [pidData, setPidData] = useState<Map<number, PidValue>>(new Map());
   const [dtcs, setDtcs] = useState<DtcCode[]>([]);
@@ -94,6 +49,10 @@ export function useVehicleData() {
   const [isLoadingMode06, setIsLoadingMode06] = useState(false);
   const [isLoadingFreezeFrame, setIsLoadingFreezeFrame] = useState(false);
   const [isPolling, setIsPolling] = useState(false);
+  const [vehicleOps, setVehicleOps] = useState<VehicleOperation[]>([]);
+  const [vehicleWriteOps, setVehicleWriteOps] = useState<WriteOperation[]>([]);
+  const [dbStats, setDbStats] = useState<{ operations: number; profiles: number; ecus: number } | null>(null);
+
   const intervalRef = useRef<number | null>(null);
   const pollingModeRef = useRef<"demo" | "real">("demo");
   const manufacturerRef = useRef("");
@@ -109,7 +68,6 @@ export function useVehicleData() {
     if (newDtcs.length === 0) return;
     devInfo("ui", "DTCs updated: " + newDtcs.length);
     setDtcs(newDtcs);
-    vehicleState.dtcs = newDtcs;
     setDtcHistory((prev) => {
       const now = Date.now();
       const codes = new Set(prev.map((h) => h.code));
@@ -118,11 +76,8 @@ export function useVehicleData() {
         .map((d) => ({ ...d, seenAt: now }));
       const updated = [...prev, ...newEntries].slice(-500);
       try { localStorage.setItem("bricarobd_dtc_history", JSON.stringify(updated)); } catch {}
-      vehicleState.dtcHistory = updated;
-      emitVehicleChange();
       return updated;
     });
-    emitVehicleChange();
   }, []);
 
   const startDemoPolling = useCallback((intervalMs: number = 500) => {
@@ -133,12 +88,9 @@ export function useVehicleData() {
     pollingModeRef.current = "demo";
     manufacturerRef.current = "";
     setIsPolling(true);
-    vehicleState.isPolling = true;
     setDtcsWithHistory(demoDtcs);
     setEcus(demoEcus);
-    vehicleState.ecus = demoEcus;
     setMonitors(demoMonitors);
-    vehicleState.monitors = demoMonitors;
 
     // Pre-load demo history with past DTCs (resolved codes no longer active)
     setDtcHistory((prev) => {
@@ -160,8 +112,6 @@ export function useVehicleData() {
         }] : []),
       ];
       const result = [...prev, ...pastDtcs];
-      vehicleState.dtcHistory = result;
-      emitVehicleChange();
       return result;
     });
 
@@ -171,8 +121,6 @@ export function useVehicleData() {
         setPidData(prev => {
           const merged = new Map(prev);
           for (const p of data) merged.set(p.pid, p);
-          vehicleState.pidData = new Map(merged);
-          emitVehicleChange();
           return merged;
         });
       } catch (e) {
@@ -182,7 +130,6 @@ export function useVehicleData() {
 
     pollFn(); // First poll immediately
     intervalRef.current = window.setInterval(pollFn, intervalMs);
-    emitVehicleChange();
   }, [setDtcsWithHistory, demoDtcs, t]);
 
   const startRealPolling = useCallback((intervalMs: number = 1000, manufacturer: string = "", skipEcuScan: boolean = false) => {
@@ -193,15 +140,14 @@ export function useVehicleData() {
     pollingModeRef.current = "real";
     manufacturerRef.current = manufacturer;
     setIsPolling(true);
-    vehicleState.isPolling = true;
 
     // Reset PID failure blacklist on new connection
     invoke("reset_pid_blacklist").catch(() => {});
 
     // Load ECUs and monitors from backend (skip on VIN update to avoid 60s rescan)
     if (!skipEcuScan) {
-      invoke<EcuInfo[]>("scan_ecus").then(e => { setEcus(e); vehicleState.ecus = e; emitVehicleChange(); }).catch(() => {});
-      invoke<MonitorStatus[]>("get_monitors").then(m => { setMonitors(m); vehicleState.monitors = m; emitVehicleChange(); }).catch(() => {});
+      invoke<EcuInfo[]>("scan_ecus").then(e => { setEcus(e); }).catch(() => {});
+      invoke<MonitorStatus[]>("get_monitors").then(m => { setMonitors(m); }).catch(() => {});
     }
 
     // Use shared poll function
@@ -209,15 +155,12 @@ export function useVehicleData() {
 
     pollFn(); // First poll immediately
     intervalRef.current = window.setInterval(pollFn, intervalMs);
-    emitVehicleChange();
-  }, [pollInProgressRef]);
+  }, []);
 
   const loadMonitors = useCallback(async () => {
     try {
       const monitors = await invoke<MonitorStatus[]>("get_monitors");
       setMonitors(monitors);
-      vehicleState.monitors = monitors;
-      emitVehicleChange();
     } catch {}
   }, []);
 
@@ -228,8 +171,6 @@ export function useVehicleData() {
     try {
       const results = await invoke<Mode06Result[]>("get_mode06_results", { lang: i18n.language });
       setMode06Results(results);
-      vehicleState.mode06Results = results;
-      emitVehicleChange();
     } catch (e) {
       devInfo("ui", "Mode 06 error: " + String(e));
     } finally {
@@ -245,8 +186,6 @@ export function useVehicleData() {
     try {
       const data = await invoke<FreezeFrameData[]>("get_freeze_frame", { lang: i18n.language });
       setFreezeFrame(data);
-      vehicleState.freezeFrame = data;
-      emitVehicleChange();
     } catch (e) {
       devInfo("ui", "Freeze frame error: " + String(e));
     } finally {
@@ -258,36 +197,26 @@ export function useVehicleData() {
   const pausePolling = useCallback(() => {
     devInfo("ui", "Polling paused");
     setIsPolling(false);
-    vehicleState.isPolling = false;
     if (intervalRef.current) {
       clearInterval(intervalRef.current);
       intervalRef.current = null;
     }
-    emitVehicleChange();
   }, []);
 
   const stopPolling = useCallback(() => {
     devInfo("ui", "Polling stopped — clearing all vehicle data");
     setIsPolling(false);
-    vehicleState.isPolling = false;
     if (intervalRef.current) {
       clearInterval(intervalRef.current);
       intervalRef.current = null;
     }
     // Clear ALL vehicle data on disconnect — UI must match reality
     setPidData(new Map());
-    vehicleState.pidData = new Map();
     setDtcs([]);
-    vehicleState.dtcs = [];
     setEcus([]);
-    vehicleState.ecus = [];
     setMonitors([]);
-    vehicleState.monitors = [];
     setMode06Results([]);
-    vehicleState.mode06Results = [];
     setFreezeFrame([]);
-    vehicleState.freezeFrame = [];
-    emitVehicleChange();
   }, []);
 
   const changeRefreshRate = useCallback((intervalMs: number) => {
@@ -310,8 +239,6 @@ export function useVehicleData() {
           setPidData(prev => {
             const merged = new Map(prev);
             for (const p of data) merged.set(p.pid, p);
-            vehicleState.pidData = new Map(merged);
-            emitVehicleChange();
             return merged;
           });
         } catch (e) {
@@ -341,12 +268,27 @@ export function useVehicleData() {
     setDtcs([]);
   }, []);
 
-  // Vehicle-specific operations from the 3.17M DB
-  const [vehicleOps, setVehicleOps] = useState<VehicleOperation[]>([]);
-  const [vehicleWriteOps, setVehicleWriteOps] = useState<WriteOperation[]>([]);
-  const [dbStats, setDbStats] = useState<{ operations: number; profiles: number; ecus: number } | null>(null);
+  const setEcusCallback = useCallback((newEcus: EcuInfo[]) => {
+    setEcus(newEcus);
+  }, []);
 
-  return {
+  const setMonitorsCallback = useCallback((newMonitors: MonitorStatus[]) => {
+    setMonitors(newMonitors);
+  }, []);
+
+  const setVehicleOpsCallback = useCallback((ops: VehicleOperation[]) => {
+    setVehicleOps(ops);
+  }, []);
+
+  const setVehicleWriteOpsCallback = useCallback((ops: WriteOperation[]) => {
+    setVehicleWriteOps(ops);
+  }, []);
+
+  const setDbStatsCallback = useCallback((stats: { operations: number; profiles: number; ecus: number } | null) => {
+    setDbStats(stats);
+  }, []);
+
+  const returnValue = useMemo(() => ({
     pidData,
     dtcs,
     dtcHistory,
@@ -370,10 +312,41 @@ export function useVehicleData() {
     changeRefreshRate,
     setDtcs: setDtcsWithHistory,
     clearAllDtcs,
-    setEcus: (ecus: EcuInfo[]) => { setEcus(ecus); vehicleState.ecus = ecus; emitVehicleChange(); },
-    setMonitors: (monitors: MonitorStatus[]) => { setMonitors(monitors); vehicleState.monitors = monitors; emitVehicleChange(); },
-    setVehicleOps: (ops: VehicleOperation[]) => { setVehicleOps(ops); vehicleState.vehicleOps = ops; emitVehicleChange(); },
-    setVehicleWriteOps: (ops: WriteOperation[]) => { setVehicleWriteOps(ops); vehicleState.vehicleWriteOps = ops; emitVehicleChange(); },
-    setDbStats: (stats: { operations: number; profiles: number; ecus: number } | null) => { setDbStats(stats); vehicleState.dbStats = stats; emitVehicleChange(); },
-  };
+    setEcus: setEcusCallback,
+    setMonitors: setMonitorsCallback,
+    setVehicleOps: setVehicleOpsCallback,
+    setVehicleWriteOps: setVehicleWriteOpsCallback,
+    setDbStats: setDbStatsCallback,
+  }), [
+    pidData,
+    dtcs,
+    dtcHistory,
+    isPolling,
+    ecus,
+    monitors,
+    mode06Results,
+    freezeFrame,
+    isLoadingMode06,
+    isLoadingFreezeFrame,
+    vehicleOps,
+    vehicleWriteOps,
+    dbStats,
+    startDemoPolling,
+    startRealPolling,
+    loadMonitors,
+    loadMode06Results,
+    loadFreezeFrame,
+    pausePolling,
+    stopPolling,
+    changeRefreshRate,
+    setDtcsWithHistory,
+    clearAllDtcs,
+    setEcusCallback,
+    setMonitorsCallback,
+    setVehicleOpsCallback,
+    setVehicleWriteOpsCallback,
+    setDbStatsCallback,
+  ]);
+
+  return returnValue;
 }

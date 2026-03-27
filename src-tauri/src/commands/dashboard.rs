@@ -40,37 +40,52 @@ fn query_all_pids(
     let mut fail_updates: Vec<(u16, bool)> = Vec::new();
     let mut skip_count = 0;
     let mut fail_count = 0;
-    let mut consecutive_timeouts = 0;
+    // Acquire CONNECTION mutex ONCE for entire batch
+    let result: Result<Vec<(u16, bool, Vec<u8>)>, String> = with_real_connection(|conn| {
+        let mut batch_results: Vec<(u16, bool, Vec<u8>)> = Vec::new();
+        let mut batch_timeouts = 0;
 
-    for def in definitions {
-        let pid_u8 = def.pid as u8;
+        for def in definitions {
+            let pid_u8 = def.pid as u8;
 
-        if has_pid_bitmap && !supported_pids.contains(&pid_u8) {
-            skip_count += 1;
-            continue;
-        }
-
-        let pid_fails = fail_snapshot.get(&def.pid).copied().unwrap_or(0);
-        if pid_fails >= MAX_PID_FAILURES {
-            skip_count += 1;
-            continue;
-        }
-
-        if consecutive_timeouts >= 5 {
-            dev_log::log_warn("dashboard", "5 consecutive timeouts — attempting bus recovery");
-            let _ = with_real_connection(|conn| conn.attempt_recovery());
-            consecutive_timeouts = 0;
-        }
-
-        match with_real_connection(|conn| conn.query_pid(0x01, pid_u8)) {
-            Ok(bytes) => {
-                fail_updates.push((def.pid, true));
-                consecutive_timeouts = 0;
-                raw_results.push((def.pid, def.name.clone(), def.unit.clone(), bytes));
+            if has_pid_bitmap && !supported_pids.contains(&pid_u8) {
+                skip_count += 1;
+                continue;
             }
-            Err(e) => {
-                fail_updates.push((def.pid, false));
-                if e.contains("Timeout") { consecutive_timeouts += 1; }
+
+            let pid_fails = fail_snapshot.get(&def.pid).copied().unwrap_or(0);
+            if pid_fails >= MAX_PID_FAILURES {
+                skip_count += 1;
+                continue;
+            }
+
+            if batch_timeouts >= 5 {
+                let _ = conn.attempt_recovery();
+                batch_timeouts = 0;
+            }
+
+            match conn.query_pid(0x01, pid_u8) {
+                Ok(bytes) => {
+                    batch_timeouts = 0;
+                    batch_results.push((def.pid, true, bytes));
+                }
+                Err(e) => {
+                    if e.contains("Timeout") { batch_timeouts += 1; }
+                    batch_results.push((def.pid, false, vec![]));
+                }
+            }
+        }
+        Ok(batch_results)
+    });
+
+    if let Ok(batch) = result {
+        for (pid, success, bytes) in batch {
+            fail_updates.push((pid, success));
+            if success {
+                if let Some(def) = definitions.iter().find(|d| d.pid == pid) {
+                    raw_results.push((pid, def.name.clone(), def.unit.clone(), bytes));
+                }
+            } else {
                 fail_count += 1;
             }
         }
@@ -117,7 +132,11 @@ fn decode_and_record_history(
                 unit: unit.clone(),
                 min,
                 max,
-                history: hist.iter().cloned().collect(),
+                history: {
+                    let len = hist.len();
+                    let skip = len.saturating_sub(30);
+                    hist.iter().skip(skip).cloned().collect()
+                },
                 timestamp: now,
             });
         }
@@ -370,24 +389,36 @@ pub fn reset_pid_blacklist() {
 /// Lock ordering: DID_INFO_CACHE → DISCOVERED_DIDS → DISCOVERED_PIDS → PID_FAIL_COUNT → PID_HISTORY
 /// This order matches get_pid_data_extended_inner to prevent deadlocks.
 pub fn clear_pid_history() {
-    let mut cache_guard = DID_INFO_CACHE.lock().unwrap_or_else(|e| e.into_inner());
-    *cache_guard = None;
+    // Release each mutex in its own scope block
+    {
+        let mut cache_guard = DID_INFO_CACHE.lock().unwrap_or_else(|e| e.into_inner());
+        *cache_guard = None;
+    }
 
-    let mut dids_guard = DISCOVERED_DIDS.lock().unwrap_or_else(|e| e.into_inner());
-    *dids_guard = None;
+    {
+        let mut dids_guard = DISCOVERED_DIDS.lock().unwrap_or_else(|e| e.into_inner());
+        *dids_guard = None;
+    }
 
-    let mut pids_guard = DISCOVERED_PIDS.lock().unwrap_or_else(|e| e.into_inner());
-    *pids_guard = None;
+    {
+        let mut pids_guard = DISCOVERED_PIDS.lock().unwrap_or_else(|e| e.into_inner());
+        *pids_guard = None;
+    }
 
-    let mut fail_guard = PID_FAIL_COUNT.lock().unwrap_or_else(|e| e.into_inner());
-    *fail_guard = None;
+    {
+        let mut fail_guard = PID_FAIL_COUNT.lock().unwrap_or_else(|e| e.into_inner());
+        *fail_guard = None;
+    }
 
-    let mut history_guard = PID_HISTORY.lock().unwrap_or_else(|e| e.into_inner());
-    *history_guard = None;
+    {
+        let mut history_guard = PID_HISTORY.lock().unwrap_or_else(|e| e.into_inner());
+        *history_guard = None;
+    }
 
-    // Reset demo singleton so elapsed time is fresh on reconnect
-    let mut demo_guard = DEMO.lock().unwrap_or_else(|e| e.into_inner());
-    *demo_guard = None;
+    {
+        let mut demo_guard = DEMO.lock().unwrap_or_else(|e| e.into_inner());
+        *demo_guard = None;
+    }
 
     dev_log::log_info("connection", "PID history and discovery data cleared");
 }

@@ -72,7 +72,7 @@ export default function DTC({
   const [selectedDtc, setSelectedDtc] = useState<string | null>(null);
   const [showConfirm, setShowConfirm] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
-  const [statusFilter, setStatusFilter] = useState<string>("all");
+
   const { toast, showToast, dismissToast } = useToast();
 
   const handleExportDtcs = useCallback(async () => {
@@ -105,11 +105,10 @@ export default function DTC({
 
   const filteredDtcs = useMemo(
     () => dtcs.filter((d) =>
-      (statusFilter === "all" || d.status === statusFilter) &&
-      (d.code.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      d.description.toLowerCase().includes(searchQuery.toLowerCase()))
+      d.code.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      d.description.toLowerCase().includes(searchQuery.toLowerCase())
     ),
-    [dtcs, searchQuery, statusFilter]
+    [dtcs, searchQuery]
   );
 
   const filteredHistory = useMemo(() => {
@@ -208,18 +207,22 @@ export default function DTC({
              activeTab === "mode06" ? (isLoadingMode06 ? t("mode06.scanning") : t("mode06.scan")) :
              (isLoadingFreezeFrame ? t("freezeFrame.loading") : t("freezeFrame.load"))}
           </button>
-          <button
-            onClick={() => setShowConfirm(true)}
-            disabled={dtcs.length === 0 || isClearing}
-            className={cn("btn-danger flex items-center gap-1.5 text-xs", (dtcs.length === 0 || isClearing) && "opacity-40")}
-          >
-            <Trash2 size={14} className={cn(isClearing && "animate-spin")} />
-            {t("dtc.clearAll")}
-          </button>
-          <button onClick={handleExportDtcs} className="btn-ghost text-xs flex items-center gap-1.5">
-            <Download size={14} />
-            {t("dtc.export")}
-          </button>
+          {activeTab === "dtc" && (
+            <>
+              <button
+                onClick={() => setShowConfirm(true)}
+                disabled={dtcs.length === 0 || isClearing}
+                className={cn("btn-danger flex items-center gap-1.5 text-xs", (dtcs.length === 0 || isClearing) && "opacity-40")}
+              >
+                <Trash2 size={14} className={cn(isClearing && "animate-spin")} />
+                {t("dtc.clearAll")}
+              </button>
+              <button onClick={handleExportDtcs} className="btn-ghost text-xs flex items-center gap-1.5">
+                <Download size={14} />
+                {t("dtc.export")}
+              </button>
+            </>
+          )}
         </div>
       </div>
 
@@ -252,21 +255,6 @@ export default function DTC({
               placeholder={t("dtc.search")}
               className="input-field pl-9 w-full text-xs"
             />
-          </div>
-          <div className="flex gap-1">
-            {(["all", "active", "pending", "permanent"] as const).map(status => (
-              <button key={status} onClick={() => setStatusFilter(status)}
-                className={cn("px-2.5 py-1 text-xs rounded-full border transition-colors",
-                  statusFilter === status
-                    ? status === "all" ? "bg-obd-accent/20 border-obd-accent text-obd-accent"
-                      : status === "active" ? "bg-obd-danger/20 border-obd-danger text-obd-danger"
-                      : status === "pending" ? "bg-obd-warning/20 border-obd-warning text-obd-warning"
-                      : "bg-blue-500/20 border-blue-500 text-blue-400"
-                    : "border-obd-border text-obd-text-muted hover:border-obd-accent/50"
-                )}>
-                {t(`dtc.filter${status.charAt(0).toUpperCase() + status.slice(1)}`)}
-              </button>
-            ))}
           </div>
         </div>
       )}

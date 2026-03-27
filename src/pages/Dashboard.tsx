@@ -142,7 +142,10 @@ export default function Dashboard({ pidData }: DashboardProps) {
   const chartsData = useMemo(
     () =>
       selectedGauges
-        .filter((pidCode) => pidData.get(pidCode)?.history && pidData.get(pidCode)!.history!.length > 0)
+        .filter((pidCode) => {
+          const pidValue = pidData.get(pidCode);
+          return pidValue?.history && pidValue.history.length > 0;
+        })
         .slice(0, 4),
     [selectedGauges, pidData]
   );

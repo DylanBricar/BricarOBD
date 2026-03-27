@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { useTranslation } from "react-i18next";
-import { Plug, RefreshCw, Loader2, Wifi } from "lucide-react";
+import { Plug, RefreshCw, Loader2, Wifi, Bluetooth } from "lucide-react";
+import { invoke } from "@tauri-apps/api/core";
 import { cn } from "@/lib/utils";
 import WiFiSettings from "@/components/connection/WiFiSettings";
 import ManualVinInput from "@/components/connection/ManualVinInput";
@@ -24,8 +25,22 @@ interface AndroidUsbBridge {
   isRunning(): boolean;
 }
 
+/** Android BLE bridge exposed by Kotlin (btleplug doesn't support Android). */
+interface AndroidBleBridge {
+  hasPermissions(): boolean;
+  requestPermissions(): void;
+  scanDevices(timeoutMs: number): string;
+  startBridge(deviceAddress: string): string;
+  stopBridge(): void;
+  isRunning(): boolean;
+}
+
 function getAndroidUsb(): AndroidUsbBridge | null {
   return (window as unknown as { AndroidUsb?: AndroidUsbBridge }).AndroidUsb ?? null;
+}
+
+function getAndroidBle(): AndroidBleBridge | null {
+  return (window as unknown as { AndroidBle?: AndroidBleBridge }).AndroidBle ?? null;
 }
 
 interface ConnectionProps {
@@ -38,6 +53,7 @@ interface ConnectionProps {
   onDisconnect: () => void;
   onDemoConnect: () => void;
   onConnectWifi: (host: string, port: number) => Promise<void>;
+  onConnectBle?: (deviceName: string) => Promise<void>;
   onPortChange: (port: string) => void;
   onBaudRateChange: (baud: number) => void;
   onScanPorts: () => void;
@@ -82,6 +98,7 @@ export default function Connection({
   onDisconnect,
   onDemoConnect,
   onConnectWifi,
+  onConnectBle,
   onPortChange,
   onBaudRateChange,
   onScanPorts,
@@ -95,12 +112,28 @@ export default function Connection({
   const [manualVin, setManualVin] = useState("");
   const [vinHistory, setVinHistory] = useState<VinHistoryEntry[]>(loadVinHistory);
   const { toast, showToast, dismissToast } = useToast();
-  const [connectionType, setConnectionType] = useState<"usb" | "wifi" | "usb_android">("usb");
+  const [connectionType, setConnectionType] = useState<"usb" | "wifi" | "usb_android" | "ble">("usb");
   const [usbDevices, setUsbDevices] = useState<Array<{ name: string; deviceId: string; vendorId: string; productId: string }>>([]);
   const [selectedUsbDevice, setSelectedUsbDevice] = useState<string>("");
-  const isAndroid = !!getAndroidUsb();
+  const [bleDevices, setBleDevices] = useState<Array<{ name: string; address: string }>>([]);
+  const [selectedBleDevice, setSelectedBleDevice] = useState<string>("");
+  const [isAndroid, setIsAndroid] = useState(!!getAndroidUsb());
   const [showTroubleshoot, setShowTroubleshoot] = useState(false);
   const isConnected = status === "connected" || status === "demo";
+
+  // Poll for Android bridge injection (may not be ready at first render)
+  useEffect(() => {
+    if (isAndroid) return;
+    let attempts = 0;
+    const timer = setInterval(() => {
+      if (getAndroidUsb()) {
+        setIsAndroid(true);
+        clearInterval(timer);
+      }
+      if (++attempts >= 10) clearInterval(timer);
+    }, 200);
+    return () => clearInterval(timer);
+  }, [isAndroid]);
 
   // Show troubleshooting guide on connection error
   useEffect(() => {
@@ -161,7 +194,8 @@ export default function Connection({
 
       const hasPermission = android.requestPermission(devId);
       if (!hasPermission) {
-        showToast(t("connection.usbPermission"), "error");
+        // Permission dialog is showing — inform user to retry after granting
+        showToast(t("connection.usbPermissionPending"));
         return;
       }
 
@@ -182,6 +216,69 @@ export default function Connection({
   const handleDisconnectUsb = useCallback(() => {
     try {
       getAndroidUsb()?.stopBridge();
+    } catch (_) { /* bridge may not be running */ }
+    onDisconnect();
+  }, [onDisconnect]);
+
+  const handleScanBle = useCallback(async () => {
+    try {
+      // On Android: use Kotlin BLE bridge (btleplug doesn't support Android)
+      const androidBle = getAndroidBle();
+      if (androidBle) {
+        if (!androidBle.hasPermissions()) {
+          androidBle.requestPermissions();
+          showToast(t("connection.blePermissionPending"));
+          return;
+        }
+        const parsed = JSON.parse(androidBle.scanDevices(5000));
+        if (!Array.isArray(parsed)) { showToast(t("connection.bleNone"), "error"); return; }
+        setBleDevices(parsed);
+        if (parsed.length > 0 && !selectedBleDevice) setSelectedBleDevice(parsed[0].address);
+        if (parsed.length === 0) showToast(t("connection.bleNone"), "error");
+        else showToast(t("connection.bleFound", { count: parsed.length }));
+        return;
+      }
+      // On iOS/desktop: use Rust btleplug via Tauri IPC
+      const devices = await invoke<Array<{ name: string; address: string }>>("scan_ble", { timeoutMs: 5000 });
+      setBleDevices(devices);
+      if (devices.length > 0 && !selectedBleDevice) setSelectedBleDevice(devices[0].address);
+      if (devices.length === 0) showToast(t("connection.bleNone"), "error");
+      else showToast(t("connection.bleFound", { count: devices.length }));
+    } catch (e) {
+      showToast(`${t("common.error")}: ${e}`, "error");
+    }
+  }, [selectedBleDevice, showToast, t]);
+
+  const handleConnectBle = useCallback(async () => {
+    if (!selectedBleDevice) return;
+    console.log("[BricarOBD] BLE connecting to", selectedBleDevice);
+    try {
+      // On Android: use Kotlin BLE bridge → TCP → WiFi transport
+      const androidBle = getAndroidBle();
+      if (androidBle) {
+        showToast(t("connection.usbBridgeStarting"));
+        const result = JSON.parse(androidBle.startBridge(selectedBleDevice));
+        if (!result?.ok || typeof result.port !== "number") {
+          showToast(t("connection.usbBridgeError", { error: result?.error ?? "unknown" }), "error");
+          return;
+        }
+        await onConnectWifi("127.0.0.1", result.port);
+        return;
+      }
+      // On iOS/desktop: use Rust btleplug via Tauri IPC
+      if (onConnectBle) {
+        await onConnectBle(selectedBleDevice);
+      } else {
+        showToast(t("common.error"), "error");
+      }
+    } catch (e) {
+      showToast(`${t("common.error")}: ${e}`, "error");
+    }
+  }, [selectedBleDevice, onConnectBle, onConnectWifi, showToast, t]);
+
+  const handleDisconnectBle = useCallback(() => {
+    try {
+      getAndroidBle()?.stopBridge();
     } catch (_) { /* bridge may not be running */ }
     onDisconnect();
   }, [onDisconnect]);
@@ -291,6 +388,54 @@ export default function Connection({
             </div>
           )}
 
+          {/* BLE Configuration */}
+          {connectionType === "ble" && !isConnected && (
+            <div className="space-y-3">
+              <div className="flex gap-2">
+                <button
+                  onClick={handleScanBle}
+                  className="btn-accent flex items-center gap-1.5 text-xs"
+                >
+                  <RefreshCw size={14} />
+                  {t("connection.bleScan")}
+                </button>
+              </div>
+              {bleDevices.length > 0 && (
+                <>
+                  <div className="space-y-1.5">
+                    <label className="text-xs text-obd-text-muted">{t("connection.bleDevice")}</label>
+                    <select
+                      value={selectedBleDevice}
+                      onChange={(e) => setSelectedBleDevice(e.target.value)}
+                      className="input-field appearance-none"
+                    >
+                      {bleDevices.map((d) => (
+                        <option key={d.address} value={d.address}>
+                          {d.name} ({d.address})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <button
+                    onClick={handleConnectBle}
+                    disabled={!selectedBleDevice || status === "connecting"}
+                    className={cn(
+                      "btn-accent-solid w-full flex items-center justify-center gap-2",
+                      (!selectedBleDevice || status === "connecting") && "opacity-50 cursor-not-allowed"
+                    )}
+                  >
+                    {status === "connecting" ? (
+                      <Loader2 size={16} className="animate-spin" />
+                    ) : (
+                      <Bluetooth size={16} />
+                    )}
+                    {status === "connecting" ? t("connection.connecting") : t("connection.connect")}
+                  </button>
+                </>
+              )}
+            </div>
+          )}
+
           {connectionType === "wifi" && isConnected && (
             <div className="flex gap-3 pt-2">
               <button
@@ -309,6 +454,17 @@ export default function Connection({
                 className="btn-danger flex-1 flex items-center justify-center gap-2"
               >
                 <Plug size={16} />
+                {t("connection.disconnect")}
+              </button>
+            </div>
+          )}
+          {connectionType === "ble" && isConnected && (
+            <div className="flex gap-3 pt-2">
+              <button
+                onClick={handleDisconnectBle}
+                className="btn-danger flex-1 flex items-center justify-center gap-2"
+              >
+                <Bluetooth size={16} />
                 {t("connection.disconnect")}
               </button>
             </div>
@@ -340,6 +496,7 @@ export default function Connection({
               vinHistory={vinHistory}
               onSelectVin={setManualVin}
               onRemoveFromHistory={removeFromHistory}
+              onCacheCleared={() => showToast(t("connection.clearCache"))}
               isClearing={false}
               t={t}
               language={i18n.language}

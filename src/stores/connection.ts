@@ -114,6 +114,11 @@ const connect = async () => {
 const disconnect = async () => {
   devInfo("ui", "Disconnected");
   try { await invoke("disconnect_obd"); } catch {}
+  // On Android: unbind from WiFi network to restore normal routing
+  try {
+    const androidWifi = (window as unknown as { AndroidWifi?: { unbind(): void } }).AndroidWifi;
+    androidWifi?.unbind();
+  } catch { /* not on Android */ }
   globalState = { ...defaultState, availablePorts: globalState.availablePorts };
   notify();
 };
@@ -128,12 +133,37 @@ const connectWifi = async (host: string, port: number) => {
   globalState = { ...globalState, status: "connecting", error: null };
   notify();
   try {
+    // On Android: bind process to WiFi network before connecting.
+    // Without this, Android routes TCP through mobile data when the
+    // ELM327 WiFi hotspot has no internet — causing connection failure.
+    const androidWifi = (window as unknown as { AndroidWifi?: { bindToWifi(): boolean } }).AndroidWifi;
+    if (androidWifi && host !== "127.0.0.1") {
+      devInfo("ui", "Binding process to WiFi network...");
+      androidWifi.bindToWifi();
+    }
+
     const vehicle = await invoke<VehicleInfo>("connect_wifi", { host, port });
     devInfo("ui", "WiFi connected: " + vehicle.make + " " + vehicle.model);
     globalState = { ...globalState, status: "connected", vehicle };
     notify();
   } catch (e) {
     devError("ui", "WiFi connection error: " + String(e));
+    globalState = { ...globalState, status: "error", error: String(e) };
+    notify();
+  }
+};
+
+const connectBle = async (deviceName: string) => {
+  devInfo("ui", "BLE connecting to " + deviceName);
+  globalState = { ...globalState, status: "connecting", error: null };
+  notify();
+  try {
+    const vehicle = await invoke<VehicleInfo>("connect_ble", { deviceName });
+    devInfo("ui", "BLE connected: " + vehicle.make + " " + vehicle.model);
+    globalState = { ...globalState, status: "connected", vehicle };
+    notify();
+  } catch (e) {
+    devError("ui", "BLE connection error: " + String(e));
     globalState = { ...globalState, status: "error", error: String(e) };
     notify();
   }
@@ -162,6 +192,7 @@ const stableActions = {
   disconnect,
   updateVehicle,
   connectWifi,
+  connectBle,
   connectDemo,
 };
 

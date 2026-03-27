@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useId } from "react";
 import {
   AreaChart,
   Area,
@@ -32,13 +32,14 @@ export default function LiveChart({
   minDomain,
   maxDomain,
 }: LiveChartProps) {
+  const gradientId = useId();
+
   const chartData = useMemo(
     () => data.map((value, i) => ({ index: i, value })),
     [data]
   );
 
   const currentValue = data.length > 0 ? data[data.length - 1] : 0;
-  const gradientId = `gradient-${label.replace(/\s/g, "-")}`;
 
   return (
     <div className={cn("glass-card p-3", className)}>

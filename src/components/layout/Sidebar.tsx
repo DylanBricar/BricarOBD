@@ -16,19 +16,21 @@ import {
   Sun,
   Moon,
   Monitor,
-  Gauge,
+  Lock,
+  Loader2,
 } from "lucide-react";
 import type { LucideProps } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { ConnectionStatus } from "@/stores/connection";
 import { useThemeStore, type ThemeMode } from "@/stores/theme";
-import { useUnitSystem } from "@/lib/units";
 
 interface SidebarProps {
   activePage: string;
   onNavigate: (page: string) => void;
   connectionStatus: ConnectionStatus;
-  canNavigate?: boolean;
+  canNavigate: boolean;
+  discoveryProgress: number;
+  hasVin: boolean;
   onToggleDevConsole?: () => void;
   dtcCount?: number;
 }
@@ -123,7 +125,7 @@ const NavItemsSection = memo(function NavItemsSection({
       {items.map((item) => {
         const isActive = activePage === item.id;
         const isDisabled =
-          item.id === "connection" || item.id === "history" ? false : !isConnected;
+          item.id === "connection" ? false : !isConnected;
 
         return (
           <NavItemButton
@@ -140,21 +142,27 @@ const NavItemsSection = memo(function NavItemsSection({
   );
 });
 
-export default function Sidebar({ activePage, onNavigate, connectionStatus, canNavigate, onToggleDevConsole, dtcCount }: SidebarProps) {
+export default function Sidebar({ activePage, onNavigate, connectionStatus, canNavigate, discoveryProgress, hasVin, onToggleDevConsole, dtcCount }: SidebarProps) {
   const { t, i18n } = useTranslation();
-  const isConnected = canNavigate ?? (connectionStatus === "connected" || connectionStatus === "demo");
+  const isReallyConnected = connectionStatus === "connected" || connectionStatus === "demo";
+  const isConnected = canNavigate;
+  const showVinWarning = isReallyConnected && !canNavigate;
   const [mobileOpen, setMobileOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
-  const { system: unitSystem, setUnitSystem } = useUnitSystem();
 
   useEffect(() => {
-    const handleResize = () => setIsMobile(window.innerWidth < 768);
+    const handleResize = () => {
+      setIsMobile(prev => {
+        const next = window.innerWidth < 768;
+        return prev === next ? prev : next;
+      });
+    };
     window.addEventListener("resize", handleResize);
     return () => window.removeEventListener("resize", handleResize);
   }, []);
 
   const toggleLanguage = () => {
-    i18n.changeLanguage(i18n.language === "fr" ? "en" : "fr");
+    i18n.changeLanguage(i18n.language?.startsWith("fr") ? "en" : "fr");
   };
 
   const { mode: themeMode, setThemeMode } = useThemeStore();
@@ -172,16 +180,15 @@ export default function Sidebar({ activePage, onNavigate, connectionStatus, canN
     if (isMobile) setMobileOpen(false);
   }, [onNavigate, isMobile]);
 
-  const toggleUnitSystem = () => {
-    setUnitSystem(unitSystem === "metric" ? "imperial" : "metric");
-  };
-
   const sidebarContent = (
     <>
       {/* Logo */}
       <div className="px-2 py-3 border-b border-obd-border/30 flex justify-center">
-        <svg width="160" height="40" viewBox="0 0 160 40" className="text-obd-text" style={{ color: "currentColor" }}>
-          <text x="8" y="28" fontSize="24" fontWeight="bold" fill="currentColor">BricarOBD</text>
+        <svg width="160" height="40" viewBox="0 0 160 40" className="text-obd-text">
+          <text x="8" y="28" fontSize="24" fontWeight="bold">
+            <tspan fill="currentColor">Bricar</tspan>
+            <tspan fill="#06B6D4">OBD</tspan>
+          </text>
         </svg>
       </div>
 
@@ -196,12 +203,31 @@ export default function Sidebar({ activePage, onNavigate, connectionStatus, canN
           dtcCount={dtcCount}
         />
 
+        {showVinWarning && !hasVin && (
+          <div className="mx-1 mt-2 flex items-start gap-2 rounded-lg bg-obd-danger/10 border border-obd-danger/30 px-2.5 py-2">
+            <Lock className="w-3.5 h-3.5 text-obd-danger mt-0.5 flex-shrink-0" />
+            <p className="text-[10px] text-obd-danger leading-relaxed">{t("nav.tabsLocked")}</p>
+          </div>
+        )}
+
+        {showVinWarning && hasVin && (
+          <div className="mx-1 mt-2 flex flex-col gap-1.5 rounded-lg bg-obd-accent/10 border border-obd-accent/30 px-2.5 py-2">
+            <div className="flex items-center gap-2">
+              <Loader2 className="w-3.5 h-3.5 text-obd-accent flex-shrink-0 animate-spin" />
+              <p className="text-[10px] text-obd-accent leading-relaxed">{t("nav.tabsLockedDiscovery")}</p>
+            </div>
+            <div className="w-full h-1.5 bg-obd-border/30 rounded-full overflow-hidden">
+              <div className="h-full bg-obd-accent rounded-full transition-all duration-500" style={{ width: `${discoveryProgress}%` }} />
+            </div>
+          </div>
+        )}
+
         <div className="pt-3">
           <NavItemsSection
             items={advancedItems}
             sectionLabelKey="nav.expert"
             activePage={activePage}
-            isConnected={isConnected}
+            isConnected={isReallyConnected}
             onNavigate={handleNavigate}
           />
         </div>
@@ -217,14 +243,6 @@ export default function Sidebar({ activePage, onNavigate, connectionStatus, canN
           <span className="text-[10px]">{t("nav.devConsole")}</span>
         </button>
         <button
-          onClick={toggleUnitSystem}
-          className="nav-item w-full justify-center"
-          title={t("nav.units")}
-        >
-          <Gauge size={16} strokeWidth={1.8} />
-          <span className="text-xs">{unitSystem === "metric" ? "km/h" : "mph"}</span>
-        </button>
-        <button
           onClick={cycleTheme}
           className="nav-item w-full justify-center"
           title={t("nav.theme")}
@@ -237,7 +255,7 @@ export default function Sidebar({ activePage, onNavigate, connectionStatus, canN
           className="nav-item w-full justify-center"
         >
           <Globe size={16} strokeWidth={1.8} />
-          <span className="text-xs">{i18n.language === "fr" ? "FR" : "EN"}</span>
+          <span className="text-xs">{i18n.language?.startsWith("fr") ? "FR" : "EN"}</span>
         </button>
       </div>
     </>

@@ -24,6 +24,18 @@ const Monitors = lazy(() => import("@/pages/Monitors"));
 const History = lazy(() => import("@/pages/History"));
 const Advanced = lazy(() => import("@/pages/Advanced"));
 
+function LoadingFallback() {
+  const { t } = useTranslation();
+  return (
+    <div className="flex items-center justify-center h-full">
+      <div className="text-center">
+        <div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-obd-border border-t-obd-accent"></div>
+        <p className="mt-4 text-obd-text/60">{t("common.loading")}</p>
+      </div>
+    </div>
+  );
+}
+
 export default function App() {
   const { t, i18n } = useTranslation();
   const [activePage, setActivePage] = useState("connection");
@@ -53,9 +65,9 @@ export default function App() {
     t,
   );
 
-  const hasVin = connection.vehicle?.vin || false;
+  const hasVin = !!connection.vehicle?.vin;
   const isDemo = connection.status === "demo";
-  const canNavigate = ((connection.status === "connected" && (hasVin || isDemo)) || isDemo) && (isDiscoveryComplete || isDemo);
+  const canNavigate = isDemo || (connection.status === "connected" && hasVin && isDiscoveryComplete);
   const isConnected =
     connection.status === "connected" || connection.status === "demo";
 
@@ -153,23 +165,42 @@ export default function App() {
   const handleClearAll = async () => {
     setIsClearing(true);
     try {
-      await invoke("clear_dtcs", { confirmed: true });
+      const result = await invoke<string>("clear_dtcs", { confirmed: true });
       vehicle.clearAllDtcs();
-      showToast(t("dtc.clearSuccess"));
+      if (result === "PARTIAL") {
+        showToast(t("dtc.clearPartial"), "error");
+      } else {
+        showToast(t("dtc.clearSuccess"));
+      }
     } catch (e) {
       showToast(String(e), "error");
     }
     setIsClearing(false);
   };
 
-  const LoadingFallback = () => (
-    <div className="flex items-center justify-center h-full">
-      <div className="text-center">
-        <div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-obd-border border-t-obd-accent"></div>
-        <p className="mt-4 text-obd-text/60">{t("common.loading")}</p>
-      </div>
-    </div>
-  );
+  const onClearCache = useCallback(async () => {
+    try {
+      await invoke("clear_vin_cache", { vin: connection.vehicle?.vin });
+      setHasVinCache(false);
+    } catch (e) {
+      devError("ui", "Clear cache error: " + String(e));
+    }
+  }, [connection.vehicle?.vin, setHasVinCache]);
+
+  const onVehicleUpdate = useCallback((info: any) => {
+    connection.updateVehicle(info);
+    const make = info.make || "";
+    if (connection.status === "connected") {
+      setIsDiscoveryComplete(false);
+      vehicle.startRealPolling(1000, make, true);
+      invoke<DtcCode[]>("read_all_dtcs", { lang: i18n.language })
+        .then(codes => vehicle.setDtcs(codes)).catch(() => {});
+    }
+    invoke<VehicleOperation[]>("get_vehicle_operations", { vehicle: make, limit: 500 })
+      .then(ops => vehicle.setVehicleOps(ops)).catch(() => {});
+    invoke<WriteOperation[]>("get_write_operations", { ecuName: "%", vehicle: make })
+      .then(ops => vehicle.setVehicleWriteOps(ops)).catch(() => {});
+  }, [connection, vehicle, i18n.language, setIsDiscoveryComplete]);
 
   const handleToggleDevConsole = useCallback(async () => {
     try {
@@ -203,34 +234,15 @@ export default function App() {
                 onDisconnect={connection.disconnect}
                 onDemoConnect={connection.connectDemo}
                 onConnectWifi={connection.connectWifi}
+                onConnectBle={connection.connectBle}
                 onPortChange={connection.setPort}
                 onBaudRateChange={connection.setBaudRate}
                 onScanPorts={connection.scanPorts}
                 discoveryProgress={discoveryProgress}
                 isDiscoveryComplete={isDiscoveryComplete}
                 hasVinCache={hasVinCache}
-                onClearCache={async () => {
-                  try {
-                    await invoke("clear_vin_cache", { vin: connection.vehicle?.vin });
-                    setHasVinCache(false);
-                  } catch (e) {
-                    devError("ui", "Clear cache error: " + String(e));
-                  }
-                }}
-                onVehicleUpdate={(info) => {
-                  connection.updateVehicle(info);
-                  const make = info.make || "";
-                  if (connection.status === "connected") {
-                    setIsDiscoveryComplete(false);
-                    vehicle.startRealPolling(1000, make, true);
-                    invoke<DtcCode[]>("read_all_dtcs", { lang: i18n.language })
-                      .then(codes => vehicle.setDtcs(codes)).catch(() => {});
-                  }
-                  invoke<VehicleOperation[]>("get_vehicle_operations", { vehicle: make, limit: 500 })
-                    .then(ops => vehicle.setVehicleOps(ops)).catch(() => {});
-                  invoke<WriteOperation[]>("get_write_operations", { ecuName: "%", vehicle: make })
-                    .then(ops => vehicle.setVehicleWriteOps(ops)).catch(() => {});
-                }}
+                onClearCache={onClearCache}
+                onVehicleUpdate={onVehicleUpdate}
               />
             </Suspense>
           </ErrorBoundary>
@@ -258,7 +270,6 @@ export default function App() {
                   }
                 }}
                 onPausePolling={vehicle.pausePolling}
-                onStopPolling={vehicle.stopPolling}
                 onChangeRefreshRate={vehicle.changeRefreshRate}
               />
             </Suspense>
@@ -330,7 +341,7 @@ export default function App() {
       default:
         return null;
     }
-  }, [activePage, connection.status, connection.vehicle, connection.port, connection.baudRate, connection.availablePorts, connection.connect, connection.disconnect, connection.connectDemo, connection.connectWifi, connection.setPort, connection.setBaudRate, connection.scanPorts, discoveryProgress, isDiscoveryComplete, hasVinCache, setHasVinCache, connection.updateVehicle, vehicle.pidData, vehicle.startRealPolling, vehicle.setDtcs, vehicle.setVehicleOps, vehicle.setVehicleWriteOps, vehicle.isPolling, vehicle.pausePolling, vehicle.stopPolling, vehicle.changeRefreshRate, vehicle.dtcs, vehicle.dtcHistory, vehicle.mode06Results, vehicle.isLoadingMode06, vehicle.loadMode06Results, vehicle.freezeFrame, vehicle.isLoadingFreezeFrame, vehicle.loadFreezeFrame, handleReadAll, handleClearAll, isReading, isClearing, vehicle.ecus, isEcuScanning, setIsEcuScanning, vehicle.setEcus, vehicle.monitors, vehicle.loadMonitors, i18n.language]);
+  }, [activePage, connection.status, connection.vehicle, connection.port, connection.baudRate, connection.availablePorts, connection.connect, connection.disconnect, connection.connectDemo, connection.connectWifi, connection.setPort, connection.setBaudRate, connection.scanPorts, discoveryProgress, isDiscoveryComplete, hasVinCache, setHasVinCache, onClearCache, onVehicleUpdate, vehicle.pidData, vehicle.startRealPolling, vehicle.setDtcs, vehicle.setVehicleOps, vehicle.setVehicleWriteOps, vehicle.isPolling, vehicle.pausePolling, vehicle.stopPolling, vehicle.changeRefreshRate, vehicle.dtcs, vehicle.dtcHistory, vehicle.mode06Results, vehicle.isLoadingMode06, vehicle.loadMode06Results, vehicle.freezeFrame, vehicle.isLoadingFreezeFrame, vehicle.loadFreezeFrame, handleReadAll, handleClearAll, isReading, isClearing, vehicle.ecus, isEcuScanning, setIsEcuScanning, vehicle.setEcus, vehicle.monitors, vehicle.loadMonitors, i18n.language]);
 
   return (
     <ErrorBoundary>
@@ -339,7 +350,9 @@ export default function App() {
           activePage={activePage}
           onNavigate={handleNavigate}
           connectionStatus={connection.status}
-          canNavigate={canNavigate || undefined}
+          canNavigate={canNavigate}
+          discoveryProgress={discoveryProgress}
+          hasVin={hasVin}
           onToggleDevConsole={handleToggleDevConsole}
           dtcCount={vehicle.dtcs.length}
         />

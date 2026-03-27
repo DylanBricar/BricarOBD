@@ -37,6 +37,7 @@ pub async fn connect_wifi(host: String, port: u16) -> Result<VehicleInfo, String
         let vin_response = conn.send_command("0902").unwrap_or_default();
         let vin = vin_parser::parse_vin_response(&vin_response);
         let vin_info = crate::obd::vin::decode_vin(&vin);
+        conn.vin = vin_info.vin.clone();
 
         let model = super::database::find_vehicle_model_sync(&vin_info.make);
         let info = VehicleInfo {
@@ -50,7 +51,10 @@ pub async fn connect_wifi(host: String, port: u16) -> Result<VehicleInfo, String
         Ok((conn, info))
     })
     .await
-    .map_err(|e| format!("Task error: {}", e))?;
+    .map_err(|e| {
+        crate::obd::dev_log::log_error("connection", &format!("WiFi task error: {}", e));
+        format!("Task error: {}", e)
+    })?;
 
     let (conn, info) = result?;
     let mut guard = super::connection::CONNECTION.lock().unwrap_or_else(|e| e.into_inner());

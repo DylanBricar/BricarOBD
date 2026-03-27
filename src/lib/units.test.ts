@@ -1,5 +1,6 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, beforeEach } from "vitest";
 import { renderHook, act } from "@testing-library/react";
+import i18n from "./i18n";
 import { convertValue, useUnitSystem } from "./units";
 
 describe("convertValue()", () => {
@@ -82,76 +83,36 @@ describe("convertValue()", () => {
   });
 });
 
-describe("setUnitSystem() and useUnitSystem() hook", () => {
+describe("useUnitSystem() hook — language-based derivation", () => {
   beforeEach(() => {
-    localStorage.clear();
+    i18n.changeLanguage("fr");
   });
 
-  afterEach(() => {
-    localStorage.clear();
-  });
-
-  it("hook provides system state and setUnitSystem function", () => {
+  it("returns metric when language is French", () => {
     const { result } = renderHook(() => useUnitSystem());
-    expect(result.current.system).toBeDefined();
-    expect(result.current.setUnitSystem).toBeDefined();
-    expect(typeof result.current.system).toBe("string");
-    expect(typeof result.current.setUnitSystem).toBe("function");
-  });
-
-  it("setUnitSystem updates the system", () => {
-    const { result } = renderHook(() => useUnitSystem());
-
-    act(() => {
-      result.current.setUnitSystem("imperial");
-    });
-
-    expect(result.current.system).toBe("imperial");
-  });
-
-  it("setUnitSystem persists to localStorage", () => {
-    const { result } = renderHook(() => useUnitSystem());
-
-    act(() => {
-      result.current.setUnitSystem("imperial");
-    });
-
-    expect(localStorage.getItem("bricarobd_unit_system")).toBe("imperial");
-  });
-
-  it("setUnitSystem can switch back to metric", () => {
-    const { result } = renderHook(() => useUnitSystem());
-
-    act(() => {
-      result.current.setUnitSystem("imperial");
-    });
-
-    expect(result.current.system).toBe("imperial");
-
-    act(() => {
-      result.current.setUnitSystem("metric");
-    });
-
     expect(result.current.system).toBe("metric");
-    expect(localStorage.getItem("bricarobd_unit_system")).toBe("metric");
   });
 
-  it("accepts multiple setUnitSystem calls", () => {
+  it("returns imperial when language is English", async () => {
+    await act(async () => {
+      await i18n.changeLanguage("en");
+    });
     const { result } = renderHook(() => useUnitSystem());
-
-    act(() => {
-      result.current.setUnitSystem("imperial");
-    });
     expect(result.current.system).toBe("imperial");
+  });
 
-    act(() => {
-      result.current.setUnitSystem("metric");
-    });
+  it("updates reactively when language changes", async () => {
+    const { result } = renderHook(() => useUnitSystem());
     expect(result.current.system).toBe("metric");
 
-    act(() => {
-      result.current.setUnitSystem("imperial");
+    await act(async () => {
+      await i18n.changeLanguage("en");
     });
     expect(result.current.system).toBe("imperial");
+
+    await act(async () => {
+      await i18n.changeLanguage("fr");
+    });
+    expect(result.current.system).toBe("metric");
   });
 });

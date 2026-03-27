@@ -1,4 +1,5 @@
 use std::time::Instant;
+use std::sync::atomic::{AtomicU64, Ordering};
 use crate::models::{PidValue, DtcCode, DtcStatus, EcuInfo, MonitorStatus, Mode06Result, FreezeFrameData};
 use std::collections::{HashMap, VecDeque};
 
@@ -236,14 +237,26 @@ impl DemoConnection {
     }
 }
 
-/// Simple pseudo-random (no external crate needed)
+/// xorshift64 PRNG state (seeded once on first call)
+static PRNG_STATE: AtomicU64 = AtomicU64::new(0);
+
+/// Simple xorshift64 PRNG returning f64 in [0.0, 1.0)
 fn rand_f64() -> f64 {
-    use std::time::SystemTime;
-    let nanos = SystemTime::now()
-        .duration_since(SystemTime::UNIX_EPOCH)
-        .unwrap_or_default()
-        .subsec_nanos();
-    (nanos % 1000) as f64 / 1000.0
+    let mut state = PRNG_STATE.load(Ordering::Relaxed);
+    if state == 0 {
+        // Seed from system time on first call
+        state = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_nanos() as u64)
+            .unwrap_or(12345);
+        if state == 0 { state = 1; }
+    }
+    // xorshift64 iteration
+    state ^= state << 13;
+    state ^= state >> 7;
+    state ^= state << 17;
+    PRNG_STATE.store(state, Ordering::Relaxed);
+    ((state >> 11) as f64) * (1.0 / 9007199254740992.0)
 }
 
 #[cfg(test)]

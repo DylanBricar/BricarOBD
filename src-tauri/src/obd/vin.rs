@@ -1,3 +1,4 @@
+use chrono::Datelike;
 use serde_json::{json, Value};
 use std::sync::LazyLock;
 
@@ -53,24 +54,36 @@ fn identify_make(vin: &str) -> (String, String) {
 }
 
 /// Decode model year from VIN position 10
+/// VIN year codes repeat every 30 years — if decoded year is in the future, subtract 30
 fn decode_year(vin: &str) -> u16 {
     if vin.len() < 10 {
         return 0;
     }
 
     let year_char = vin.chars().nth(9).unwrap_or('0');
-    match year_char {
+    let raw_year = match year_char {
         'A' => 2010, 'B' => 2011, 'C' => 2012, 'D' => 2013,
         'E' => 2014, 'F' => 2015, 'G' => 2016, 'H' => 2017,
         'J' => 2018, 'K' => 2019, 'L' => 2020, 'M' => 2021,
         'N' => 2022, 'P' => 2023, 'R' => 2024, 'S' => 2025,
         'T' => 2026, 'V' => 2027, 'W' => 2028, 'X' => 2029,
         'Y' => 2030,
-        // 2031+ cycle: same chars as 2001-2009 — default to newer range for modern vehicles
         '1' => 2031, '2' => 2032, '3' => 2033, '4' => 2034,
         '5' => 2035, '6' => 2036, '7' => 2037, '8' => 2038,
         '9' => 2039,
         _ => 0,
+    };
+
+    // Handle 30-year VIN cycle: if year is beyond next model year, it's from the previous cycle
+    if raw_year > 0 {
+        let current_year = chrono::Utc::now().year() as u16;
+        if raw_year > current_year + 1 {
+            raw_year - 30
+        } else {
+            raw_year
+        }
+    } else {
+        0
     }
 }
 
@@ -113,17 +126,19 @@ mod tests {
         assert_eq!(decode_year("AAAAAAAAAL"), 2020); // pos 9 = 'L'
         assert_eq!(decode_year("AAAAAAAAAP"), 2023); // pos 9 = 'P'
         assert_eq!(decode_year("AAAAAAAAAS"), 2025); // pos 9 = 'S'
-        assert_eq!(decode_year("AAAAAAAAAY"), 2030); // pos 9 = 'Y'
+        assert_eq!(decode_year("AAAAAAAAAV"), 2027); // pos 9 = 'V' — 2027 ≤ current+1, model year ahead OK
+        assert_eq!(decode_year("AAAAAAAAAW"), 1998); // pos 9 = 'W' — 2028 > current+1, wraps to 1998
+        assert_eq!(decode_year("AAAAAAAAAY"), 2000); // pos 9 = 'Y' — 2030 > current+1, wraps to 2000
     }
 
     #[test]
     fn test_decode_year_numeric_codes() {
         // Position 9 (0-indexed) holds the year code
-        // 2031+ cycle: same chars as 2001-2009, defaults to newer range
-        assert_eq!(decode_year("AAAAAAAAA1"), 2031); // position 9 = '1'
-        assert_eq!(decode_year("AAAAAAAAA2"), 2032); // position 9 = '2'
-        assert_eq!(decode_year("AAAAAAAAA5"), 2035); // position 9 = '5'
-        assert_eq!(decode_year("AAAAAAAAA9"), 2039); // position 9 = '9'
+        // 30-year cycle: future years (> current+1) wrap to previous cycle
+        assert_eq!(decode_year("AAAAAAAAA1"), 2001); // 2031 > current+1 → 2001
+        assert_eq!(decode_year("AAAAAAAAA2"), 2002); // 2032 > current+1 → 2002
+        assert_eq!(decode_year("AAAAAAAAA5"), 2005); // 2035 > current+1 → 2005
+        assert_eq!(decode_year("AAAAAAAAA9"), 2009); // 2039 > current+1 → 2009
     }
 
     #[test]

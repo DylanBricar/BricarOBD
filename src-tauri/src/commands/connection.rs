@@ -156,8 +156,11 @@ pub async fn disconnect_obd() -> Result<(), String> {
         let mut guard = CONNECTION.lock().unwrap_or_else(|e| e.into_inner());
         std::mem::replace(&mut *guard, ConnectionMode::Disconnected)
     };
-    if let ConnectionMode::Real(mut conn) = prev {
-        conn.disconnect();
+    if let ConnectionMode::Real(conn) = prev {
+        tokio::task::spawn_blocking(move || {
+            let mut c = conn;
+            c.disconnect();
+        }).await.ok();
     }
     crate::obd::dev_log::log_info("connection", "Disconnected from OBD adapter");
 
@@ -187,13 +190,11 @@ pub fn connect_demo() -> VehicleInfo {
 #[command]
 pub fn get_connection_status() -> ConnectionStatus {
     let guard = CONNECTION.lock().unwrap_or_else(|e| e.into_inner());
-    let status = match *guard {
+    match *guard {
         ConnectionMode::Disconnected => ConnectionStatus::Disconnected,
         ConnectionMode::Demo => ConnectionStatus::Demo,
         ConnectionMode::Real(_) => ConnectionStatus::Connected,
-    };
-    crate::obd::dev_log::log_debug("connection", &format!("Status requested: {:?}", status));
-    status
+    }
 }
 
 /// Get available connection types for the platform

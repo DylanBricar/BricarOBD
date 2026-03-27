@@ -18,14 +18,13 @@ interface LiveDataProps {
   isPolling: boolean;
   onStartPolling: (intervalMs: number) => void;
   onPausePolling: () => void;
-  onStopPolling: () => void;
   onChangeRefreshRate: (intervalMs: number) => void;
 }
 
 const TIME_RANGE_OPTIONS = ["30s", "1m", "5m", "all"] as const;
 
 
-export default function LiveData({ pidData, isPolling, onStartPolling, onPausePolling, onStopPolling, onChangeRefreshRate }: LiveDataProps) {
+export default function LiveData({ pidData, isPolling, onStartPolling, onPausePolling, onChangeRefreshRate }: LiveDataProps) {
   const { t } = useTranslation();
   const [search, setSearch] = useState("");
   const [selectedPid, setSelectedPid] = useState<number | null>(null);
@@ -122,13 +121,8 @@ export default function LiveData({ pidData, isPolling, onStartPolling, onPausePo
 
   const handleRefreshRateChange = useCallback((ms: number) => {
     setRefreshRate(ms);
-    if (isActive) {
-      onStopPolling();
-      onChangeRefreshRate(ms);
-    } else {
-      onChangeRefreshRate(ms);
-    }
-  }, [isActive, onChangeRefreshRate, onStopPolling]);
+    onChangeRefreshRate(ms);
+  }, [onChangeRefreshRate]);
 
   const handleStartRecording = useCallback(() => {
     recordBufferRef.current = [];

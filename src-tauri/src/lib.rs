@@ -58,6 +58,8 @@ pub fn run() {
             connection::set_language,
             connection_wifi_vin::has_vin_cache,
             connection_wifi_vin::clear_vin_cache,
+            connection_ble::scan_ble,
+            connection_ble::connect_ble,
             // Dashboard
             dashboard::get_pid_data,
             dashboard::get_all_pids,
@@ -68,7 +70,7 @@ pub fn run() {
             get_discovery_progress,
             // DTC
             dtc::read_all_dtcs,
-            dtc::clear_dtcs,
+            dtc_clear::clear_dtcs,
             dtc::export_dtcs,
             // ECU
             ecu::scan_ecus,
