@@ -1,11 +1,11 @@
 import { describe, it, expect, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import StatusBar from "./StatusBar";
-import type { VehicleInfo, ConnectionStatus } from "@/stores/connection";
+import type { VehicleInfo } from "@/stores/connection";
 
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({
-    t: (key: string, opts?: any) => {
+    t: (key: string, _opts?: any) => {
       if (key === "status.connecting") return "Connecting...";
       if (key === "status.connected") return "Connected";
       if (key === "status.demo") return "Demo Mode";

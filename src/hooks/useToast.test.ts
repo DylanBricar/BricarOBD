@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { renderHook, act, waitFor } from "@testing-library/react";
+import { renderHook, act } from "@testing-library/react";
 import { useToast } from "./useToast";
 
 describe("useToast()", () => {
@@ -136,7 +136,7 @@ describe("useToast()", () => {
     });
 
     it("auto-dismisses after custom duration", () => {
-      const { result } = renderHook(() => useToast({ duration: 3000 }));
+      const { result } = renderHook(() => useToast(3000));
 
       act(() => {
         result.current.showToast("Custom duration test");

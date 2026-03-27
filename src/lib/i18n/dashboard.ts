@@ -16,6 +16,8 @@ export const dashboard = {
     "dashboard.engineData": "Données moteur en temps réel",
     "dashboard.configure": "Configurer les jauges",
     "dashboard.gaugesSelected": "jauges sélectionnées",
+    "dashboard.configGauges": "Configurer les jauges",
+    "dashboard.configDesc": "Sélectionnez jusqu'à 6 jauges à afficher",
   },
   en: {
     "dashboard.title": "Dashboard",
@@ -34,5 +36,7 @@ export const dashboard = {
     "dashboard.engineData": "Real-time engine data",
     "dashboard.configure": "Configure Gauges",
     "dashboard.gaugesSelected": "gauges selected",
+    "dashboard.configGauges": "Configure Gauges",
+    "dashboard.configDesc": "Select up to 6 gauges to display",
   },
 };

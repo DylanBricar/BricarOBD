@@ -35,7 +35,7 @@ export default function VehicleInfoCard({
           <div className="space-y-2">
             <InfoRow icon={<Fingerprint size={14} />} label={t("connection.vin")} value={vehicle.vin} mono />
             <InfoRow icon={<Radio size={14} />} label={t("connection.protocol")} value={vehicle.protocol} />
-            <InfoRow icon={<KeyRound size={14} />} label={t("connection.elmVersion")} value={vehicle.elmVersion} />
+            <InfoRow icon={<KeyRound size={14} />} label={t("connection.elmVersion")} value={vehicle.elmVersion ?? ""} />
           </div>
         </div>
       ) : (

@@ -17,13 +17,15 @@ export default function Mode06({ results, isLoading }: Mode06Props) {
   const failCount = results.filter(r => !r.passed).length;
 
   const handleExport = useCallback(async () => {
-    const header = "TID,MID,Name,Value,Min,Max,Status";
-    const rows = results.map(r => `${r.tid},${r.mid},${escapeCSV(r.name ?? "")},${r.testValue},${r.minLimit ?? ""},${r.maxLimit ?? ""},${r.passed ? "Pass" : "Fail"}`);
+    const header = [t("mode06.csvTid"), t("mode06.csvMid"), t("mode06.csvName"), t("mode06.csvValue"), t("mode06.csvMin"), t("mode06.csvMax"), t("mode06.csvStatus")].join(",");
+    const rows = results.map(r => `${r.tid},${r.mid},${escapeCSV(r.name ?? "")},${r.testValue},${r.minLimit ?? ""},${r.maxLimit ?? ""},${r.passed ? t("mode06.csvPass") : t("mode06.csvFail")}`);
     const csv = [header, ...rows].join("\n");
     try {
       await invoke("save_csv_file", { filename: `bricarobd_mode06_${Date.now()}.csv`, content: csv });
-    } catch {}
-  }, [results]);
+    } catch (e) {
+      console.error(`[BricarOBD] ${t("mode06.exportError")}:`, e);
+    }
+  }, [results, t]);
 
   return (
     <div className="space-y-4">

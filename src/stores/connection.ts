@@ -1,4 +1,4 @@
-import { useSyncExternalStore } from "react";
+import { useSyncExternalStore, useMemo } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { devInfo, devError } from "@/lib/devlog";
 
@@ -15,7 +15,7 @@ export interface VehicleInfo {
   model: string;
   year: number;
   protocol: string;
-  elmVersion: string;
+  elmVersion?: string;
 }
 
 export interface ConnectionState {
@@ -167,8 +167,5 @@ const stableActions = {
 
 export function useConnectionStore() {
   const state = useSyncExternalStore(subscribe, getSnapshot);
-  return {
-    ...state,
-    ...stableActions,
-  };
+  return useMemo(() => ({ ...state, ...stableActions }), [state]);
 }

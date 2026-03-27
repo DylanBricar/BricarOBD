@@ -4,11 +4,20 @@ use crate::obd::demo::DemoConnection;
 use crate::obd::dtc;
 use crate::obd::dev_log;
 use crate::commands::connection::{is_demo, with_real_connection};
+use crate::commands::OBDBusyGuard;
 
 /// Read all DTCs — Mode 03 (active), Mode 07 (pending), Mode 0A (permanent) + UDS 0x19
 #[command]
 pub async fn read_all_dtcs(lang: Option<String>) -> Vec<DtcCode> {
     tokio::task::spawn_blocking(move || {
+        let _guard = match OBDBusyGuard::try_acquire() {
+            Ok(g) => g,
+            Err(e) => {
+                dev_log::log_warn("dtc", &format!("DTC scan blocked: {}", e));
+                return Vec::new();
+            }
+        };
+
         let lang = lang.as_deref().unwrap_or("en");
         if is_demo() {
             dev_log::log_info("dtc", "Demo mode: returning simulated DTCs");

@@ -23,7 +23,7 @@ describe("InfoRow", () => {
   });
 
   it("applies mono font when mono is true", () => {
-    const { container } = render(
+    render(
       <InfoRow icon={<Info />} label="Test Label" value="Test Value" mono />
     );
 
@@ -32,7 +32,7 @@ describe("InfoRow", () => {
   });
 
   it("does not apply mono font when mono is false", () => {
-    const { container } = render(
+    render(
       <InfoRow
         icon={<Info />}
         label="Test Label"
@@ -46,7 +46,7 @@ describe("InfoRow", () => {
   });
 
   it("does not apply mono font when mono is undefined", () => {
-    const { container } = render(
+    render(
       <InfoRow icon={<Info />} label="Test Label" value="Test Value" />
     );
 
@@ -76,7 +76,7 @@ describe("InfoRow", () => {
   });
 
   it("applies text-xs class to label and value", () => {
-    const { container } = render(
+    render(
       <InfoRow icon={<Info />} label="Test Label" value="Test Value" />
     );
 
@@ -85,7 +85,7 @@ describe("InfoRow", () => {
   });
 
   it("label has muted text color", () => {
-    const { container } = render(
+    render(
       <InfoRow icon={<Info />} label="Test Label" value="Test Value" />
     );
 

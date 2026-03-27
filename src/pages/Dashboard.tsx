@@ -184,7 +184,7 @@ export default function Dashboard({ pidData }: DashboardProps) {
           <button
             onClick={() => setShowConfig(!showConfig)}
             className="p-2 rounded-lg bg-obd-surface/50 hover:bg-obd-surface border border-obd-border/50 hover:border-obd-accent/50 transition-colors"
-            title={t("dashboard.configGauges") || "Configure gauges"}
+            title={t("dashboard.configGauges")}
           >
             <Settings size={20} className="text-obd-accent" />
           </button>
@@ -266,9 +266,9 @@ export default function Dashboard({ pidData }: DashboardProps) {
       {showConfig && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 animate-fade-in">
           <div className="glass-card max-w-md w-full mx-4 p-6 space-y-4 animate-scale-in">
-            <h3 className="text-lg font-semibold">{t("dashboard.configGauges") || "Configure Gauges"}</h3>
+            <h3 className="text-lg font-semibold">{t("dashboard.configGauges")}</h3>
             <p className="text-sm text-obd-text-muted">
-              {t("dashboard.configDesc") || "Select up to 6 gauges to display"}
+              {t("dashboard.configDesc")}
             </p>
             <div className="space-y-2 max-h-80 overflow-y-auto">
               {Array.from(pidData.entries()).map(([pidCode, pidValue]) => (
@@ -290,7 +290,7 @@ export default function Dashboard({ pidData }: DashboardProps) {
                 onClick={() => setShowConfig(false)}
                 className="flex-1 px-4 py-2 rounded-lg bg-obd-surface border border-obd-border hover:bg-obd-surface/50 transition-colors"
               >
-                {t("common.close") || "Close"}
+                {t("common.close")}
               </button>
             </div>
           </div>

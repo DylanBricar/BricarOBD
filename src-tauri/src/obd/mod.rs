@@ -12,6 +12,7 @@ pub mod dev_log;
 pub mod transport;
 pub mod transport_ble;
 pub mod error;
+pub mod nrc;
 
 pub use connection::Elm327Connection;
 pub use demo::DemoConnection;

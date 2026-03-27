@@ -2,7 +2,7 @@ import { describe, it, expect, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import DiscoveryStatus from "./DiscoveryStatus";
-import type { ConnectionStatus, VehicleInfo } from "@/stores/connection";
+import type { VehicleInfo } from "@/stores/connection";
 
 describe("DiscoveryStatus", () => {
   const mockT = (key: string) => key;

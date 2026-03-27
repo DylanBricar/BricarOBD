@@ -113,7 +113,7 @@ describe("WiFiSettings", () => {
 
   it("validates IP address format when invalid", async () => {
     const user = userEvent.setup();
-    const { container } = render(
+    render(
       <WiFiSettings
         isConnected={false}
         status="disconnected"
@@ -131,7 +131,7 @@ describe("WiFiSettings", () => {
 
   it("validates port range when invalid", async () => {
     const user = userEvent.setup();
-    const { container } = render(
+    render(
       <WiFiSettings
         isConnected={false}
         status="disconnected"
@@ -150,7 +150,7 @@ describe("WiFiSettings", () => {
   it("accepts valid IP address", async () => {
     const user = userEvent.setup();
 
-    const { container } = render(
+    render(
       <WiFiSettings
         isConnected={false}
         status="disconnected"

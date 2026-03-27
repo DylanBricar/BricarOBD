@@ -6,56 +6,8 @@ import { cn } from "@/lib/utils";
 import type { AdvancedOperation, OperationCategory } from "@/components/advanced/types";
 import AdvancedConsole from "@/components/advanced/AdvancedConsole";
 import ConfirmDialog from "@/components/advanced/ConfirmDialog";
-
-const riskColors = {
-  low: "bg-obd-success/10 text-obd-success border-obd-success/20",
-  medium: "bg-obd-warning/10 text-obd-warning border-obd-warning/20",
-  high: "bg-obd-danger/10 text-obd-danger border-obd-danger/20",
-  critical: "bg-obd-danger/15 text-obd-danger border-obd-danger/30",
-};
-
-/// Parse service ID from hex command (handles spaced and unspaced formats)
-const parseServiceId = (command: string): number | null => {
-  const trimmed = command.trim().toUpperCase();
-  if (!trimmed) return null;
-
-  // Spaced format: "2E F1 90"
-  const parts = trimmed.split(/\s+/);
-  if (parts[0].length === 2) {
-    const val = parseInt(parts[0], 16);
-    return isNaN(val) ? null : val;
-  }
-
-  // Unspaced format: "2EF190"
-  if (trimmed.length >= 2) {
-    const val = parseInt(trimmed.substring(0, 2), 16);
-    return isNaN(val) ? null : val;
-  }
-
-  return null;
-};
-
-/// Check if command is blocked (matches ALWAYS_BLOCKED list from backend)
-const isCommandBlocked = (command: string): boolean => {
-  const trimmed = command.trim().toUpperCase();
-
-  // Blocked AT commands
-  const blockedAt = ["ATMA", "ATBD", "ATBI", "ATPP", "ATWS"];
-  for (const at of blockedAt) {
-    if (trimmed.startsWith(at)) {
-      return true;
-    }
-  }
-
-  // Blocked service IDs (always blocked even in advanced mode)
-  const alwaysBlocked = [0x11, 0x27, 0x28, 0x34, 0x35, 0x36, 0x37, 0x3D];
-  const serviceId = parseServiceId(command);
-  if (serviceId !== null && alwaysBlocked.includes(serviceId)) {
-    return true;
-  }
-
-  return false;
-};
+import { riskColors } from "@/components/advanced/constants";
+import { isCommandBlocked } from "@/components/advanced/utils";
 
 export default function Advanced() {
   const { t, i18n } = useTranslation();
@@ -159,7 +111,7 @@ export default function Advanced() {
     setShowConfirmDialog(true);
   };
 
-  const confirmOperation = async () => {
+  const confirmOperation = useCallback(async () => {
     if (!pendingOperation || pendingOperation.type !== "operation" || !pendingOperation.op) return;
     const op = pendingOperation.op;
     const now = new Date().toLocaleTimeString(i18n.language === "fr" ? "fr-FR" : "en-US");
@@ -188,7 +140,7 @@ export default function Advanced() {
     } finally {
       setExecutingOp(null);
     }
-  };
+  }, [pendingOperation, operationValues, ecuAddress, customEcuAddress, i18n.language, t]);
 
   const executeRawCommand = async () => {
     if (!rawCommand.trim()) return;
@@ -199,7 +151,7 @@ export default function Advanced() {
     setShowConfirmDialog(true);
   };
 
-  const confirmRawCommand = async () => {
+  const confirmRawCommand = useCallback(async () => {
     if (!pendingOperation || pendingOperation.type !== "raw" || !pendingOperation.cmd) return;
     const cmd = pendingOperation.cmd;
     const now = new Date().toLocaleTimeString(i18n.language === "fr" ? "fr-FR" : "en-US");
@@ -227,7 +179,7 @@ export default function Advanced() {
     } finally {
       setExecutingRaw(false);
     }
-  };
+  }, [pendingOperation, ecuAddress, customEcuAddress, i18n.language, t]);
 
   return (
     <div className="p-6 space-y-6 animate-slide-in h-full flex flex-col">
@@ -403,7 +355,7 @@ export default function Advanced() {
           } else if (pendingOperation?.type === "raw") {
             confirmRawCommand();
           }
-        }, [pendingOperation])}
+        }, [pendingOperation, confirmOperation, confirmRawCommand])}
         t={t}
       />
     </div>

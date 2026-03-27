@@ -484,8 +484,6 @@ describe("useConnectionStore()", () => {
       // We'll just verify the setter works
       const { result } = renderHook(() => useConnectionStore());
 
-      const previousPort = result.current.port;
-
       act(() => {
         result.current.setPort("TEST_PORT_123");
       });

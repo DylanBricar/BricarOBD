@@ -171,10 +171,10 @@ export function useVehicleData() {
         setPidData(prev => {
           const merged = new Map(prev);
           for (const p of data) merged.set(p.pid, p);
+          vehicleState.pidData = new Map(merged);
+          emitVehicleChange();
           return merged;
         });
-        vehicleState.pidData = new Map(pidData);
-        emitVehicleChange();
       } catch (e) {
         devDebug("ui", `Demo poll error: ${String(e)}`);
       }
@@ -310,10 +310,10 @@ export function useVehicleData() {
           setPidData(prev => {
             const merged = new Map(prev);
             for (const p of data) merged.set(p.pid, p);
+            vehicleState.pidData = new Map(merged);
+            emitVehicleChange();
             return merged;
           });
-          vehicleState.pidData = new Map(pidData);
-          emitVehicleChange();
         } catch (e) {
           devDebug("ui", `Demo poll error: ${String(e)}`);
         }

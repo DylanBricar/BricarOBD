@@ -1,6 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
 import ErrorBoundary from "./ErrorBoundary";
 
 vi.mock("i18next", () => ({
@@ -62,8 +61,6 @@ describe("ErrorBoundary", () => {
   });
 
   it("reload button is present and functional", async () => {
-    const user = userEvent.setup();
-
     render(
       <ErrorBoundary>
         <ThrowError />

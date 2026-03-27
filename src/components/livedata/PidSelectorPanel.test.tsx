@@ -1,21 +1,19 @@
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import PidSelectorPanel from './PidSelectorPanel';
+import type { PidValue } from '@/stores/vehicleTypes';
 
 const mockT = (key: string) => key;
 
-interface PidValue {
-  pid: number;
-  name: string;
-  value: number;
-  unit: string;
-}
+const makePid = (pid: number, name: string, value: number, unit: string): PidValue => ({
+  pid, name, value, unit, min: 0, max: value * 2, history: [value], timestamp: Date.now(),
+});
 
 describe('PidSelectorPanel', () => {
   const mockPidData = new Map<number, PidValue>([
-    [0x01, { pid: 0x01, name: 'Engine Load', value: 45, unit: '%' }],
-    [0x02, { pid: 0x02, name: 'Engine Temperature', value: 85, unit: '°C' }],
-    [0x03, { pid: 0x03, name: 'Fuel Pressure', value: 300, unit: 'kPa' }],
+    [0x01, makePid(0x01, 'Engine Load', 45, '%')],
+    [0x02, makePid(0x02, 'Engine Temperature', 85, '°C')],
+    [0x03, makePid(0x03, 'Fuel Pressure', 300, 'kPa')],
   ]);
 
   const defaultProps = {

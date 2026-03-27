@@ -13,6 +13,11 @@ export const freezeFrame = {
     "freezeFrame.subtitle": "Données moteur au moment du défaut",
     "freezeFrame.frame": "Capture {{n}}",
     "freezeFrame.noFrameData": "Aucune donnée disponible pour cette capture",
+    "freezeFrame.csvPid": "PID",
+    "freezeFrame.csvName": "Nom",
+    "freezeFrame.csvValue": "Valeur",
+    "freezeFrame.csvUnit": "Unité",
+    "freezeFrame.exportError": "Erreur lors de l'export du fichier",
   },
   en: {
     "freezeFrame.title": "Freeze Frame (Mode 02)",
@@ -28,5 +33,10 @@ export const freezeFrame = {
     "freezeFrame.subtitle": "Engine data at fault moment",
     "freezeFrame.frame": "Frame {{n}}",
     "freezeFrame.noFrameData": "No data available for this frame",
+    "freezeFrame.csvPid": "PID",
+    "freezeFrame.csvName": "Name",
+    "freezeFrame.csvValue": "Value",
+    "freezeFrame.csvUnit": "Unit",
+    "freezeFrame.exportError": "Error exporting file",
   },
 };

@@ -27,13 +27,15 @@ export default function FreezeFrame({ data, isLoading }: FreezeFrameProps) {
   const handleExport = useCallback(async () => {
     const frame = data[selectedFrame];
     if (!frame) return;
-    const header = "PID,Name,Value,Unit";
+    const header = [t("freezeFrame.csvPid"), t("freezeFrame.csvName"), t("freezeFrame.csvValue"), t("freezeFrame.csvUnit")].join(",");
     const rows = frame.pids.map(p => `${p.pid},${escapeCSV(p.name)},${p.value},${escapeCSV(p.unit)}`);
     const csv = [header, ...rows].join("\n");
     try {
       await invoke("save_csv_file", { filename: `bricarobd_freezeframe_frame${selectedFrame}_${Date.now()}.csv`, content: csv });
-    } catch {}
-  }, [data, selectedFrame]);
+    } catch (e) {
+      console.error(`[BricarOBD] ${t("freezeFrame.exportError")}:`, e);
+    }
+  }, [data, selectedFrame, t]);
 
   return (
     <div className="space-y-4">

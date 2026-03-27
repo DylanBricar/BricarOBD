@@ -176,7 +176,6 @@ describe("ManualVinInput", () => {
 
   it("shows error toast for empty VIN on submit", async () => {
     const showToast = vi.fn();
-    const user = userEvent.setup();
 
     render(
       <ManualVinInput

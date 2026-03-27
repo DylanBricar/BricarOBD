@@ -1,6 +1,6 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { renderHook, act } from "@testing-library/react";
-import { convertValue, setUnitSystem, useUnitSystem, type UnitSystem } from "./units";
+import { convertValue, useUnitSystem } from "./units";
 
 describe("convertValue()", () => {
   it("returns metric value and unit unchanged when system is metric", () => {

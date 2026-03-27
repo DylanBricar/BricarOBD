@@ -3,7 +3,7 @@ import { render, screen } from "@testing-library/react";
 import LiveChart from "./LiveChart";
 
 // Mock ResizeObserver
-global.ResizeObserver = vi.fn().mockImplementation(() => ({
+(globalThis as any).ResizeObserver = vi.fn().mockImplementation(() => ({
   observe: vi.fn(),
   unobserve: vi.fn(),
   disconnect: vi.fn(),
@@ -98,7 +98,7 @@ describe("LiveChart", () => {
   });
 
   it("accepts custom color", () => {
-    const { container } = render(
+    render(
       <LiveChart
         data={[10, 20, 30]}
         label="Test"
@@ -111,7 +111,7 @@ describe("LiveChart", () => {
   });
 
   it("accepts custom height", () => {
-    const { container } = render(
+    render(
       <LiveChart
         data={[10, 20, 30]}
         label="Test"
@@ -148,7 +148,7 @@ describe("LiveChart", () => {
   });
 
   it("renders with showAxis false by default", () => {
-    const { container } = render(
+    render(
       <LiveChart
         data={[10, 20, 30]}
         label="Test"

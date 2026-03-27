@@ -4,12 +4,14 @@ import { Activity, TrendingUp } from "lucide-react";
 import LiveChart from "@/components/charts/LiveChart";
 import { makeCSVFilename, saveCSVFile } from "@/lib/csv";
 import type { PidValue } from "@/stores/vehicle";
-import { cn, escapeCSV } from "@/lib/utils";
+import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/useToast";
 import { Toast } from "@/components/Toast";
 import { convertValue, useUnitSystem } from "@/lib/units";
 import LiveDataToolbar from "@/components/livedata/LiveDataToolbar";
 import PidSelectorPanel from "@/components/livedata/PidSelectorPanel";
+import { generateCSV, getTheoreticalMax } from "@/lib/livedata";
+import { StatRow } from "@/components/livedata/StatRow";
 
 interface LiveDataProps {
   pidData: Map<number, PidValue>;
@@ -21,46 +23,6 @@ interface LiveDataProps {
 }
 
 const TIME_RANGE_OPTIONS = ["30s", "1m", "5m", "all"] as const;
-
-function getTheoreticalMax(unit: string): number {
-  const map: Record<string, number> = {
-    "RPM": 8000,
-    "km/h": 250,
-    "°C": 120,
-    "%": 100,
-    "bar": 5,
-    "V": 14,
-    "A": 100,
-    "kPa": 200,
-    "ms": 50,
-    "g": 5,
-  };
-  return map[unit] || 100;
-}
-
-function generateCSV(pidData: Map<number, PidValue>, header: string, buffer?: Array<{ timestamp: Date; snapshot: Record<number, number> }>): string {
-  const rows: string[] = [header];
-
-  if (buffer && buffer.length > 0) {
-    // Export recording buffer
-    buffer.forEach((record) => {
-      pidData.forEach((pid) => {
-        const value = record.snapshot[pid.pid];
-        if (value !== undefined) {
-          rows.push(`${record.timestamp.toISOString()},0x${pid.pid.toString(16).toUpperCase().padStart(2, "0")},${escapeCSV(pid.name)},${value.toFixed(2)},${pid.unit},${pid.min.toFixed(2)},${pid.max.toFixed(2)}`);
-        }
-      });
-    });
-  } else {
-    // Export current snapshot
-    const now = new Date().toISOString();
-    pidData.forEach((pid) => {
-      rows.push(`${now},0x${pid.pid.toString(16).toUpperCase().padStart(2, "0")},${escapeCSV(pid.name)},${pid.value.toFixed(2)},${pid.unit},${pid.min.toFixed(2)},${pid.max.toFixed(2)}`);
-    });
-  }
-
-  return rows.join("\n");
-}
 
 
 export default function LiveData({ pidData, isPolling, onStartPolling, onPausePolling, onStopPolling, onChangeRefreshRate }: LiveDataProps) {
@@ -175,6 +137,10 @@ export default function LiveData({ pidData, isPolling, onStartPolling, onPausePo
     setIsRecording(true);
   }, []);
 
+  const handleTogglePidSelector = useCallback(() => {
+    setShowPidSelector(prev => !prev);
+  }, []);
+
   const { toast, showToast, dismissToast } = useToast();
 
   const handleStopRecording = useCallback(async () => {
@@ -211,11 +177,10 @@ export default function LiveData({ pidData, isPolling, onStartPolling, onPausePo
     }
   }, [pidData, showToast, t]);
 
-  const historyRanges = useMemo(() => ({ "30s": 30, "1m": 60, "5m": 300, all: Infinity }), []);
-
   const getFilteredHistory = useCallback((history: number[]) => {
-    return history.slice(-historyRanges[timeRange]);
-  }, [historyRanges, timeRange]);
+    const ranges = { "30s": 30, "1m": 60, "5m": 300, all: Infinity };
+    return history.slice(-ranges[timeRange]);
+  }, [timeRange]);
 
   const sortedPidValues = useMemo(() => Array.from(pidData.values()).sort((a, b) => a.name.localeCompare(b.name)), [pidData]);
 
@@ -264,7 +229,7 @@ export default function LiveData({ pidData, isPolling, onStartPolling, onPausePo
           search={search}
           onSearchChange={setSearch}
           showPidSelector={showPidSelector}
-          onTogglePidSelector={useCallback(() => setShowPidSelector(!showPidSelector), [showPidSelector])}
+          onTogglePidSelector={handleTogglePidSelector}
           selectedPidsCount={selectedPids.size}
           totalPidsCount={pidData.size}
           refreshRate={refreshRate}
@@ -412,17 +377,6 @@ export default function LiveData({ pidData, isPolling, onStartPolling, onPausePo
 
       {/* Toast notification */}
       {toast && <Toast message={toast.message} type={toast.type} onDismiss={dismissToast} />}
-    </div>
-  );
-}
-
-function StatRow({ label, value, unit }: { label: string; value: string; unit: string }) {
-  return (
-    <div className="flex items-center justify-between py-1.5">
-      <span className="text-xs text-obd-text-muted">{label}</span>
-      <span className="text-xs font-mono text-obd-text">
-        {value} <span className="text-obd-text-muted">{unit}</span>
-      </span>
     </div>
   );
 }

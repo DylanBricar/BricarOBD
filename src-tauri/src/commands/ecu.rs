@@ -6,34 +6,30 @@ use crate::obd::anomaly;
 use crate::obd::ecu_profiles;
 use crate::obd::advanced_ops;
 use crate::obd::dev_log;
+use crate::obd::nrc;
 use crate::commands::connection::{is_demo, with_real_connection};
 use crate::commands::ecu_scan::{
     get_ecu_probes, probe_ecu_alive, read_ecu_dids, build_ecu_info
 };
+use crate::commands::OBDBusyGuard;
 
 /// Get user's language from the global setting
 fn get_user_lang() -> String {
     super::connection::get_lang()
 }
 
-/// Map operation IDs to real UDS hex commands
-fn resolve_operation_command(op_id: &str) -> Option<(&str, &str)> {
-    match op_id {
-        "reset_service" => Some(("752", "2E 2282 00")),
-        "set_service_threshold" => Some(("752", "2E 2282")),
-        "write_config" => Some(("752", "2E 2100")),
-        "force_regen" => Some(("7E0", "31 01 0060")),
-        "test_injectors" => Some(("7E0", "30 01")),
-        "test_relays" => Some(("7E0", "30 02")),
-        _ => None,
-    }
-}
-
-
 /// Scan all ECUs — probes standard OBD-II + manufacturer addresses with multi-method discovery
 #[command]
 pub async fn scan_ecus() -> Vec<EcuInfo> {
     tokio::task::spawn_blocking(move || {
+        let _guard = match OBDBusyGuard::try_acquire() {
+            Ok(g) => g,
+            Err(e) => {
+                dev_log::log_warn("ecu", &format!("ECU scan blocked: {}", e));
+                return Vec::new();
+            }
+        };
+
         if is_demo() {
             dev_log::log_info("ecu", "Demo mode: returning simulated ECUs");
             let lang = get_user_lang();
@@ -95,7 +91,10 @@ pub async fn scan_ecus() -> Vec<EcuInfo> {
         }
 
         ecus
-    }).await.unwrap_or_default()
+    }).await.unwrap_or_else(|e| {
+        dev_log::log_error("ecu", &format!("scan_ecus task failed: {}", e));
+        Vec::new()
+    })
 }
 
 /// Read DID from ECU — UDS Service 0x22 with improved error handling
@@ -141,8 +140,9 @@ pub async fn read_did(ecu_address: String, did: String) -> Result<String, String
                     Err(format!("DID {} not supported by ECU {}", did, ecu_address))
                 } else if r.contains("7F") {
                     // Parse negative response code
-                    let nrc = parse_negative_response(&r);
-                    Err(format!("DID {} error: {}", did, nrc))
+                    let lang = get_user_lang();
+                    let nrc_msg = nrc::parse_negative_response(&r, &lang);
+                    Err(format!("DID {} error: {}", did, nrc_msg))
                 } else {
                     Ok(r)
                 }
@@ -150,50 +150,6 @@ pub async fn read_did(ecu_address: String, did: String) -> Result<String, String
             Err(e) => Err(e),
         }
     }).await.map_err(|e| format!("Task error: {}", e))?
-}
-
-/// Helper to get bilingual NRC description
-fn nrc_description(lang: &str, fr: &str, en: &str) -> String {
-    if lang == "fr" { fr.to_string() } else { en.to_string() }
-}
-
-/// Parse UDS negative response code into human-readable string
-fn parse_negative_response(response: &str) -> String {
-    let lang = get_user_lang();
-    let bytes: Vec<u8> = response
-        .split_whitespace()
-        .filter_map(|s| u8::from_str_radix(s, 16).ok())
-        .collect();
-
-    if bytes.len() >= 3 && bytes[0] == 0x7F {
-        let nrc = bytes[2];
-        match nrc {
-            0x10 => nrc_description(&lang, "Rejet général", "General reject"),
-            0x11 => nrc_description(&lang, "Service non supporté", "Service not supported"),
-            0x12 => nrc_description(&lang, "Sous-fonction non supportée", "Sub-function not supported"),
-            0x13 => nrc_description(&lang, "Longueur de message invalide", "Invalid message length"),
-            0x14 => nrc_description(&lang, "Réponse trop longue", "Response too long"),
-            0x22 => nrc_description(&lang, "Conditions non remplies", "Conditions not correct"),
-            0x24 => nrc_description(&lang, "Erreur de séquence de requête", "Request sequence error"),
-            0x25 => nrc_description(&lang, "Pas de réponse du sous-réseau", "No response from sub-net"),
-            0x26 => nrc_description(&lang, "Échec empêchant l'exécution", "Failure prevents execution"),
-            0x31 => nrc_description(&lang, "Requête hors limites", "Request out of range"),
-            0x33 => nrc_description(&lang, "Accès sécurité refusé", "Security access denied"),
-            0x35 => nrc_description(&lang, "Clé invalide", "Invalid key"),
-            0x36 => nrc_description(&lang, "Nombre de tentatives dépassé", "Exceeded number of attempts"),
-            0x37 => nrc_description(&lang, "Délai requis non écoulé", "Required time delay not expired"),
-            0x70 => nrc_description(&lang, "Upload/download non accepté", "Upload/download not accepted"),
-            0x71 => nrc_description(&lang, "Transfert de données suspendu", "Transfer data suspended"),
-            0x72 => nrc_description(&lang, "Échec de programmation général", "General programming failure"),
-            0x73 => nrc_description(&lang, "Compteur de séquence de bloc incorrect", "Wrong block sequence counter"),
-            0x78 => nrc_description(&lang, "Réponse en attente (traitement en cours)", "Response pending (still processing)"),
-            0x7E => nrc_description(&lang, "Sous-fonction non supportée dans la session active", "Sub-function not supported in active session"),
-            0x7F => nrc_description(&lang, "Service non supporté dans la session active", "Service not supported in active session"),
-            _ => format!("NRC 0x{:02X}", nrc),
-        }
-    } else {
-        response.to_string()
-    }
 }
 
 /// Get OBD monitor statuses — Mode 01 PID 01, with retry and wake-up
@@ -281,8 +237,8 @@ fn execute_uds_command(addr: &str, hex_cmd: &str) -> Result<String, String> {
 
 /// Send raw UDS command or named operation (Advanced mode — uses elevated safety)
 #[command]
-pub fn send_raw_command(ecu_address: String, command: String, confirmed: Option<bool>) -> Result<String, String> {
-    if let Some((addr, hex_cmd)) = resolve_operation_command(&command) {
+pub async fn send_raw_command(ecu_address: String, command: String, confirmed: Option<bool>) -> Result<String, String> {
+    if let Some((addr, hex_cmd)) = advanced_ops::resolve_operation_command(&command) {
         dev_log::log_info("ecu", &format!("Operation resolved: {} → {}", command, hex_cmd));
         let risk = SafetyGuard::check_command_advanced(hex_cmd);
         dev_log::log_debug("ecu", &format!("Safety check result: {:?}", risk));
@@ -305,7 +261,12 @@ pub fn send_raw_command(ecu_address: String, command: String, confirmed: Option<
         }
 
         dev_log::log_tx(hex_cmd);
-        return execute_uds_command(addr, hex_cmd);
+        let addr = addr.to_string();
+        let hex_cmd = hex_cmd.to_string();
+        return tokio::task::spawn_blocking(move || {
+            let _guard = super::connection::OBDBusyGuard::try_acquire()?;
+            execute_uds_command(&addr, &hex_cmd)
+        }).await.map_err(|e| format!("Task error: {}", e))?;
     }
 
     SafetyGuard::validate_hex(&command)?;
@@ -332,7 +293,11 @@ pub fn send_raw_command(ecu_address: String, command: String, confirmed: Option<
     dev_log::log_info("ecu", &format!("Sending raw command to ECU {}: {}", ecu_address, command));
     dev_log::log_tx(&command);
     let addr = ecu_address.replace("0x", "");
-    execute_uds_command(&addr, &command)
+    let cmd = command.clone();
+    tokio::task::spawn_blocking(move || {
+        let _guard = super::connection::OBDBusyGuard::try_acquire()?;
+        execute_uds_command(&addr, &cmd)
+    }).await.map_err(|e| format!("Task error: {}", e))?
 }
 
 #[command]

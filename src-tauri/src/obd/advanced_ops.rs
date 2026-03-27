@@ -74,6 +74,19 @@ pub fn get_manufacturer_groups() -> HashMap<String, ManufacturerGroup> {
         .collect()
 }
 
+/// Map operation IDs to real UDS hex commands
+pub fn resolve_operation_command(op_id: &str) -> Option<(&str, &str)> {
+    match op_id {
+        "reset_service" => Some(("752", "2E 2282 00")),
+        "set_service_threshold" => Some(("752", "2E 2282")),
+        "write_config" => Some(("752", "2E 2100")),
+        "force_regen" => Some(("7E0", "31 01 0060")),
+        "test_injectors" => Some(("7E0", "30 01")),
+        "test_relays" => Some(("7E0", "30 02")),
+        _ => None,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

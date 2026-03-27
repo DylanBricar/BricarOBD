@@ -1,7 +1,8 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 import ConfirmDialog from "./ConfirmDialog";
+import type { AdvancedOperation } from "./types";
 
 describe("ConfirmDialog", () => {
   const mockOnCancel = vi.fn();
@@ -30,7 +31,7 @@ describe("ConfirmDialog", () => {
     render(
       <ConfirmDialog
         show={true}
-        pendingOperation={{ type: "operation", op: { name: "TestOp" } }}
+        pendingOperation={{ type: "operation", op: { id: "test", name: "TestOp", description: "Test operation", risk_level: "medium" } as AdvancedOperation }}
         onCancel={mockOnCancel}
         onConfirm={mockOnConfirm}
         t={mockT}
@@ -43,7 +44,7 @@ describe("ConfirmDialog", () => {
     const { container } = render(
       <ConfirmDialog
         show={true}
-        pendingOperation={{ type: "operation", op: { name: "TestOp" } }}
+        pendingOperation={{ type: "operation", op: { id: "test", name: "TestOp", description: "Test operation", risk_level: "medium" } as AdvancedOperation }}
         onCancel={mockOnCancel}
         onConfirm={mockOnConfirm}
         t={mockT}
@@ -57,7 +58,7 @@ describe("ConfirmDialog", () => {
     const { container } = render(
       <ConfirmDialog
         show={true}
-        pendingOperation={{ type: "operation", op: { name: "TestOp" } }}
+        pendingOperation={{ type: "operation", op: { id: "test", name: "TestOp", description: "Test operation", risk_level: "medium" } as AdvancedOperation }}
         onCancel={mockOnCancel}
         onConfirm={mockOnConfirm}
         t={mockT}
@@ -71,7 +72,7 @@ describe("ConfirmDialog", () => {
     render(
       <ConfirmDialog
         show={true}
-        pendingOperation={{ type: "operation", op: { name: "WriteValue" } }}
+        pendingOperation={{ type: "operation", op: { id: "write", name: "WriteValue", description: "Write value", risk_level: "high" } as AdvancedOperation }}
         onCancel={mockOnCancel}
         onConfirm={mockOnConfirm}
         t={mockT}
@@ -97,7 +98,7 @@ describe("ConfirmDialog", () => {
     const { container } = render(
       <ConfirmDialog
         show={true}
-        pendingOperation={{ type: "operation", op: { name: "TestOp" } }}
+        pendingOperation={{ type: "operation", op: { id: "test", name: "TestOp", description: "Test operation", risk_level: "medium" } as AdvancedOperation }}
         onCancel={mockOnCancel}
         onConfirm={mockOnConfirm}
         t={mockT}
@@ -111,7 +112,7 @@ describe("ConfirmDialog", () => {
     render(
       <ConfirmDialog
         show={true}
-        pendingOperation={{ type: "operation", op: { name: "TestOp" } }}
+        pendingOperation={{ type: "operation", op: { id: "test", name: "TestOp", description: "Test operation", risk_level: "medium" } as AdvancedOperation }}
         onCancel={mockOnCancel}
         onConfirm={mockOnConfirm}
         t={mockT}
@@ -125,7 +126,7 @@ describe("ConfirmDialog", () => {
     render(
       <ConfirmDialog
         show={true}
-        pendingOperation={{ type: "operation", op: { name: "TestOp" } }}
+        pendingOperation={{ type: "operation", op: { id: "test", name: "TestOp", description: "Test operation", risk_level: "medium" } as AdvancedOperation }}
         onCancel={mockOnCancel}
         onConfirm={mockOnConfirm}
         t={mockT}
@@ -140,7 +141,7 @@ describe("ConfirmDialog", () => {
     render(
       <ConfirmDialog
         show={true}
-        pendingOperation={{ type: "operation", op: { name: "TestOp" } }}
+        pendingOperation={{ type: "operation", op: { id: "test", name: "TestOp", description: "Test operation", risk_level: "medium" } as AdvancedOperation }}
         onCancel={mockOnCancel}
         onConfirm={mockOnConfirm}
         t={mockT}
@@ -155,7 +156,7 @@ describe("ConfirmDialog", () => {
     render(
       <ConfirmDialog
         show={true}
-        pendingOperation={{ type: "operation", op: { name: "TestOp" } }}
+        pendingOperation={{ type: "operation", op: { id: "test", name: "TestOp", description: "Test operation", risk_level: "medium" } as AdvancedOperation }}
         onCancel={mockOnCancel}
         onConfirm={mockOnConfirm}
         t={mockT}
