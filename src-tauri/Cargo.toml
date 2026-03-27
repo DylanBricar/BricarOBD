@@ -1,6 +1,6 @@
 [package]
 name = "bricarobd"
-version = "2.0.7"
+version = "2.0.8"
 description = "BricarOBD - Outil de diagnostic automobile OBD-II"
 authors = ["BricarOBD"]
 edition = "2021"
