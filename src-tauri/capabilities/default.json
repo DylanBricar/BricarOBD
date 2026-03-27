@@ -1,9 +1,11 @@
 {
   "identifier": "default",
   "description": "Default capabilities for BricarOBD",
-  "windows": ["main"],
+  "windows": ["main", "dev-console"],
   "permissions": [
     "core:default",
+    "core:window:allow-create",
+    "core:webview:allow-create-webview-window",
     "shell:allow-open"
   ]
 }

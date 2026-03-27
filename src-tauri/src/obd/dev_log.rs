@@ -147,11 +147,11 @@ pub fn init_log_file() {
         let path = log_dir.join(&filename);
 
         match std::fs::File::create(&path) {
-            Ok(file) => {
+            Ok(mut file) => {
+                let _ = writeln!(file, "BricarOBD Log Session Started — {}", chrono::Local::now());
+                let _ = writeln!(file, "---");
                 if let Ok(mut file_guard) = LOG_FILE.lock() {
                     *file_guard = Some(file);
-                    // Log initial message
-                    let _ = writeln!(std::io::Cursor::new(Vec::new()), "BricarOBD Log Session Started — {}", chrono::Local::now());
                 }
             }
             Err(e) => {

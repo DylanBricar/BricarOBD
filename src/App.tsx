@@ -171,17 +171,21 @@ export default function App() {
     </div>
   );
 
-  const handleToggleDevConsole = useCallback(() => {
+  const handleToggleDevConsole = useCallback(async () => {
     try {
-      new WebviewWindow("dev-console", {
+      const webview = new WebviewWindow("dev-console", {
         url: "#/devconsole",
+        title: "BricarOBD — Dev Console",
         width: 1200,
         height: 600,
       });
+      webview.once("tauri://error", () => {
+        setShowDevConsole(prev => !prev);
+      });
     } catch {
-      setShowDevConsole(!showDevConsole);
+      setShowDevConsole(prev => !prev);
     }
-  }, [showDevConsole]);
+  }, []);
 
   const renderedPage = useMemo(() => {
     switch (activePage) {

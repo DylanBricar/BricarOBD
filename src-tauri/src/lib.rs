@@ -106,6 +106,7 @@ pub fn run() {
             settings::get_dev_log_count,
             settings::clear_dev_logs,
             settings::add_dev_log,
+            settings::add_dev_logs_batch,
             settings::save_csv_file,
             settings::read_csv_file,
             settings::list_exports,

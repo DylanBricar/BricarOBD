@@ -178,6 +178,28 @@ pub fn add_dev_log(level: String, source: String, message: String) {
     }
 }
 
+/// Batch-add frontend log entries to the dev console
+#[derive(serde::Deserialize)]
+pub struct BatchLogEntry {
+    pub level: String,
+    pub source: String,
+    pub message: String,
+}
+
+#[command]
+pub fn add_dev_logs_batch(logs: Vec<BatchLogEntry>) {
+    for entry in logs {
+        let source: String = entry.source.chars().take(64).collect();
+        let message: String = entry.message.chars().take(512).collect();
+        match entry.level.to_lowercase().as_str() {
+            "debug" => dev_log::log_debug(&source, &message),
+            "warn" => dev_log::log_warn(&source, &message),
+            "error" => dev_log::log_error(&source, &message),
+            _ => dev_log::log_info(&source, &message),
+        }
+    }
+}
+
 fn dirs_next() -> Option<PathBuf> {
     // Try Desktop first, fallback to home
     if let Some(home) = std::env::var_os("HOME").map(PathBuf::from) {
