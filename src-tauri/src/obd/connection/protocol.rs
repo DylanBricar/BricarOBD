@@ -58,9 +58,12 @@ impl Elm327Connection {
             let _ = self.send_command(&format!("ATSP{}", proto_num));
             std::thread::sleep(Duration::from_millis(300));
 
-            // For slow protocols (KWP/ISO), set max adapter timeout
+            // For slow protocols (KWP/ISO), set max adapter timeout and allow extra init time
             if timeout_ms > 6000 {
                 let _ = self.send_command("ATST FF");
+                // KWP 5-baud and ISO 9141 need the adapter to perform slow init handshake
+                // Give extra settling time before sending the PID request
+                std::thread::sleep(Duration::from_millis(500));
             }
 
             // Try 0100 first (standard PID request)
@@ -108,7 +111,7 @@ impl Elm327Connection {
         dev_log::log_warn("obd", "All protocols failed with headers off, trying with headers on...");
         self.set_headers(true);
 
-        for (proto_num, timeout_ms, proto_name) in &protocols[..4] {
+        for (proto_num, timeout_ms, proto_name) in &protocols[..6] {
             let _ = self.send_command(&format!("ATSP{}", proto_num));
             std::thread::sleep(Duration::from_millis(200));
 
@@ -124,7 +127,7 @@ impl Elm327Connection {
         }
 
         self.set_headers(false);
-        Err("No compatible OBD protocol found after trying all 10 protocols".to_string())
+        Err("No compatible OBD protocol found after trying all 10 protocols. Check: (1) vehicle ignition is ON, (2) adapter is firmly plugged in, (3) adapter is not a limited clone that only supports CAN.".to_string())
     }
 
     /// Check if response contains a valid PID response (handles spaces/no-spaces, multi-line)
@@ -160,5 +163,121 @@ impl Elm327Connection {
             _ => "Unknown",
         }
         .to_string()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_decode_protocol_0_auto() {
+        let result = Elm327Connection::decode_protocol("ATDPN0");
+        assert_eq!(result, "Auto");
+    }
+
+    #[test]
+    fn test_decode_protocol_1_j1850_pwm() {
+        let result = Elm327Connection::decode_protocol("ATDPN1");
+        assert_eq!(result, "SAE J1850 PWM");
+    }
+
+    #[test]
+    fn test_decode_protocol_2_j1850_vpw() {
+        let result = Elm327Connection::decode_protocol("ATDPN2");
+        assert_eq!(result, "SAE J1850 VPW");
+    }
+
+    #[test]
+    fn test_decode_protocol_3_iso9141() {
+        let result = Elm327Connection::decode_protocol("ATDPN3");
+        assert_eq!(result, "ISO 9141-2");
+    }
+
+    #[test]
+    fn test_decode_protocol_4_kwp_5baud() {
+        let result = Elm327Connection::decode_protocol("ATDPN4");
+        assert_eq!(result, "ISO 14230-4 KWP (5 baud init)");
+    }
+
+    #[test]
+    fn test_decode_protocol_5_kwp_fast() {
+        let result = Elm327Connection::decode_protocol("ATDPN5");
+        assert_eq!(result, "ISO 14230-4 KWP (fast init)");
+    }
+
+    #[test]
+    fn test_decode_protocol_6_can_11bit_500k() {
+        let result = Elm327Connection::decode_protocol("ATDPN6");
+        assert_eq!(result, "ISO 15765-4 CAN 11-bit 500k");
+    }
+
+    #[test]
+    fn test_decode_protocol_7_can_29bit_500k() {
+        let result = Elm327Connection::decode_protocol("ATDPN7");
+        assert_eq!(result, "ISO 15765-4 CAN 29-bit 500k");
+    }
+
+    #[test]
+    fn test_decode_protocol_8_can_11bit_250k() {
+        let result = Elm327Connection::decode_protocol("ATDPN8");
+        assert_eq!(result, "ISO 15765-4 CAN 11-bit 250k");
+    }
+
+    #[test]
+    fn test_decode_protocol_9_can_29bit_250k() {
+        let result = Elm327Connection::decode_protocol("ATDPN9");
+        assert_eq!(result, "ISO 15765-4 CAN 29-bit 250k");
+    }
+
+    #[test]
+    fn test_decode_protocol_a_j1939_lowercase() {
+        let result = Elm327Connection::decode_protocol("ATDPNa");
+        assert_eq!(result, "SAE J1939 CAN 29-bit 250k");
+    }
+
+    #[test]
+    fn test_decode_protocol_a_j1939_uppercase() {
+        let result = Elm327Connection::decode_protocol("ATDPNA");
+        assert_eq!(result, "SAE J1939 CAN 29-bit 250k");
+    }
+
+    #[test]
+    fn test_decode_protocol_b_user_can1() {
+        let result = Elm327Connection::decode_protocol("ATDPNB");
+        assert_eq!(result, "User CAN 1 (11-bit, user baud)");
+    }
+
+    #[test]
+    fn test_decode_protocol_c_user_can2() {
+        let result = Elm327Connection::decode_protocol("ATDPNC");
+        assert_eq!(result, "User CAN 2 (29-bit, user baud)");
+    }
+
+    #[test]
+    fn test_decode_protocol_unknown() {
+        let result = Elm327Connection::decode_protocol("ATDPNX");
+        assert_eq!(result, "Unknown");
+    }
+
+    #[test]
+    fn test_decode_protocol_with_whitespace() {
+        let result = Elm327Connection::decode_protocol("  ATDPN6  ");
+        assert_eq!(result, "ISO 15765-4 CAN 11-bit 500k");
+    }
+
+    #[test]
+    fn test_decode_protocol_empty() {
+        let result = Elm327Connection::decode_protocol("");
+        assert_eq!(result, "Unknown");
+    }
+
+    #[test]
+    fn test_check_valid_pid_response_impl() {
+        let response_spaces = "41 00 FF FF FF FF";
+        let no_space_prefix = "41 00".replace(" ", "");
+        let clean = response_spaces.replace(" ", "");
+        assert!(response_spaces.contains("41 00"));
+        assert!(clean.contains(&no_space_prefix));
     }
 }

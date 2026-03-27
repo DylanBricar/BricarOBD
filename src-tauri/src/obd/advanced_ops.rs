@@ -73,3 +73,70 @@ pub fn get_manufacturer_groups() -> HashMap<String, ManufacturerGroup> {
         })
         .collect()
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_get_categories_not_empty() {
+        let categories = get_categories();
+        assert!(!categories.is_empty());
+    }
+
+    #[test]
+    fn test_get_categories_have_id() {
+        let categories = get_categories();
+        for cat in categories {
+            assert!(!cat.id.is_empty());
+        }
+    }
+
+    #[test]
+    fn test_get_categories_have_names() {
+        let categories = get_categories();
+        for cat in categories {
+            assert!(!cat.name.en.is_empty());
+            assert!(!cat.name.fr.is_empty());
+        }
+    }
+
+    #[test]
+    fn test_get_categories_have_descriptions() {
+        let categories = get_categories();
+        for cat in categories {
+            assert!(!cat.desc.en.is_empty());
+            assert!(!cat.desc.fr.is_empty());
+        }
+    }
+
+    #[test]
+    fn test_get_categories_have_risk() {
+        let categories = get_categories();
+        for cat in categories {
+            assert!(!cat.risk.is_empty());
+        }
+    }
+
+    #[test]
+    fn test_get_manufacturer_groups_not_empty() {
+        let groups = get_manufacturer_groups();
+        assert!(!groups.is_empty());
+    }
+
+    #[test]
+    fn test_get_manufacturer_groups_have_manufacturers() {
+        let groups = get_manufacturer_groups();
+        for (_, group) in groups {
+            assert!(!group.manufacturers.is_empty());
+        }
+    }
+
+    #[test]
+    fn test_get_manufacturer_groups_keys_not_empty() {
+        let groups = get_manufacturer_groups();
+        for (key, _) in groups {
+            assert!(!key.is_empty());
+        }
+    }
+}

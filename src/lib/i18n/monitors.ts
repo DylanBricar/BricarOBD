@@ -38,6 +38,7 @@ export const monitors = {
     "monitors.incomplete": "Incomplet",
     "monitors.notAvailable": "Non disponible",
     "monitors.emissionTestStatus": "Statut des tests d'émissions",
+    "monitors.refreshHint": "Les moniteurs se mettent à jour après les cycles de conduite",
   },
   en: {
     "monitors.title": "OBD Monitors",
@@ -78,5 +79,6 @@ export const monitors = {
     "monitors.incomplete": "Incomplete",
     "monitors.notAvailable": "Not Available",
     "monitors.emissionTestStatus": "Emission test status",
+    "monitors.refreshHint": "Monitors update after drive cycles",
   },
 };

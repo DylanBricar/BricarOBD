@@ -66,9 +66,10 @@ fn decode_year(vin: &str) -> u16 {
         'N' => 2022, 'P' => 2023, 'R' => 2024, 'S' => 2025,
         'T' => 2026, 'V' => 2027, 'W' => 2028, 'X' => 2029,
         'Y' => 2030,
-        '1' => 2001, '2' => 2002, '3' => 2003, '4' => 2004,
-        '5' => 2005, '6' => 2006, '7' => 2007, '8' => 2008,
-        '9' => 2009,
+        // 2031+ cycle: same chars as 2001-2009 — default to newer range for modern vehicles
+        '1' => 2031, '2' => 2032, '3' => 2033, '4' => 2034,
+        '5' => 2035, '6' => 2036, '7' => 2037, '8' => 2038,
+        '9' => 2039,
         _ => 0,
     }
 }
@@ -104,7 +105,6 @@ mod tests {
     fn test_decode_year_letter_codes() {
         // Position 10 (0-indexed 9) holds the year code
         // Need exactly 10 characters, year code at index 9
-        assert_eq!(decode_year("AAAAAAAAA2"), 2002); // pos 9 = '2'
         assert_eq!(decode_year("AAAAAAAAAA"), 2010); // pos 9 = 'A'
         assert_eq!(decode_year("AAAAAAAAAB"), 2011); // pos 9 = 'B'
         assert_eq!(decode_year("AAAAAAAAAC"), 2012); // pos 9 = 'C'
@@ -119,10 +119,11 @@ mod tests {
     #[test]
     fn test_decode_year_numeric_codes() {
         // Position 9 (0-indexed) holds the year code
-        assert_eq!(decode_year("AAAAAAAAA1"), 2001); // position 9 = '1'
-        assert_eq!(decode_year("AAAAAAAAA2"), 2002); // position 9 = '2'
-        assert_eq!(decode_year("AAAAAAAAA5"), 2005); // position 9 = '5'
-        assert_eq!(decode_year("AAAAAAAAA9"), 2009); // position 9 = '9'
+        // 2031+ cycle: same chars as 2001-2009, defaults to newer range
+        assert_eq!(decode_year("AAAAAAAAA1"), 2031); // position 9 = '1'
+        assert_eq!(decode_year("AAAAAAAAA2"), 2032); // position 9 = '2'
+        assert_eq!(decode_year("AAAAAAAAA5"), 2035); // position 9 = '5'
+        assert_eq!(decode_year("AAAAAAAAA9"), 2039); // position 9 = '9'
     }
 
     #[test]

@@ -12,6 +12,8 @@ pub fn run() {
         .with_max_level(tracing::Level::DEBUG)
         .init();
 
+    obd::dev_log::init_log_file();
+
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
         .setup(|app| {
@@ -54,6 +56,8 @@ pub fn run() {
             connection::get_connection_status,
             connection::set_manual_vin,
             connection::set_language,
+            connection::has_vin_cache,
+            connection::clear_vin_cache,
             // Dashboard
             dashboard::get_pid_data,
             dashboard::get_all_pids,
@@ -61,6 +65,7 @@ pub fn run() {
             dashboard::reset_pid_blacklist,
             dashboard::discover_vehicle_params,
             dashboard::get_battery_voltage,
+            dashboard::get_discovery_progress,
             // DTC
             dtc::read_all_dtcs,
             dtc::clear_dtcs,
@@ -73,6 +78,7 @@ pub fn run() {
             ecu::get_generic_ecus,
             ecu::get_manufacturer_dids,
             ecu::get_all_manufacturer_dids,
+            ecu::get_vehicle_info_extended,
             // Advanced
             ecu::send_raw_command,
             ecu::get_advanced_categories,
@@ -104,6 +110,8 @@ pub fn run() {
             settings::read_csv_file,
             settings::list_exports,
             settings::open_exports_folder,
+            settings::get_log_dir,
+            settings::open_log_folder,
         ])
         .run(tauri::generate_context!())
         .expect("error while running BricarOBD");

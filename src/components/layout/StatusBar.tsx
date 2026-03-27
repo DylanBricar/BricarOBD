@@ -1,3 +1,4 @@
+import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { Wifi, WifiOff, Radio, Gauge } from "lucide-react";
 import type { ConnectionStatus, VehicleInfo } from "@/stores/connection";
@@ -6,12 +7,13 @@ import { cn } from "@/lib/utils";
 interface StatusBarProps {
   status: ConnectionStatus;
   vehicle: VehicleInfo | null;
+  isPolling?: boolean;
 }
 
-export default function StatusBar({ status, vehicle }: StatusBarProps) {
-  const { t } = useTranslation();
+export default function StatusBar({ status, vehicle, isPolling }: StatusBarProps) {
+  const { t, i18n } = useTranslation();
 
-  const statusConfig = {
+  const statusConfig = useMemo(() => ({
     connected: {
       icon: Wifi,
       label: t("status.connected"),
@@ -42,7 +44,7 @@ export default function StatusBar({ status, vehicle }: StatusBarProps) {
       dotClass: "status-dot-disconnected",
       textClass: "text-obd-danger",
     },
-  };
+  }), [t, i18n.language]);
 
   const config = statusConfig[status];
   const Icon = config.icon;
@@ -83,9 +85,17 @@ export default function StatusBar({ status, vehicle }: StatusBarProps) {
       {/* Spacer */}
       <div className="flex-1" />
 
+      {/* Polling indicator */}
+      {isPolling && (
+        <div className="flex items-center gap-1.5 text-xs text-obd-success">
+          <div className="w-2 h-2 rounded-full bg-obd-success animate-pulse" />
+          {t("nav.polling")}
+        </div>
+      )}
+
       {/* Right side */}
       <span className="text-obd-text-muted">
-        BricarOBD v2.0.3
+        BricarOBD v2.0.4
       </span>
     </footer>
   );

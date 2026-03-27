@@ -7,11 +7,11 @@ const config: Config = {
     extend: {
       colors: {
         obd: {
-          bg: "#060913",
-          surface: "#0C1220",
-          card: "#111827",
-          border: "#1E293B",
-          "border-light": "#334155",
+          bg: "rgb(var(--obd-bg) / <alpha-value>)",
+          surface: "rgb(var(--obd-surface) / <alpha-value>)",
+          card: "rgb(var(--obd-card) / <alpha-value>)",
+          border: "rgb(var(--obd-border) / <alpha-value>)",
+          "border-light": "rgb(var(--obd-border-light) / <alpha-value>)",
           accent: "#06B6D4",
           "accent-light": "#22D3EE",
           "accent-glow": "#06B6D440",
@@ -20,9 +20,9 @@ const config: Config = {
           danger: "#EF4444",
           "danger-glow": "#EF444440",
           info: "#3B82F6",
-          text: "#F1F5F9",
-          "text-secondary": "#94A3B8",
-          "text-muted": "#64748B",
+          text: "rgb(var(--obd-text) / <alpha-value>)",
+          "text-secondary": "rgb(var(--obd-text-secondary) / <alpha-value>)",
+          "text-muted": "rgb(var(--obd-text-muted) / <alpha-value>)",
         },
       },
       fontFamily: {

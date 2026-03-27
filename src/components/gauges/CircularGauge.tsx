@@ -29,34 +29,10 @@ export default function CircularGauge({
   const normalizedValue = clamp(value, min, max);
   const percentage = ((normalizedValue - min) / (max - min)) * 100;
 
-  const { arcPath, valuePath, color } = useMemo(() => {
-    const startAngle = 135;
-    const endAngle = 405;
-    const totalArc = endAngle - startAngle;
-    const valueAngle = startAngle + (totalArc * percentage) / 100;
-
-    const cx = size / 2;
-    const cy = size / 2;
-    const radius = size / 2 - 20;
-
-    const toRad = (deg: number) => (deg * Math.PI) / 180;
-
-    const arcPoint = (angle: number) => ({
-      x: cx + radius * Math.cos(toRad(angle)),
-      y: cy + radius * Math.sin(toRad(angle)),
-    });
-
-    const start = arcPoint(startAngle);
-    const end = arcPoint(endAngle);
-    const valueEnd = arcPoint(valueAngle);
-
-    const largeArc = endAngle - startAngle > 180 ? 1 : 0;
-    const valueLargeArc = valueAngle - startAngle > 180 ? 1 : 0;
-
-    const bgPath = `M ${start.x} ${start.y} A ${radius} ${radius} 0 ${largeArc} 1 ${end.x} ${end.y}`;
-    const valPath = percentage > 0
-      ? `M ${start.x} ${start.y} A ${radius} ${radius} 0 ${valueLargeArc} 1 ${valueEnd.x} ${valueEnd.y}`
-      : "";
+  const { radius, circumference, offset, color } = useMemo(() => {
+    const r = size / 2 - 20;
+    const circ = 2 * Math.PI * r;
+    const off = circ - (circ * percentage) / 100;
 
     let col = "var(--obd-chart-cyan)"; // cyan
     if (dangerThreshold && normalizedValue >= dangerThreshold) {
@@ -65,7 +41,7 @@ export default function CircularGauge({
       col = "var(--obd-chart-amber)";
     }
 
-    return { arcPath: bgPath, valuePath: valPath, color: col };
+    return { radius: r, circumference: circ, offset: off, color: col };
   }, [size, percentage, normalizedValue, warningThreshold, dangerThreshold]);
 
   const displayValue = decimals > 0 ? normalizedValue.toFixed(decimals) : Math.round(normalizedValue);
@@ -100,29 +76,32 @@ export default function CircularGauge({
           opacity="0.5"
         />
 
-        {/* Background arc */}
-        <path
-          d={arcPath}
+        {/* Background circle */}
+        <circle
+          cx={size / 2}
+          cy={size / 2}
+          r={radius}
           fill="none"
           stroke="var(--obd-gauge-grad-start)"
           strokeWidth="8"
           strokeLinecap="round"
         />
 
-        {/* Value arc */}
-        {valuePath && (
-          <path
-            d={valuePath}
-            fill="none"
-            stroke={color}
-            strokeWidth="8"
-            strokeLinecap="round"
-            filter={`url(#glow-${sanitizedLabel})`}
-            style={{
-              transition: "stroke 0.3s ease, d 0.3s ease",
-            }}
-          />
-        )}
+        {/* Value circle with strokeDasharray */}
+        <circle
+          cx={size / 2}
+          cy={size / 2}
+          r={radius}
+          fill="none"
+          stroke={color}
+          strokeWidth="8"
+          strokeLinecap="round"
+          strokeDasharray={circumference}
+          strokeDashoffset={offset}
+          transform={`rotate(-90 ${size / 2} ${size / 2})`}
+          filter={`url(#glow-${sanitizedLabel})`}
+          style={{ transition: "stroke-dashoffset 0.3s ease, stroke 0.3s ease" }}
+        />
 
         {/* Center text */}
         <text

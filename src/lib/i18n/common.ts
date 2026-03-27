@@ -16,6 +16,11 @@ export const common = {
     "common.language": "Langue",
     "common.delete": "Supprimer",
     "common.ok": "OK",
+    "common.search": "Rechercher...",
+    "common.noResults": "Aucun résultat trouvé",
+    "common.errorBoundaryTitle": "Une erreur s'est produite",
+    "common.errorBoundaryMessage": "L'application a rencontré une erreur inattendue.",
+    "common.errorBoundaryReload": "Recharger",
   },
   en: {
     "common.save": "Save",
@@ -34,5 +39,10 @@ export const common = {
     "common.language": "Language",
     "common.delete": "Delete",
     "common.ok": "OK",
+    "common.search": "Search...",
+    "common.noResults": "No results found",
+    "common.errorBoundaryTitle": "Something went wrong",
+    "common.errorBoundaryMessage": "The application encountered an unexpected error.",
+    "common.errorBoundaryReload": "Reload",
   },
 };

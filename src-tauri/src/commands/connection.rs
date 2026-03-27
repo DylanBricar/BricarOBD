@@ -3,6 +3,8 @@ use crate::models::{ConnectionStatus, PortInfo, VehicleInfo};
 use crate::obd::Elm327Connection;
 use crate::obd::transport::{self, OBDTransport};
 use std::sync::Mutex;
+use std::sync::atomic::{AtomicBool, Ordering};
+use super::vin_parser;
 
 enum ConnectionMode {
     Disconnected,
@@ -12,6 +14,7 @@ enum ConnectionMode {
 
 static CONNECTION: Mutex<ConnectionMode> = Mutex::new(ConnectionMode::Disconnected);
 static CURRENT_LANG: Mutex<String> = Mutex::new(String::new());
+static OBD_BUSY: AtomicBool = AtomicBool::new(false);
 
 /// Get the current language setting (default: "en")
 pub fn get_lang() -> String {
@@ -37,6 +40,62 @@ pub fn is_demo() -> bool {
 
 pub fn is_connected() -> bool {
     !matches!(*CONNECTION.lock().unwrap_or_else(|e| e.into_inner()), ConnectionMode::Disconnected)
+}
+
+/// Set OBD busy state
+pub fn set_obd_busy(busy: bool) {
+    OBD_BUSY.store(busy, Ordering::SeqCst);
+}
+
+/// Check if OBD is busy
+pub fn is_obd_busy() -> bool {
+    OBD_BUSY.load(Ordering::SeqCst)
+}
+
+/// Guard to manage OBD busy state with RAII semantics
+pub struct OBDBusyGuard;
+
+impl OBDBusyGuard {
+    /// Try to acquire the OBD lock, fail immediately if already busy
+    pub fn try_acquire() -> Result<Self, String> {
+        if OBD_BUSY.compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst).is_err() {
+            return Err("OBD is busy with another operation".to_string());
+        }
+        Ok(OBDBusyGuard)
+    }
+
+    /// Acquire the OBD lock with timeout (capped at 10s), retrying every 100ms
+    pub fn acquire_with_wait(timeout_secs: u64) -> Result<Self, String> {
+        let start = std::time::Instant::now();
+        let timeout = std::time::Duration::from_secs(timeout_secs.min(10));
+
+        loop {
+            if OBD_BUSY.compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst).is_ok() {
+                crate::obd::dev_log::log_debug("connection", "OBD lock acquired");
+                return Ok(OBDBusyGuard);
+            }
+
+            if start.elapsed() > timeout {
+                crate::obd::dev_log::log_warn("connection", &format!("OBD lock timeout after {} seconds", timeout_secs));
+                return Err(format!("OBD lock timeout after {} seconds", timeout_secs));
+            }
+
+            std::thread::sleep(std::time::Duration::from_millis(100));
+        }
+    }
+}
+
+impl Drop for OBDBusyGuard {
+    fn drop(&mut self) {
+        // Use try_lock to avoid deadlock if CONNECTION Mutex is already held (e.g. panic unwind)
+        if let Ok(mut guard) = CONNECTION.try_lock() {
+            if let ConnectionMode::Real(ref mut conn) = *guard {
+                let _ = conn.reset_headers();
+            }
+        }
+        set_obd_busy(false);
+        crate::obd::dev_log::log_debug("connection", "OBD lock released");
+    }
 }
 
 /// Execute a closure with the real Elm327Connection. Returns Err if not in Real mode.
@@ -98,10 +157,12 @@ pub async fn connect_obd(port: String, baud_rate: u32) -> Result<VehicleInfo, St
                     crate::obd::dev_log::log_info("connection", &format!("Connected successfully at {} baud", baud));
                     tracing::info!("Connected at {} baud", baud);
                     let vin_response = conn.send_command("0902").unwrap_or_default();
-                    let vin = parse_vin_response(&vin_response);
+                    let vin = vin_parser::parse_vin_response(&vin_response);
                     let vin_info = crate::obd::vin::decode_vin(&vin);
 
                     crate::obd::dev_log::log_info("connection", &format!("VIN decoded: {}, Make: {}, Year: {}", vin_info.vin, vin_info.make, vin_info.year));
+
+                    conn.vin = vin_info.vin.clone();
 
                     let model = super::database::find_vehicle_model_sync(&vin_info.make);
                     let info = VehicleInfo {
@@ -122,8 +183,17 @@ pub async fn connect_obd(port: String, baud_rate: u32) -> Result<VehicleInfo, St
                 }
             }
         }
-        crate::obd::dev_log::log_error("connection", &format!("Connection failed at all baud rates: {}", last_error));
-        Err(format!("Connection failed at all baud rates: {}", last_error))
+        let diagnostic = if last_error.contains("Permission denied") || last_error.contains("Access denied") {
+            last_error.clone()
+        } else if last_error.contains("not found") || last_error.contains("No such file") {
+            last_error.clone()
+        } else if last_error.contains("All 4 connection strategies failed") {
+            format!("{} — The adapter was detected but could not communicate with the vehicle ECU. Check that the ignition is ON and the adapter is firmly plugged into the OBD-II port.", last_error)
+        } else {
+            format!("Connection failed: {}", last_error)
+        };
+        crate::obd::dev_log::log_error("connection", &diagnostic);
+        Err(diagnostic)
     })
     .await
     .map_err(|e| format!("Task error: {}", e))?;
@@ -181,130 +251,6 @@ pub fn get_connection_status() -> ConnectionStatus {
     status
 }
 
-/// Strategy 1: Standard multi-frame "49 02 XX <data>"
-fn parse_vin_multiframe(response: &str) -> Vec<u8> {
-    let mut bytes: Vec<u8> = Vec::new();
-    for line in response.lines() {
-        let parts: Vec<&str> = line.split_whitespace().collect();
-        if parts.len() > 3 && parts[0] == "49" && parts[1] == "02" {
-            // Skip "49 02 XX" (service + PID + message counter)
-            bytes.extend(
-                parts[3..].iter()
-                    .filter_map(|s| u8::from_str_radix(s, 16).ok())
-            );
-        }
-    }
-    bytes
-}
-
-/// Strategy 2: Single-line response without frame counter "49 02 <all data>"
-fn parse_vin_singleline(response: &str) -> Vec<u8> {
-    let all_parts: Vec<&str> = response.split_whitespace().collect();
-    if all_parts.len() > 2 && all_parts[0] == "49" && all_parts[1] == "02" {
-        return all_parts[2..].iter()
-            .filter_map(|s| u8::from_str_radix(s, 16).ok())
-            .collect();
-    }
-    Vec::new()
-}
-
-/// Strategy 3: No-space hex "4902XXXXXXXXXXXX..."
-fn parse_vin_nospace(response: &str) -> Vec<u8> {
-    let hex_str = response.replace(" ", "").replace("\n", "");
-    if let Some(start) = hex_str.find("4902") {
-        let data_start = start + 4;
-        // Skip message counter byte (2 chars)
-        let data_start = if data_start + 2 <= hex_str.len() { data_start + 2 } else { data_start };
-        return (data_start..hex_str.len()).step_by(2)
-            .filter_map(|i| {
-                if i + 2 <= hex_str.len() {
-                    u8::from_str_radix(&hex_str[i..i+2], 16).ok()
-                } else {
-                    None
-                }
-            })
-            .collect();
-    }
-    Vec::new()
-}
-
-/// Strategy 4: CAN multi-frame with headers "7E8 10 14 49 02 01 XX XX XX..."
-fn parse_vin_can_header(response: &str) -> Vec<u8> {
-    let mut bytes: Vec<u8> = Vec::new();
-    for line in response.lines() {
-        let parts: Vec<&str> = line.split_whitespace().collect();
-        // Look for "49 02" anywhere in the line (skip header bytes)
-        if let Some(pos) = parts.iter().position(|&p| p == "49") {
-            if pos + 1 < parts.len() && parts[pos + 1] == "02" {
-                let data_start = pos + 3; // Skip "49 02 XX"
-                if data_start < parts.len() {
-                    bytes.extend(
-                        parts[data_start..].iter()
-                            .filter_map(|s| u8::from_str_radix(s, 16).ok())
-                    );
-                }
-            }
-        }
-    }
-    bytes
-}
-
-/// Strategy 5: Raw fallback — try to parse all hex bytes and find ASCII VIN pattern
-fn parse_vin_raw_fallback(response: &str) -> Vec<u8> {
-    response
-        .split_whitespace()
-        .filter_map(|s| u8::from_str_radix(s, 16).ok())
-        .collect()
-}
-
-/// Convert raw bytes to a validated 17-char VIN string
-fn validate_vin(bytes: Vec<u8>) -> String {
-    // Convert to ASCII, filter to alphanumeric only
-    let vin: String = String::from_utf8(bytes)
-        .unwrap_or_default()
-        .chars()
-        .filter(|c| c.is_ascii_alphanumeric())
-        .collect();
-
-    // VIN must be exactly 17 characters
-    if vin.len() == 17 {
-        vin
-    } else if vin.len() > 17 {
-        // Some adapters pad with extra bytes — try to extract 17-char VIN
-        // VIN never contains I, O, Q
-        for start in 0..=(vin.len() - 17) {
-            let candidate = &vin[start..start + 17];
-            if candidate.chars().all(|c| c.is_ascii_alphanumeric() && c != 'I' && c != 'O' && c != 'Q') {
-                return candidate.to_string();
-            }
-        }
-        String::new()
-    } else {
-        crate::obd::dev_log::log_warn("connection", &format!("VIN parse: got {} chars instead of 17: {}", vin.len(), vin));
-        String::new()
-    }
-}
-
-/// Parse VIN from Mode 09 response (multi-frame compatible, handles many adapter formats)
-fn parse_vin_response(response: &str) -> String {
-    if response.is_empty() || response.contains("NO DATA") || response.contains("ERROR") {
-        return String::new();
-    }
-    let strategies: &[fn(&str) -> Vec<u8>] = &[
-        parse_vin_multiframe,
-        parse_vin_singleline,
-        parse_vin_nospace,
-        parse_vin_can_header,
-        parse_vin_raw_fallback,
-    ];
-    for strategy in strategies {
-        let bytes = strategy(response);
-        if !bytes.is_empty() {
-            return validate_vin(bytes);
-        }
-    }
-    String::new()
-}
 
 /// Connect via WiFi (ELM327 WiFi adapter) — now fully integrated with ELM327 protocol
 #[command]
@@ -337,7 +283,7 @@ pub async fn connect_wifi(host: String, port: u16) -> Result<VehicleInfo, String
 
         // Read VIN
         let vin_response = conn.send_command("0902").unwrap_or_default();
-        let vin = parse_vin_response(&vin_response);
+        let vin = vin_parser::parse_vin_response(&vin_response);
         let vin_info = crate::obd::vin::decode_vin(&vin);
 
         let model = super::database::find_vehicle_model_sync(&vin_info.make);
@@ -386,7 +332,10 @@ pub async fn scan_wifi() -> Vec<serde_json::Value> {
         found
     })
     .await
-    .unwrap_or_default()
+    .unwrap_or_else(|e| {
+        crate::obd::dev_log::log_error("connection", &format!("scan_wifi task failed: {}", e));
+        Vec::new()
+    })
 }
 
 /// Get available connection types for the platform
@@ -407,6 +356,13 @@ pub fn get_connection_types() -> Vec<serde_json::Value> {
         "available": true,
     }));
 
+    #[cfg(feature = "mobile")]
+    types.push(serde_json::json!({
+        "type": "usb_android",
+        "name": "USB Serial (Android)",
+        "available": true,
+    }));
+
     types.push(serde_json::json!({
         "type": "bluetooth",
         "name": "Bluetooth BLE",
@@ -416,22 +372,17 @@ pub fn get_connection_types() -> Vec<serde_json::Value> {
     types
 }
 
+
 /// Set VIN manually and decode vehicle info from it
 #[command]
 pub fn set_manual_vin(vin: String) -> Result<VehicleInfo, String> {
     let vin = vin.trim().to_uppercase();
 
     // Validate: exactly 17 alphanumeric chars, no I/O/Q
-    if vin.len() != 17 {
+    if !vin_parser::is_valid_vin(&vin) {
         return Err(err_msg(
-            &format!("Le VIN doit contenir 17 caractères (reçu {})", vin.len()),
-            &format!("VIN must be 17 characters (got {})", vin.len()),
-        ));
-    }
-    if !vin.chars().all(|c| c.is_ascii_alphanumeric() && c != 'I' && c != 'O' && c != 'Q') {
-        return Err(err_msg(
-            "Le VIN contient des caractères invalides (I, O, Q interdits)",
-            "VIN contains invalid characters (I, O, Q not allowed)",
+            "Le VIN doit contenir 17 caractères alphanumériques valides (sans I, O, Q)",
+            "VIN must be 17 valid alphanumeric characters (no I, O, Q)",
         ));
     }
 
@@ -472,3 +423,131 @@ fn is_private_ip(host: &str) -> bool {
         host == "localhost"
     }
 }
+
+/// Check if VIN cache exists
+#[command]
+pub fn has_vin_cache(vin: String) -> bool {
+    crate::obd::vin_cache::has_cache(&vin)
+}
+
+/// Clear VIN cache for a specific VIN
+#[command]
+pub fn clear_vin_cache(vin: String) -> Result<(), String> {
+    crate::obd::vin_cache::clear_cache(&vin)?;
+    super::dashboard::reset_discovered_params_inner();
+    crate::obd::dev_log::log_info("connection", &format!("VIN cache cleared for {}", vin));
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    static LANG_TEST_LOCK: Mutex<()> = Mutex::new(());
+
+    #[test]
+    fn test_get_lang_default() {
+        let _guard = LANG_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        set_language(String::new());
+        assert_eq!(get_lang(), "en");
+    }
+
+    #[test]
+    fn test_get_lang_set_fr() {
+        let _guard = LANG_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        set_language("fr".to_string());
+        assert_eq!(get_lang(), "fr");
+        set_language("en".to_string());
+    }
+
+    #[test]
+    fn test_get_lang_set_en() {
+        let _guard = LANG_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        set_language("en".to_string());
+        assert_eq!(get_lang(), "en");
+    }
+
+    #[test]
+    fn test_err_msg_english() {
+        let _guard = LANG_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        set_language("en".to_string());
+        assert_eq!(err_msg("Erreur", "Error"), "Error");
+    }
+
+    #[test]
+    fn test_err_msg_french() {
+        let _guard = LANG_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        set_language("fr".to_string());
+        assert_eq!(err_msg("Erreur", "Error"), "Erreur");
+        set_language("en".to_string());
+    }
+
+    #[test]
+    fn test_is_private_ip_localhost() {
+        assert!(is_private_ip("localhost"));
+    }
+
+    #[test]
+    fn test_is_private_ip_loopback() {
+        assert!(is_private_ip("127.0.0.1"));
+    }
+
+    #[test]
+    fn test_is_private_ip_private_range_192() {
+        assert!(is_private_ip("192.168.1.1"));
+    }
+
+    #[test]
+    fn test_is_private_ip_private_range_10() {
+        assert!(is_private_ip("10.0.0.1"));
+    }
+
+    #[test]
+    fn test_is_private_ip_private_range_172() {
+        assert!(is_private_ip("172.16.0.1"));
+        assert!(is_private_ip("172.31.255.255"));
+    }
+
+    #[test]
+    fn test_is_private_ip_link_local() {
+        assert!(is_private_ip("169.254.1.1"));
+    }
+
+    #[test]
+    fn test_is_private_ip_public() {
+        assert!(!is_private_ip("8.8.8.8"));
+        assert!(!is_private_ip("1.1.1.1"));
+    }
+
+
+    #[test]
+    fn test_obd_busy_guard_try_acquire() {
+        set_obd_busy(false);
+        let guard = OBDBusyGuard::try_acquire();
+        assert!(guard.is_ok());
+        assert!(is_obd_busy());
+        drop(guard);
+        assert!(!is_obd_busy());
+    }
+
+    #[test]
+    fn test_obd_busy_guard_try_acquire_fails_when_busy() {
+        set_obd_busy(false);
+        let _guard1 = OBDBusyGuard::try_acquire().unwrap();
+        assert!(is_obd_busy());
+        let guard2 = OBDBusyGuard::try_acquire();
+        assert!(guard2.is_err());
+        assert!(is_obd_busy());
+    }
+
+    #[test]
+    fn test_obd_busy_guard_auto_release_on_drop() {
+        set_obd_busy(false);
+        {
+            let _guard = OBDBusyGuard::try_acquire().unwrap();
+            assert!(is_obd_busy());
+        }
+        assert!(!is_obd_busy());
+    }
+}
+

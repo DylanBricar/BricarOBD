@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useSyncExternalStore } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { devInfo, devError } from "@/lib/devlog";
 
@@ -36,7 +36,6 @@ const defaultState: ConnectionState = {
   availablePorts: [],
 };
 
-// Simple global state (will be replaced by Tauri events later)
 let globalState = { ...defaultState };
 let listeners: Set<() => void> = new Set();
 
@@ -44,102 +43,132 @@ function notify() {
   listeners.forEach((l) => l());
 }
 
+function subscribe(callback: () => void) {
+  listeners.add(callback);
+  return () => {
+    listeners.delete(callback);
+  };
+}
+
+function getSnapshot() {
+  return globalState;
+}
+
+const setPort = (port: string) => {
+  globalState = { ...globalState, port };
+  notify();
+};
+
+const setBaudRate = (baudRate: number) => {
+  globalState = { ...globalState, baudRate };
+  notify();
+};
+
+const setStatus = (status: ConnectionStatus) => {
+  globalState = { ...globalState, status };
+  notify();
+};
+
+const setVehicle = (vehicle: VehicleInfo | null) => {
+  globalState = { ...globalState, vehicle };
+  notify();
+};
+
+const setError = (error: string | null) => {
+  globalState = { ...globalState, error };
+  notify();
+};
+
+const setPorts = (ports: string[]) => {
+  globalState = { ...globalState, availablePorts: ports };
+  notify();
+};
+
+const scanPorts = async () => {
+  try {
+    const ports = await invoke<Array<{name: string, description: string}>>("list_serial_ports");
+    devInfo("ui", "Ports found: " + ports.length);
+    globalState = { ...globalState, availablePorts: ports.map(p => p.name) };
+    notify();
+  } catch (e) {
+    console.error("[BricarOBD] Failed to scan ports: " + String(e));
+  }
+};
+
+const connect = async () => {
+  devInfo("ui", "Connecting to " + globalState.port + " at " + globalState.baudRate);
+  globalState = { ...globalState, status: "connecting", error: null };
+  notify();
+  try {
+    const vehicle = await invoke<VehicleInfo>("connect_obd", { port: globalState.port, baudRate: globalState.baudRate });
+    devInfo("ui", "Connected: " + vehicle.make + " " + vehicle.model);
+    globalState = { ...globalState, status: "connected", vehicle };
+    notify();
+  } catch (e) {
+    devError("ui", "Connection error: " + String(e));
+    globalState = { ...globalState, status: "error", error: String(e) };
+    notify();
+  }
+};
+
+const disconnect = async () => {
+  devInfo("ui", "Disconnected");
+  try { await invoke("disconnect_obd"); } catch {}
+  globalState = { ...defaultState, availablePorts: globalState.availablePorts };
+  notify();
+};
+
+const updateVehicle = (vehicle: VehicleInfo) => {
+  globalState = { ...globalState, vehicle };
+  notify();
+};
+
+const connectWifi = async (host: string, port: number) => {
+  devInfo("ui", "WiFi connecting to " + host + ":" + port);
+  globalState = { ...globalState, status: "connecting", error: null };
+  notify();
+  try {
+    const vehicle = await invoke<VehicleInfo>("connect_wifi", { host, port });
+    devInfo("ui", "WiFi connected: " + vehicle.make + " " + vehicle.model);
+    globalState = { ...globalState, status: "connected", vehicle };
+    notify();
+  } catch (e) {
+    devError("ui", "WiFi connection error: " + String(e));
+    globalState = { ...globalState, status: "error", error: String(e) };
+    notify();
+  }
+};
+
+const connectDemo = async () => {
+  devInfo("ui", "Demo mode activated");
+  try {
+    const vehicle = await invoke<VehicleInfo>("connect_demo");
+    globalState = { ...globalState, status: "demo", vehicle, error: null };
+  } catch {
+    globalState = { ...globalState, status: "demo", vehicle: { vin: "DEMO", make: "Demo", model: "Demo Vehicle", year: 2018, protocol: "Demo", elmVersion: "Demo v1.0" }, error: null };
+  }
+  notify();
+};
+
+const stableActions = {
+  setPort,
+  setBaudRate,
+  setStatus,
+  setVehicle,
+  setError,
+  setPorts,
+  scanPorts,
+  connect,
+  disconnect,
+  updateVehicle,
+  connectWifi,
+  connectDemo,
+};
+
 export function useConnectionStore() {
-  const [, setTick] = useState(0);
-
-  useEffect(() => {
-    const forceUpdate = () => setTick((t) => t + 1);
-    listeners.add(forceUpdate);
-    return () => {
-      listeners.delete(forceUpdate);
-    };
-  }, []);
-
+  const state = useSyncExternalStore(subscribe, getSnapshot);
   return {
-    ...globalState,
-    setPort: (port: string) => {
-      globalState = { ...globalState, port };
-      notify();
-    },
-    setBaudRate: (baudRate: number) => {
-      globalState = { ...globalState, baudRate };
-      notify();
-    },
-    setStatus: (status: ConnectionStatus) => {
-      globalState = { ...globalState, status };
-      notify();
-    },
-    setVehicle: (vehicle: VehicleInfo | null) => {
-      globalState = { ...globalState, vehicle };
-      notify();
-    },
-    setError: (error: string | null) => {
-      globalState = { ...globalState, error };
-      notify();
-    },
-    setPorts: (ports: string[]) => {
-      globalState = { ...globalState, availablePorts: ports };
-      notify();
-    },
-    scanPorts: async () => {
-      try {
-        const ports = await invoke<Array<{name: string, description: string}>>("list_serial_ports");
-        devInfo("ui", "Ports found: " + ports.length);
-        globalState = { ...globalState, availablePorts: ports.map(p => p.name) };
-        notify();
-      } catch (e) {
-        console.error("[BricarOBD] Failed to scan ports: " + String(e));
-      }
-    },
-    connect: async () => {
-      devInfo("ui", "Connecting to " + globalState.port + " at " + globalState.baudRate);
-      globalState = { ...globalState, status: "connecting", error: null };
-      notify();
-      try {
-        const vehicle = await invoke<VehicleInfo>("connect_obd", { port: globalState.port, baudRate: globalState.baudRate });
-        devInfo("ui", "Connected: " + vehicle.make + " " + vehicle.model);
-        globalState = { ...globalState, status: "connected", vehicle };
-        notify();
-      } catch (e) {
-        devError("ui", "Connection error: " + String(e));
-        globalState = { ...globalState, status: "error", error: String(e) };
-        notify();
-      }
-    },
-    disconnect: async () => {
-      devInfo("ui", "Disconnected");
-      try { await invoke("disconnect_obd"); } catch {}
-      globalState = { ...defaultState, availablePorts: globalState.availablePorts };
-      notify();
-    },
-    updateVehicle: (vehicle: VehicleInfo) => {
-      globalState = { ...globalState, vehicle };
-      notify();
-    },
-    connectWifi: async (host: string, port: number) => {
-      devInfo("ui", "WiFi connecting to " + host + ":" + port);
-      globalState = { ...globalState, status: "connecting", error: null };
-      notify();
-      try {
-        const vehicle = await invoke<VehicleInfo>("connect_wifi", { host, port });
-        devInfo("ui", "WiFi connected: " + vehicle.make + " " + vehicle.model);
-        globalState = { ...globalState, status: "connected", vehicle };
-        notify();
-      } catch (e) {
-        devError("ui", "WiFi connection error: " + String(e));
-        globalState = { ...globalState, status: "error", error: String(e) };
-        notify();
-      }
-    },
-    connectDemo: async () => {
-      devInfo("ui", "Demo mode activated");
-      try {
-        const vehicle = await invoke<VehicleInfo>("connect_demo");
-        globalState = { ...globalState, status: "demo", vehicle, error: null };
-      } catch {
-        globalState = { ...globalState, status: "demo", vehicle: { vin: "DEMO", make: "Demo", model: "Demo Vehicle", year: 2018, protocol: "Demo", elmVersion: "Demo v1.0" }, error: null };
-      }
-      notify();
-    },
+    ...state,
+    ...stableActions,
   };
 }

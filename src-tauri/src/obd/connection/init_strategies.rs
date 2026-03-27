@@ -50,7 +50,7 @@ impl Elm327Connection {
     /// Strategy 2: Clone adapter compatible (no ATZ reset — many clones hang on it)
     fn try_clone_init(&mut self) -> Result<(), String> {
         self.flush_buffer();
-        std::thread::sleep(Duration::from_millis(200));
+        std::thread::sleep(Duration::from_millis(500));
 
         // Use ATI instead of ATZ — clones handle it better
         let ati_response = self.send_command_timeout("ATI", 3000)?;
@@ -63,6 +63,11 @@ impl Elm327Connection {
         let _ = self.send_command_timeout("ATE0", 1500);
 
         self.configure_adapter()?;
+        // Verify adapter responds — some clones appear to init but are actually unresponsive
+        match self.send_command_timeout("ATRV", 2000) {
+            Ok(r) if r.contains('.') || r.contains("OK") => {},
+            _ => return Err("Clone adapter did not respond to validation (ATRV)".to_string()),
+        }
         self.configure_can_flow_control()?;
         self.detect_protocol()
     }
@@ -75,10 +80,10 @@ impl Elm327Connection {
 
         // Send multiple CR to wake up adapter from sleep/garbage state
         if let Some(ref mut transport) = self.transport {
-            let _ = transport.write_bytes(b"\r\r\r");
+            let _ = transport.write_bytes(b"\r\r\r\r\r");
             let _ = transport.flush();
         }
-        std::thread::sleep(Duration::from_millis(300));
+        std::thread::sleep(Duration::from_millis(800));
         self.flush_buffer();
 
         // Try ATD (set all defaults) instead of ATZ — lighter reset
@@ -94,6 +99,7 @@ impl Elm327Connection {
         let _ = self.send_command("ATAT2");   // 2× adaptive timing
         let _ = self.send_command("ATST FF");  // Max timeout (255 × 4ms = 1.02s)
 
+        std::thread::sleep(Duration::from_millis(300));
         self.configure_adapter()?;
         // Skip CAN flow control — might cause issues on problem adapters
         self.detect_protocol()

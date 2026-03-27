@@ -3,7 +3,8 @@
 @tailwind utilities;
 
 @layer base {
-  :root {
+  /* Dark theme (default) */
+  :root, .dark {
     /* Chart and gauge colors */
     --obd-chart-cyan: #06B6D4;
     --obd-chart-cyan-light: #22D3EE;
@@ -24,14 +25,70 @@
     --obd-glow-cyan: #06B6D440;
     --obd-glow-red: #EF444460;
     --obd-glow-amber: #F59E0B50;
+
+    /* Theme colors (space-separated RGB for Tailwind opacity support) */
+    --obd-bg: 6 9 19;
+    --obd-surface: 12 18 32;
+    --obd-card: 17 24 39;
+    --obd-border: 30 41 59;
+    --obd-border-light: 51 65 85;
+    --obd-text: 241 245 249;
+    --obd-text-secondary: 148 163 184;
+    --obd-text-muted: 100 116 139;
+
+    /* Glass effects */
+    --glass-bg: rgba(17, 24, 39, 0.6);
+    --glass-sidebar-bg: rgba(12, 18, 32, 0.8);
+    --glass-shadow: rgba(0, 0, 0, 0.3);
+    --glass-highlight: rgba(255, 255, 255, 0.03);
+    --glass-highlight-strong: rgba(255, 255, 255, 0.04);
+    --glass-hover-highlight: rgba(255, 255, 255, 0.06);
+    --hover-bg: rgba(255, 255, 255, 0.05);
+    --data-row-hover: rgba(255, 255, 255, 0.02);
+    --input-bg: rgba(6, 9, 19, 0.5);
+  }
+
+  /* Light theme */
+  .light {
+    --obd-chart-tooltip-bg: #FFFFFF;
+    --obd-chart-tooltip-border: #E2E8F0;
+    --obd-chart-text: #1E293B;
+
+    --obd-gauge-grad-start: #E2E8F0;
+    --obd-gauge-grad-end: #F1F5F9;
+
+    --obd-glow-cyan: #06B6D425;
+    --obd-glow-red: #EF444435;
+    --obd-glow-amber: #F59E0B30;
+
+    /* Theme colors (space-separated RGB for Tailwind opacity support) */
+    --obd-bg: 241 245 249;
+    --obd-surface: 255 255 255;
+    --obd-card: 255 255 255;
+    --obd-border: 226 232 240;
+    --obd-border-light: 203 213 225;
+    --obd-text: 15 23 42;
+    --obd-text-secondary: 71 85 105;
+    --obd-text-muted: 148 163 184;
+
+    --glass-bg: rgba(255, 255, 255, 0.7);
+    --glass-sidebar-bg: rgba(255, 255, 255, 0.85);
+    --glass-shadow: rgba(0, 0, 0, 0.08);
+    --glass-highlight: rgba(255, 255, 255, 0.5);
+    --glass-highlight-strong: rgba(255, 255, 255, 0.6);
+    --glass-hover-highlight: rgba(255, 255, 255, 0.8);
+    --hover-bg: rgba(0, 0, 0, 0.04);
+    --data-row-hover: rgba(0, 0, 0, 0.02);
+    --input-bg: rgba(241, 245, 249, 0.5);
   }
 
   * {
-    @apply border-obd-border;
+    border-color: rgb(var(--obd-border));
   }
 
   body {
-    @apply bg-obd-bg text-obd-text;
+    background-color: rgb(var(--obd-bg));
+    color: rgb(var(--obd-text));
     font-feature-settings: "cv02", "cv03", "cv04", "cv11";
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
@@ -48,43 +105,50 @@
   }
 
   ::-webkit-scrollbar-thumb {
-    @apply bg-obd-border rounded-full;
+    background-color: rgb(var(--obd-border));
+    border-radius: 9999px;
   }
 
   ::-webkit-scrollbar-thumb:hover {
-    @apply bg-obd-border-light;
+    background-color: rgb(var(--obd-border-light));
   }
 }
 
 @layer components {
   /* Glassmorphic card */
   .glass-card {
-    @apply bg-obd-card/60 backdrop-blur-md border border-obd-border/50 rounded-xl;
+    background-color: var(--glass-bg);
+    @apply border border-obd-border/50 rounded-xl;
     box-shadow:
-      0 0 0 1px rgba(255, 255, 255, 0.03),
-      0 4px 24px rgba(0, 0, 0, 0.3),
-      inset 0 1px 0 rgba(255, 255, 255, 0.04);
+      0 0 0 1px var(--glass-highlight),
+      0 4px 24px var(--glass-shadow),
+      inset 0 1px 0 var(--glass-highlight-strong);
+  }
+
+  .glass-card-static {
+    @apply glass-card backdrop-blur-md;
   }
 
   .glass-card-hover {
-    @apply glass-card transition-all duration-300;
+    @apply glass-card transition-all duration-300 backdrop-blur-md;
   }
 
   .glass-card-hover:hover {
     @apply border-obd-accent/30;
     box-shadow:
       0 0 0 1px rgba(6, 182, 212, 0.1),
-      0 4px 24px rgba(0, 0, 0, 0.4),
+      0 4px 24px var(--glass-shadow),
       0 0 40px rgba(6, 182, 212, 0.05),
-      inset 0 1px 0 rgba(255, 255, 255, 0.06);
+      inset 0 1px 0 var(--glass-hover-highlight);
   }
 
   /* Glassmorphic sidebar */
   .glass-sidebar {
-    @apply bg-obd-surface/80 backdrop-blur-xl border-r border-obd-border/50;
+    background-color: var(--glass-sidebar-bg);
+    @apply glass-card-static backdrop-blur-xl border-r border-obd-border/50;
     box-shadow:
-      4px 0 24px rgba(0, 0, 0, 0.3),
-      inset -1px 0 0 rgba(255, 255, 255, 0.03);
+      4px 0 24px var(--glass-shadow),
+      inset -1px 0 0 var(--glass-highlight);
   }
 
   /* Status indicator */
@@ -132,15 +196,22 @@
 
   .btn-ghost {
     @apply px-4 py-2 rounded-lg font-medium text-sm transition-all duration-200
-           text-obd-text-secondary hover:text-obd-text hover:bg-white/5
-           active:scale-[0.98];
+           text-obd-text-secondary hover:text-obd-text active:scale-[0.98];
+  }
+
+  .btn-ghost:hover {
+    background-color: var(--hover-bg);
   }
 
   /* Nav item — all items same width via w-full + border-transparent for consistent sizing */
   .nav-item {
     @apply w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium
            transition-all duration-200 cursor-pointer border border-transparent
-           text-obd-text-secondary hover:text-obd-text hover:bg-white/5;
+           text-obd-text-secondary hover:text-obd-text;
+  }
+
+  .nav-item:hover {
+    background-color: var(--hover-bg);
   }
 
   .nav-item-active {
@@ -166,16 +237,21 @@
   /* Data table row */
   .data-row {
     @apply flex items-center px-4 py-3 border-b border-obd-border/30
-           transition-colors duration-150 hover:bg-white/[0.02];
+           transition-colors duration-150;
+  }
+
+  .data-row:hover {
+    background-color: var(--data-row-hover);
   }
 
   /* Input */
   .input-field {
     @apply w-full px-3 py-2 rounded-lg text-sm
-           bg-obd-bg/50 border border-obd-border
+           border border-obd-border
            text-obd-text placeholder-obd-text-muted
            focus:outline-none focus:border-obd-accent/50 focus:ring-1 focus:ring-obd-accent/20
            transition-all duration-200;
+    background-color: var(--input-bg);
   }
 
   /* Badge */

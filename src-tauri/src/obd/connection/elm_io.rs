@@ -47,6 +47,7 @@ impl Elm327Connection {
 
         // Read response (wait for prompt '>')
         let mut response = String::new();
+        let max_response_size: usize = 65536; // 64KB cap to prevent OOM from misbehaving adapter
         let mut buf = [0u8; 256]; // Larger buffer for multi-frame responses
         let timeout = std::time::Instant::now();
 
@@ -76,9 +77,15 @@ impl Elm327Connection {
                         }
                         response.push(ch);
                     }
+                    // Prevent unbounded memory growth from misbehaving adapter
+                    if response.len() > max_response_size {
+                        dev_log::log_error("obd", &format!("Response exceeded {}KB cap for: {}", max_response_size / 1024, cmd));
+                        self.consecutive_errors += 1;
+                        return Err(format!("Response too large (>{}KB)", max_response_size / 1024));
+                    }
                 }
                 Ok(_) => {
-                    std::thread::sleep(Duration::from_millis(5));
+                    std::thread::sleep(Duration::from_millis(1));
                 }
                 Err(_) => {
                     self.consecutive_errors += 1;
@@ -144,7 +151,7 @@ impl Elm327Connection {
             let mut buf = [0u8; 1024];
             // Read and discard all pending data (up to 10 rounds to be sure)
             for _ in 0..10 {
-                match transport.read_bytes(&mut buf, 50) {
+                match transport.read_bytes(&mut buf, 10) {
                     Ok(0) => break,
                     Ok(_) => continue,
                     Err(_) => break,

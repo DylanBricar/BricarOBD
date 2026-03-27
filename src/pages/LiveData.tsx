@@ -1,12 +1,15 @@
 import { useState, useMemo, useRef, useEffect, useCallback } from "react";
 import { useTranslation } from "react-i18next";
-import { Activity, Search, Download, TrendingUp, Circle, Play, Pause, ListChecks, Check } from "lucide-react";
+import { Activity, TrendingUp } from "lucide-react";
 import LiveChart from "@/components/charts/LiveChart";
 import { makeCSVFilename, saveCSVFile } from "@/lib/csv";
 import type { PidValue } from "@/stores/vehicle";
-import { cn } from "@/lib/utils";
+import { cn, escapeCSV } from "@/lib/utils";
 import { useToast } from "@/hooks/useToast";
 import { Toast } from "@/components/Toast";
+import { convertValue, useUnitSystem } from "@/lib/units";
+import LiveDataToolbar from "@/components/livedata/LiveDataToolbar";
+import PidSelectorPanel from "@/components/livedata/PidSelectorPanel";
 
 interface LiveDataProps {
   pidData: Map<number, PidValue>;
@@ -17,17 +20,26 @@ interface LiveDataProps {
   onChangeRefreshRate: (intervalMs: number) => void;
 }
 
-const REFRESH_OPTIONS = [
-  { label: "500ms", value: 500 },
-  { label: "1s", value: 1000 },
-  { label: "2s", value: 2000 },
-  { label: "5s", value: 5000 },
-];
-
 const TIME_RANGE_OPTIONS = ["30s", "1m", "5m", "all"] as const;
 
-function generateCSV(pidData: Map<number, PidValue>, buffer?: Array<{ timestamp: Date; snapshot: Record<number, number> }>): string {
-  const rows: string[] = ["Timestamp,PID,Name,Value,Unit,Min,Max"];
+function getTheoreticalMax(unit: string): number {
+  const map: Record<string, number> = {
+    "RPM": 8000,
+    "km/h": 250,
+    "°C": 120,
+    "%": 100,
+    "bar": 5,
+    "V": 14,
+    "A": 100,
+    "kPa": 200,
+    "ms": 50,
+    "g": 5,
+  };
+  return map[unit] || 100;
+}
+
+function generateCSV(pidData: Map<number, PidValue>, header: string, buffer?: Array<{ timestamp: Date; snapshot: Record<number, number> }>): string {
+  const rows: string[] = [header];
 
   if (buffer && buffer.length > 0) {
     // Export recording buffer
@@ -35,7 +47,7 @@ function generateCSV(pidData: Map<number, PidValue>, buffer?: Array<{ timestamp:
       pidData.forEach((pid) => {
         const value = record.snapshot[pid.pid];
         if (value !== undefined) {
-          rows.push(`${record.timestamp.toISOString()},0x${pid.pid.toString(16).toUpperCase().padStart(2, "0")},${pid.name},${value.toFixed(2)},${pid.unit},${pid.min.toFixed(2)},${pid.max.toFixed(2)}`);
+          rows.push(`${record.timestamp.toISOString()},0x${pid.pid.toString(16).toUpperCase().padStart(2, "0")},${escapeCSV(pid.name)},${value.toFixed(2)},${pid.unit},${pid.min.toFixed(2)},${pid.max.toFixed(2)}`);
         }
       });
     });
@@ -43,7 +55,7 @@ function generateCSV(pidData: Map<number, PidValue>, buffer?: Array<{ timestamp:
     // Export current snapshot
     const now = new Date().toISOString();
     pidData.forEach((pid) => {
-      rows.push(`${now},0x${pid.pid.toString(16).toUpperCase().padStart(2, "0")},${pid.name},${pid.value.toFixed(2)},${pid.unit},${pid.min.toFixed(2)},${pid.max.toFixed(2)}`);
+      rows.push(`${now},0x${pid.pid.toString(16).toUpperCase().padStart(2, "0")},${escapeCSV(pid.name)},${pid.value.toFixed(2)},${pid.unit},${pid.min.toFixed(2)},${pid.max.toFixed(2)}`);
     });
   }
 
@@ -68,9 +80,15 @@ export default function LiveData({ pidData, isPolling, onStartPolling, onPausePo
     return new Set();
   });
   const [showPidSelector, setShowPidSelector] = useState(false);
-  const [isActive, setIsActive] = useState(false);
+  const [isActive, setIsActive] = useState(isPolling);
+  const { system: unitSystem } = useUnitSystem();
   const recordBufferRef = useRef<Array<{ timestamp: Date; snapshot: Record<number, number> }>>([]);
   const recordingStartRef = useRef<Date | null>(null);
+
+  // Sync isActive with isPolling
+  useEffect(() => {
+    setIsActive(isPolling);
+  }, [isPolling]);
 
   // Reset selectedPids when data transitions from empty to populated (reconnect)
   // If user had a saved selection, restore it; otherwise select all
@@ -106,7 +124,6 @@ export default function LiveData({ pidData, isPolling, onStartPolling, onPausePo
       } catch {}
     }
   }, [selectedPids]);
-
 
   // Recording timer with cleanup
   useEffect(() => {
@@ -165,7 +182,8 @@ export default function LiveData({ pidData, isPolling, onStartPolling, onPausePo
     const snapshots = recordBufferRef.current.length;
     if (snapshots > 0) {
       try {
-        const csv = generateCSV(pidData, recordBufferRef.current);
+        const csvHeader = [t("liveData.csvTimestamp"), t("liveData.csvPid"), t("liveData.csvName"), t("liveData.csvValue"), t("liveData.csvUnit"), t("liveData.csvMin"), t("liveData.csvMax")].join(",");
+        const csv = generateCSV(pidData, csvHeader, recordBufferRef.current);
         const filename = makeCSVFilename("bricarobd_recording");
         const path = await saveCSVFile(csv, filename);
         showToast(`${t("liveData.exportSuccess")} : ${path}`);
@@ -183,7 +201,8 @@ export default function LiveData({ pidData, isPolling, onStartPolling, onPausePo
       return;
     }
     try {
-      const csv = generateCSV(pidData);
+      const csvHeader = [t("liveData.csvTimestamp"), t("liveData.csvPid"), t("liveData.csvName"), t("liveData.csvValue"), t("liveData.csvUnit"), t("liveData.csvMin"), t("liveData.csvMax")].join(",");
+      const csv = generateCSV(pidData, csvHeader);
       const filename = makeCSVFilename("bricarobd_snapshot");
       const path = await saveCSVFile(csv, filename);
       showToast(`${t("liveData.exportSuccess")} : ${path}`);
@@ -199,6 +218,14 @@ export default function LiveData({ pidData, isPolling, onStartPolling, onPausePo
   }, [historyRanges, timeRange]);
 
   const sortedPidValues = useMemo(() => Array.from(pidData.values()).sort((a, b) => a.name.localeCompare(b.name)), [pidData]);
+
+  const theoreticalMaxCache = useMemo(() => {
+    const cache: Record<number, number> = {};
+    for (const pid of Array.from(pidData.values())) {
+      cache[pid.pid] = getTheoreticalMax(pid.unit);
+    }
+    return cache;
+  }, [pidData]);
 
   const filteredPids = useMemo(() => {
     // Only show PIDs if polling is active
@@ -233,136 +260,36 @@ export default function LiveData({ pidData, isPolling, onStartPolling, onPausePo
           </div>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2 h-auto md:h-[34px]">
-          {/* Search */}
-          <div className="relative">
-            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-obd-text-muted" />
-            <input
-              type="text"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder={t("liveData.search")}
-              className="input-field pl-9 w-48 text-xs h-[34px]"
-            />
-          </div>
-
-          {/* PID Selector toggle */}
-          <button
-            onClick={() => setShowPidSelector(!showPidSelector)}
-            className={cn(
-              "h-[34px] px-3 rounded-lg text-xs font-medium flex items-center gap-1.5 border transition-all",
-              showPidSelector
-                ? "bg-obd-accent/20 text-obd-accent border-obd-accent/30"
-                : "bg-obd-border/20 text-obd-text-muted border-obd-border/30 hover:bg-obd-border/40"
-            )}
-          >
-            <ListChecks size={14} />
-            {selectedPids.size}/{pidData.size}
-          </button>
-
-          {/* Refresh Rate */}
-          <select
-            value={refreshRate}
-            onChange={(e) => handleRefreshRateChange(Number(e.target.value))}
-            className="input-field text-xs h-[34px] w-20"
-          >
-            {REFRESH_OPTIONS.map((opt) => (
-              <option key={opt.value} value={opt.value}>{opt.label}</option>
-            ))}
-          </select>
-
-          {/* Start/Pause — AFTER the select */}
-          <button
-            onClick={handleTogglePolling}
-            className={cn(
-              "h-[34px] px-3 rounded-lg text-xs font-medium flex items-center gap-1.5 transition-all",
-              isActive
-                ? "bg-obd-warning/20 text-obd-warning border border-obd-warning/30"
-                : "bg-obd-accent/20 text-obd-accent border border-obd-accent/30"
-            )}
-          >
-            {isActive ? <Pause size={14} /> : <Play size={14} />}
-            {isActive ? t("liveData.pause") : t("liveData.start")}
-          </button>
-
-          {/* Record */}
-          <button
-            onClick={isRecording ? handleStopRecording : handleStartRecording}
-            className={cn(
-              "h-[34px] px-3 rounded-lg text-xs font-medium flex items-center gap-1.5 transition-all border",
-              isRecording
-                ? "bg-red-500/20 text-red-400 border-red-500/30"
-                : "bg-obd-border/20 text-obd-text-muted border-obd-border/30 hover:bg-obd-border/40"
-            )}
-          >
-            <Circle size={8} className={cn(isRecording && "fill-red-400")} />
-            {isRecording ? `${t("liveData.stop")} (${recordingDuration}s)` : t("liveData.record")}
-          </button>
-
-          {/* Export CSV */}
-          <button
-            onClick={handleExportCSV}
-            disabled={pidData.size === 0}
-            className={cn("h-[34px] px-3 rounded-lg text-xs font-medium flex items-center gap-1.5 border bg-obd-border/20 text-obd-text-muted border-obd-border/30 hover:bg-obd-border/40", pidData.size === 0 && "opacity-40")}
-          >
-            <Download size={14} />
-            CSV
-          </button>
-        </div>
+        <LiveDataToolbar
+          search={search}
+          onSearchChange={setSearch}
+          showPidSelector={showPidSelector}
+          onTogglePidSelector={useCallback(() => setShowPidSelector(!showPidSelector), [showPidSelector])}
+          selectedPidsCount={selectedPids.size}
+          totalPidsCount={pidData.size}
+          refreshRate={refreshRate}
+          onRefreshRateChange={handleRefreshRateChange}
+          isActive={isActive}
+          onTogglePolling={handleTogglePolling}
+          isRecording={isRecording}
+          recordingDuration={recordingDuration}
+          onStartRecording={handleStartRecording}
+          onStopRecording={handleStopRecording}
+          pidDataSize={pidData.size}
+          onExportCSV={handleExportCSV}
+          t={t}
+        />
       </div>
 
       {/* PID Selector Panel */}
       {showPidSelector && pidData.size > 0 && (
-        <div className="glass-card p-3 space-y-2">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-obd-text-secondary">
-              {t("liveData.selectParameters")} ({selectedPids.size}/{pidData.size})
-            </span>
-            <div className="flex gap-1.5">
-              <button
-                onClick={() => setSelectedPids(new Set(pidData.keys()))}
-                className="text-[10px] px-2 py-1 rounded bg-obd-accent/10 text-obd-accent hover:bg-obd-accent/20 transition-colors"
-              >
-                {t("liveData.selectAll")}
-              </button>
-              <button
-                onClick={() => setSelectedPids(new Set())}
-                className="text-[10px] px-2 py-1 rounded bg-obd-border/20 text-obd-text-muted hover:bg-obd-border/40 transition-colors"
-              >
-                {t("liveData.selectNone")}
-              </button>
-            </div>
-          </div>
-          <div className="flex flex-wrap gap-1.5 max-h-28 overflow-y-auto">
-            {sortedPidValues.map((pid) => {
-                const isChecked = selectedPids.has(pid.pid);
-                return (
-                  <button
-                    key={pid.pid}
-                    onClick={() => {
-                      const next = new Set(selectedPids);
-                      if (isChecked) next.delete(pid.pid); else next.add(pid.pid);
-                      setSelectedPids(next);
-                    }}
-                    className={cn(
-                      "flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-medium transition-all border",
-                      isChecked
-                        ? "bg-obd-accent/15 text-obd-accent border-obd-accent/30"
-                        : "bg-obd-border/10 text-obd-text-muted border-obd-border/20 opacity-50 hover:opacity-80"
-                    )}
-                  >
-                    <div className={cn(
-                      "w-3.5 h-3.5 rounded-sm border flex items-center justify-center transition-colors",
-                      isChecked ? "bg-obd-accent border-obd-accent" : "border-obd-border-light"
-                    )}>
-                      {isChecked && <Check size={10} className="text-obd-bg" />}
-                    </div>
-                    {pid.name}
-                  </button>
-                );
-              })}
-          </div>
-        </div>
+        <PidSelectorPanel
+          pidData={pidData}
+          selectedPids={selectedPids}
+          onSelectedPidsChange={setSelectedPids}
+          sortedPidValues={sortedPidValues}
+          t={t}
+        />
       )}
 
       <div className="flex gap-4 flex-1 min-h-0">
@@ -391,8 +318,12 @@ export default function LiveData({ pidData, isPolling, onStartPolling, onPausePo
               </div>
             ) : (
               filteredPids.map((pid) => {
-                const range = pid.max - pid.min || 1;
-                const percent = ((pid.value - pid.min) / range) * 100;
+                const theoreticalMax = theoreticalMaxCache[pid.pid];
+                const range = Math.max(pid.max - pid.min, theoreticalMax) || 1;
+                const displayValue = convertValue(pid.value, pid.unit, unitSystem);
+                const displayMin = convertValue(pid.min, pid.unit, unitSystem);
+                const displayMax = convertValue(pid.max, pid.unit, unitSystem);
+                const percent = ((displayValue.value - displayMin.value) / range) * 100;
                 return (
                   <button
                     key={pid.pid}
@@ -414,10 +345,10 @@ export default function LiveData({ pidData, isPolling, onStartPolling, onPausePo
                         />
                       </div>
                     </div>
-                    <span className="w-24 text-right text-xs font-mono text-obd-text">{pid.value.toFixed(1)}</span>
-                    <span className="w-16 text-right text-[10px] text-obd-text-muted">{pid.unit}</span>
-                    <span className="w-16 text-right text-[10px] text-obd-text-muted font-mono">{pid.min.toFixed(1)}</span>
-                    <span className="w-16 text-right text-[10px] text-obd-text-muted font-mono">{pid.max.toFixed(1)}</span>
+                    <span className="w-24 text-right text-xs font-mono text-obd-text">{displayValue.value.toFixed(1)}</span>
+                    <span className="w-16 text-right text-[10px] text-obd-text-muted">{displayValue.unit}</span>
+                    <span className="w-16 text-right text-[10px] text-obd-text-muted font-mono">{displayMin.value.toFixed(1)}</span>
+                    <span className="w-16 text-right text-[10px] text-obd-text-muted font-mono">{displayMax.value.toFixed(1)}</span>
                     <div className="w-12 flex justify-center">
                       <TrendingUp size={12} className="text-obd-text-muted" />
                     </div>
@@ -448,22 +379,32 @@ export default function LiveData({ pidData, isPolling, onStartPolling, onPausePo
               ))}
             </div>
             <LiveChart
-              data={getFilteredHistory(selectedData.history)}
+              data={getFilteredHistory(selectedData.history).map(v => convertValue(v, selectedData.unit, unitSystem).value)}
               label={selectedData.name}
-              unit={selectedData.unit}
+              unit={convertValue(selectedData.value, selectedData.unit, unitSystem).unit}
               color="#06B6D4"
               height={200}
             />
             <div className="glass-card p-4 space-y-2">
               <h4 className="text-xs font-semibold text-obd-text-secondary">{t("liveData.statistics")}</h4>
-              <StatRow label={t("liveData.current")} value={selectedData.value.toFixed(2)} unit={selectedData.unit} />
-              <StatRow label={t("liveData.minimum")} value={selectedData.min.toFixed(2)} unit={selectedData.unit} />
-              <StatRow label={t("liveData.maximum")} value={selectedData.max.toFixed(2)} unit={selectedData.unit} />
-              <StatRow
-                label={t("liveData.average")}
-                value={(selectedData.history.reduce((a, b) => a + b, 0) / selectedData.history.length || 0).toFixed(2)}
-                unit={selectedData.unit}
-              />
+              {(() => {
+                const currVal = convertValue(selectedData.value, selectedData.unit, unitSystem);
+                const minVal = convertValue(selectedData.min, selectedData.unit, unitSystem);
+                const maxVal = convertValue(selectedData.max, selectedData.unit, unitSystem);
+                const avgVal = convertValue(
+                  selectedData.history.length > 0 ? selectedData.history.reduce((a, b) => a + b, 0) / selectedData.history.length : 0,
+                  selectedData.unit,
+                  unitSystem
+                );
+                return (
+                  <>
+                    <StatRow label={t("liveData.current")} value={currVal.value.toFixed(2)} unit={currVal.unit} />
+                    <StatRow label={t("liveData.minimum")} value={minVal.value.toFixed(2)} unit={minVal.unit} />
+                    <StatRow label={t("liveData.maximum")} value={maxVal.value.toFixed(2)} unit={maxVal.unit} />
+                    <StatRow label={t("liveData.average")} value={avgVal.value.toFixed(2)} unit={avgVal.unit} />
+                  </>
+                );
+              })()}
             </div>
           </div>
         )}

@@ -7,22 +7,20 @@ import {
   History,
   Download,
   RefreshCw,
-  ExternalLink,
   ChevronRight,
   ShieldAlert,
   Clock,
   Lock,
-  Wrench,
-  Youtube,
 } from "lucide-react";
 import type { DtcCode, DtcHistoryEntry, Mode06Result, FreezeFrameData } from "@/stores/vehicle";
 import { makeCSVFilename, saveCSVFile } from "@/lib/csv";
 import type { VehicleInfo } from "@/stores/connection";
-import { cn } from "@/lib/utils";
+import { cn, escapeCSV } from "@/lib/utils";
 import { useToast } from "@/hooks/useToast";
 import { Toast } from "@/components/Toast";
 import Mode06 from "./Mode06";
 import FreezeFrame from "./FreezeFrame";
+import DtcDetailPanel from "@/components/dtc/DtcDetailPanel";
 
 const statusIcon = {
   active: <ShieldAlert size={14} className="text-obd-danger" />,
@@ -74,6 +72,7 @@ export default function DTC({
   const [selectedDtc, setSelectedDtc] = useState<string | null>(null);
   const [showConfirm, setShowConfirm] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState<string>("all");
   const { toast, showToast, dismissToast } = useToast();
 
   const handleExportDtcs = useCallback(async () => {
@@ -82,15 +81,15 @@ export default function DTC({
       return;
     }
     // Build CSV
-    const rows = ["Code,Description,Status,Source"];
+    const rows = [[t("dtc.csvCode"), t("dtc.csvDescription"), t("dtc.csvStatus"), t("dtc.csvSource")].join(",")];
     dtcs.forEach((d) => {
-      rows.push(`${d.code},"${d.description}",${d.status},${d.source}`);
+      rows.push(`${d.code},${escapeCSV(d.description)},${d.status},${d.source}`);
     });
     if (dtcHistory.length > 0) {
       rows.push("");
       rows.push(`# ${t("dtc.history")}`);
       dtcHistory.forEach((h) => {
-        rows.push(`${h.code},"${h.description}",${h.status},${h.source}`);
+        rows.push(`${h.code},${escapeCSV(h.description)},${h.status},${h.source}`);
       });
     }
     const csv = rows.join("\n");
@@ -106,10 +105,11 @@ export default function DTC({
 
   const filteredDtcs = useMemo(
     () => dtcs.filter((d) =>
-      d.code.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      d.description.toLowerCase().includes(searchQuery.toLowerCase())
+      (statusFilter === "all" || d.status === statusFilter) &&
+      (d.code.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      d.description.toLowerCase().includes(searchQuery.toLowerCase()))
     ),
-    [dtcs, searchQuery]
+    [dtcs, searchQuery, statusFilter]
   );
 
   const filteredHistory = useMemo(() => {
@@ -131,9 +131,11 @@ export default function DTC({
   const selectedData = useMemo(() => {
     if (!selectedDtc) return null;
     if (selectedDtc.startsWith("hist-")) {
-      return dtcHistory.find((h) => h.code === selectedDtc.replace("hist-", ""));
+      const data = dtcHistory.find((h) => h.code === selectedDtc.replace("hist-", ""));
+      return data || null;
     }
-    return filteredDtcs.find((d) => d.code === selectedDtc);
+    const data = filteredDtcs.find((d) => d.code === selectedDtc);
+    return data || null;
   }, [selectedDtc, dtcHistory, filteredDtcs]);
 
   const openExternal = useCallback((url: string) => {
@@ -188,9 +190,23 @@ export default function DTC({
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <button onClick={onReadAll} disabled={isReading} className={cn("btn-accent flex items-center gap-1.5 text-xs", isReading && "opacity-60")}>
-            <RefreshCw size={14} className={cn(isReading && "animate-spin")} />
-            {isReading ? t("dtc.reading") : t("dtc.readAll")}
+          <button
+            onClick={() => {
+              if (activeTab === "dtc") {
+                onReadAll();
+              } else if (activeTab === "mode06") {
+                onLoadMode06?.();
+              } else if (activeTab === "freeze") {
+                onLoadFreezeFrame?.();
+              }
+            }}
+            disabled={isReading || isLoadingMode06 || isLoadingFreezeFrame}
+            className={cn("btn-accent flex items-center gap-1.5 text-xs", (isReading || isLoadingMode06 || isLoadingFreezeFrame) && "opacity-60")}
+          >
+            <RefreshCw size={14} className={cn((isReading || isLoadingMode06 || isLoadingFreezeFrame) && "animate-spin")} />
+            {activeTab === "dtc" ? (isReading ? t("dtc.reading") : t("dtc.readAll")) :
+             activeTab === "mode06" ? (isLoadingMode06 ? t("mode06.scanning") : t("mode06.scan")) :
+             (isLoadingFreezeFrame ? t("freezeFrame.loading") : t("freezeFrame.load"))}
           </button>
           <button
             onClick={() => setShowConfirm(true)}
@@ -208,7 +224,7 @@ export default function DTC({
       </div>
 
       {/* Tab bar */}
-      <div className="flex gap-1 p-1 rounded-lg bg-white/5 w-fit">
+      <div className="flex gap-1 p-1 rounded-lg bg-obd-surface/30 w-fit">
         {TAB_OPTIONS.map(tab => (
           <button
             key={tab}
@@ -216,7 +232,7 @@ export default function DTC({
             className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
               activeTab === tab
                 ? "bg-obd-accent/20 text-obd-accent"
-                : "text-white/50 hover:text-white/80"
+                : "text-obd-text-muted hover:text-obd-text"
             }`}
           >
             {tab === "dtc" ? t("dtc.title") : tab === "mode06" ? t("mode06.tabLabel") : t("freezeFrame.tabLabel")}
@@ -226,15 +242,32 @@ export default function DTC({
 
       {/* Search — only show for DTC tab */}
       {activeTab === "dtc" && (
-        <div className="relative max-w-sm">
-          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-obd-text-muted" />
-          <input
-            type="text"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder={t("dtc.search")}
-            className="input-field pl-9 w-full text-xs"
-          />
+        <div className="space-y-3">
+          <div className="relative max-w-sm">
+            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-obd-text-muted" />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder={t("dtc.search")}
+              className="input-field pl-9 w-full text-xs"
+            />
+          </div>
+          <div className="flex gap-1">
+            {(["all", "active", "pending", "permanent"] as const).map(status => (
+              <button key={status} onClick={() => setStatusFilter(status)}
+                className={cn("px-2.5 py-1 text-xs rounded-full border transition-colors",
+                  statusFilter === status
+                    ? status === "all" ? "bg-obd-accent/20 border-obd-accent text-obd-accent"
+                      : status === "active" ? "bg-obd-danger/20 border-obd-danger text-obd-danger"
+                      : status === "pending" ? "bg-obd-warning/20 border-obd-warning text-obd-warning"
+                      : "bg-blue-500/20 border-blue-500 text-blue-400"
+                    : "border-obd-border text-obd-text-muted hover:border-obd-accent/50"
+                )}>
+                {t(`dtc.filter${status.charAt(0).toUpperCase() + status.slice(1)}`)}
+              </button>
+            ))}
+          </div>
         </div>
       )}
 
@@ -317,109 +350,17 @@ export default function DTC({
         </div>
 
         {/* Detail panel */}
-        {selectedData && (
-          <div className="w-full md:w-80 glass-card p-5 space-y-4 overflow-y-auto">
-            <div>
-              <span className="text-2xl font-mono font-bold text-obd-text">{selectedData.code}</span>
-              <span className={cn("ml-2", statusBadge[selectedData.status])}>
-                {t(`dtc.${selectedData.status}`)}
-              </span>
-              {selectedData.difficulty && (
-                <span className={`ml-2 px-2 py-0.5 rounded-full text-xs font-medium ${
-                  selectedData.difficulty === 1 ? "bg-obd-success/20 text-obd-success" :
-                  selectedData.difficulty === 2 ? "bg-yellow-500/20 text-yellow-400" :
-                  selectedData.difficulty === 3 ? "bg-orange-500/20 text-orange-400" :
-                  "bg-obd-danger/20 text-obd-danger"
-                }`}>
-                  {t(`dtc.difficulty${selectedData.difficulty}`)}
-                </span>
-              )}
-            </div>
-
-            <div className="space-y-1">
-              <h4 className="text-xs font-semibold text-obd-text-secondary uppercase tracking-wider">
-                {t("dtc.description")}
-              </h4>
-              <p className="text-sm text-obd-text leading-relaxed">{selectedData.description}</p>
-            </div>
-
-            <div className="space-y-1">
-              <h4 className="text-xs font-semibold text-obd-text-secondary uppercase tracking-wider">
-                {t("dtc.source")}
-              </h4>
-              <p className="text-sm text-obd-text">{selectedData.source}</p>
-            </div>
-
-            {selectedData.ecuContext && (
-              <div className="space-y-1">
-                <h4 className="text-xs font-medium text-white/40 mb-1">{t("dtc.ecu")}</h4>
-                <p className="text-sm text-obd-accent">{selectedData.ecuContext}</p>
-              </div>
-            )}
-
-            {selectedData.causes && selectedData.causes.length > 0 && (
-              <div>
-                <h4 className="text-xs font-semibold text-obd-text-muted mb-2 flex items-center gap-1.5">
-                  <AlertTriangle className="w-3.5 h-3.5" />
-                  {t("dtc.causes")}
-                </h4>
-                <ul className="space-y-1">
-                  {selectedData.causes.map((cause, i) => (
-                    <li key={i} className="text-sm text-obd-text flex items-start gap-2">
-                      <span className="text-obd-accent mt-1">•</span>
-                      {cause}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
-
-            {selectedData.quickCheck && (
-              <div className="bg-obd-accent/10 border border-obd-accent/20 rounded-lg p-3">
-                <h4 className="text-xs font-semibold text-obd-accent mb-1 flex items-center gap-1.5">
-                  <Wrench className="w-3.5 h-3.5" />
-                  {t("dtc.quickCheck")}
-                </h4>
-                <p className="text-sm text-obd-text">{selectedData.quickCheck}</p>
-              </div>
-            )}
-
-            {!selectedData.causes && !selectedData.quickCheck && !selectedData.repairTips && (
-              <p className="text-sm text-obd-text-muted italic">{t("dtc.noTips")}</p>
-            )}
-
-            {selectedData.repairTips && !selectedData.quickCheck && (
-              <div className="space-y-1">
-                <h4 className="text-xs font-semibold text-obd-text-secondary uppercase tracking-wider flex items-center gap-1.5">
-                  <Wrench size={12} />
-                  {t("dtc.repairTips")}
-                </h4>
-                <p className="text-sm text-obd-text leading-relaxed">{selectedData.repairTips}</p>
-              </div>
-            )}
-
-            <button
-              onClick={() => openExternal(buildSearchQuery(selectedData.code, "google"))}
-              className="btn-accent w-full flex items-center justify-center gap-1.5 text-xs"
-            >
-              <ExternalLink size={14} />
-              {t("dtc.webSearch")}
-            </button>
-
-            <button
-              onClick={() => openExternal(buildSearchQuery(selectedData.code, "youtube"))}
-              className="w-full px-4 py-2 rounded-lg font-medium text-sm transition-all duration-200 bg-red-600/20 text-red-400 border border-red-500/30 hover:bg-red-600/30 hover:border-red-500/50 active:scale-[0.98] flex items-center justify-center gap-1.5 text-xs"
-            >
-              <Youtube size={14} />
-              {t("dtc.youtubeSearch")}
-            </button>
-          </div>
-        )}
+        <DtcDetailPanel
+          selectedData={selectedData}
+          t={t}
+          onOpenExternal={openExternal}
+          onBuildSearchQuery={buildSearchQuery}
+        />
       </div>
       ) : activeTab === "mode06" ? (
-        <Mode06 results={mode06Results} isLoading={isLoadingMode06} onLoad={onLoadMode06} />
+        <Mode06 results={mode06Results} isLoading={isLoadingMode06} />
       ) : (
-        <FreezeFrame data={freezeFrame} isLoading={isLoadingFreezeFrame} onLoad={onLoadFreezeFrame} />
+        <FreezeFrame data={freezeFrame} isLoading={isLoadingFreezeFrame} />
       )}
 
       {/* Confirm Dialog */}

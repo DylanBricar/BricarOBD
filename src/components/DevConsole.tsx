@@ -1,7 +1,8 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { X, Copy, Trash2, Pause, Play, Terminal, ChevronDown, Maximize2, Minimize2 } from "lucide-react";
+import { X, Copy, Trash2, Pause, Play, Terminal, ChevronDown, FolderOpen } from "lucide-react";
 import { useTranslation } from "react-i18next";
+import { useVirtualizer } from "@tanstack/react-virtual";
 import { cn } from "@/lib/utils";
 
 interface LogEntry {
@@ -12,30 +13,30 @@ interface LogEntry {
 }
 
 const levelColors: Record<string, string> = {
-  TX: "text-cyan-400", RX: "text-green-400", INFO: "text-blue-400",
-  WARN: "text-amber-400", ERROR: "text-red-400", DEBUG: "text-gray-500",
+  TX: "dark:text-cyan-400 text-cyan-700", RX: "dark:text-green-400 text-green-700", INFO: "dark:text-blue-400 text-blue-700",
+  WARN: "dark:text-amber-400 text-amber-700", ERROR: "dark:text-red-400 text-red-700", DEBUG: "dark:text-gray-500 text-gray-700",
 };
 
 const sourceColors: Record<string, string> = {
-  obd: "text-cyan-300", connection: "text-yellow-300", dtc: "text-orange-300",
-  ecu: "text-purple-300", db: "text-emerald-300", dashboard: "text-teal-300",
-  ui: "text-pink-300", safety: "text-red-300", settings: "text-gray-300",
+  obd: "dark:text-cyan-300 text-cyan-700", connection: "dark:text-yellow-300 text-yellow-700", dtc: "dark:text-orange-300 text-orange-700",
+  ecu: "dark:text-purple-300 text-purple-700", db: "dark:text-emerald-300 text-emerald-700", dashboard: "dark:text-teal-300 text-teal-700",
+  ui: "dark:text-pink-300 text-pink-700", safety: "dark:text-red-300 text-red-700", settings: "dark:text-gray-300 text-gray-700",
 };
 
-export default function DevConsole({ onClose }: { onClose: () => void }) {
+export default function DevConsole({ isStandalone = false, onClose }: { isStandalone?: boolean; onClose: () => void }) {
   const { t } = useTranslation();
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [paused, setPaused] = useState(false);
   const [filter, setFilter] = useState("");
   const [autoScroll, setAutoScroll] = useState(true);
-  const [expanded, setExpanded] = useState(false);
-  const scrollRef = useRef<HTMLDivElement>(null);
+  const parentRef = useRef<HTMLDivElement>(null);
   const pausedRef = useRef(false);
   const indexRef = useRef(0);
+  const wasPausedBeforeHideRef = useRef(false);
 
   pausedRef.current = paused;
 
-  // Backend polling — stable
+  // Backend polling — pauses on page visibility hidden
   useEffect(() => {
     // Load initial logs
     invoke<LogEntry[]>("get_dev_logs").then(all => {
@@ -62,23 +63,50 @@ export default function DevConsole({ onClose }: { onClose: () => void }) {
     };
 
     const interval = setInterval(poll, 500);
-    return () => clearInterval(interval);
+
+    // Page Visibility API — pause polling when hidden, resume when visible
+    const handleVisibilityChange = () => {
+      if (document.hidden) {
+        wasPausedBeforeHideRef.current = pausedRef.current;
+        setPaused(true);
+      } else if (!wasPausedBeforeHideRef.current) {
+        setPaused(false);
+      }
+    };
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
   }, []);
 
-  // Auto-scroll
-  useEffect(() => {
-    if (autoScroll && scrollRef.current) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-    }
-  }, [logs.length, autoScroll]);
+  // Memoize filtered logs
+  const filteredLogs = useMemo(
+    () => filter
+      ? logs.filter(l =>
+          l.message.toLowerCase().includes(filter.toLowerCase()) ||
+          l.level.toLowerCase().includes(filter.toLowerCase()) ||
+          l.source.toLowerCase().includes(filter.toLowerCase())
+        )
+      : logs,
+    [logs, filter]
+  );
 
-  const filteredLogs = filter
-    ? logs.filter(l =>
-        l.message.toLowerCase().includes(filter.toLowerCase()) ||
-        l.level.toLowerCase().includes(filter.toLowerCase()) ||
-        l.source.toLowerCase().includes(filter.toLowerCase())
-      )
-    : logs;
+  // Virtualizer setup
+  const virtualizer = useVirtualizer({
+    count: filteredLogs.length,
+    getScrollElement: () => parentRef.current,
+    estimateSize: () => 18,
+    overscan: 10,
+  });
+
+  // Auto-scroll with virtualizer
+  useEffect(() => {
+    if (autoScroll && filteredLogs.length > 0) {
+      virtualizer.scrollToIndex(filteredLogs.length - 1, { align: "end" });
+    }
+  }, [filteredLogs.length, autoScroll, virtualizer]);
 
   const handleCopy = () => {
     navigator.clipboard.writeText(
@@ -92,17 +120,17 @@ export default function DevConsole({ onClose }: { onClose: () => void }) {
     try { await invoke("clear_dev_logs"); } catch {}
   };
 
-  const height = expanded ? "h-[80vh]" : "h-[300px]";
+  const height = isStandalone ? "h-screen" : "h-[300px]";
 
   return (
-    <div className={cn("fixed bottom-0 left-0 right-0 z-50 flex flex-col border-t border-[#30363D] shadow-2xl", height)}
-         style={{ background: "#0D1117ee", backdropFilter: "blur(8px)" }}>
+    <div className={cn("flex flex-col border-t border-obd-border shadow-2xl", isStandalone ? "w-screen h-screen" : "fixed bottom-0 left-0 right-0 z-50", height)}
+         style={{ background: "var(--obd-bg)", backdropFilter: "blur(8px)" }}>
       {/* Toolbar */}
-      <div className="flex items-center justify-between px-3 py-1.5 bg-[#161B22] border-b border-[#30363D] flex-shrink-0">
+      <div className="flex items-center justify-between px-3 py-1.5 bg-obd-surface border-b border-obd-border flex-shrink-0">
         <div className="flex items-center gap-2">
-          <Terminal size={14} className="text-[#58A6FF]" />
-          <span className="text-xs font-semibold text-[#58A6FF] font-mono">{t("devConsole.title")}</span>
-          <span className="text-[10px] text-[#8B949E] font-mono">{filteredLogs.length}</span>
+          <Terminal size={14} className="text-obd-accent" />
+          <span className="text-xs font-semibold text-obd-accent font-mono">{t("devConsole.title")}</span>
+          <span className="text-[10px] text-obd-text-muted font-mono">{filteredLogs.length}</span>
         </div>
         <div className="flex items-center gap-1.5">
           <input
@@ -110,61 +138,72 @@ export default function DevConsole({ onClose }: { onClose: () => void }) {
             value={filter}
             onChange={(e) => setFilter(e.target.value)}
             placeholder={t("devConsole.filter")}
-            className="h-6 px-2 rounded text-[10px] font-mono bg-[#0D1117] border border-[#30363D] text-[#C9D1D9] placeholder-[#484F58] focus:border-[#58A6FF] focus:outline-none w-36"
+            className="h-6 px-2 rounded text-[10px] font-mono bg-obd-bg border border-obd-border text-obd-text placeholder-obd-text-muted focus:border-obd-accent focus:outline-none w-36"
           />
           <button onClick={() => setPaused(!paused)}
             className={cn("h-6 px-2 rounded text-[10px] font-mono flex items-center gap-1",
-              paused ? "bg-[#1F6FEB] text-white" : "bg-[#21262D] text-[#C9D1D9] hover:bg-[#30363D]"
+              paused ? "bg-obd-accent text-white" : "bg-obd-border text-obd-text-muted hover:bg-obd-border/80"
             )}
             aria-label={paused ? t("devConsole.resume") : t("devConsole.pause")}>
             {paused ? <Play size={10} /> : <Pause size={10} />}
           </button>
           <button onClick={() => setAutoScroll(!autoScroll)}
             className={cn("h-6 px-2 rounded text-[10px] font-mono flex items-center gap-1",
-              autoScroll ? "bg-[#238636] text-white" : "bg-[#21262D] text-[#C9D1D9]"
+              autoScroll ? "bg-obd-success text-white" : "bg-obd-border text-obd-text-muted"
             )}
             aria-label={t("devConsole.autoScroll")}>
             <ChevronDown size={10} />
           </button>
-          <button onClick={handleCopy} className="h-6 px-2 rounded text-[10px] font-mono bg-[#238636] text-white hover:bg-[#2EA043] flex items-center gap-1" aria-label={t("devConsole.copyLogs")}>
+          <button onClick={() => invoke("open_log_folder").catch(() => {})} className="h-6 px-2 rounded text-[10px] font-mono bg-obd-border text-obd-text-muted hover:bg-obd-border/80 flex items-center gap-1" aria-label={t("devConsole.openFolder")}>
+            <FolderOpen size={10} />
+          </button>
+          <button onClick={handleCopy} className="h-6 px-2 rounded text-[10px] font-mono bg-obd-success text-white hover:opacity-80 flex items-center gap-1" aria-label={t("devConsole.copyLogs")}>
             <Copy size={10} />
           </button>
-          <button onClick={handleClear} className="h-6 px-2 rounded text-[10px] font-mono bg-[#DA3633] text-white hover:bg-[#F85149] flex items-center gap-1" aria-label={t("devConsole.clearLogs")}>
+          <button onClick={handleClear} className="h-6 px-2 rounded text-[10px] font-mono bg-obd-danger text-white hover:opacity-80 flex items-center gap-1" aria-label={t("devConsole.clearLogs")}>
             <Trash2 size={10} />
           </button>
-          <button onClick={() => setExpanded(!expanded)} className="h-6 px-2 rounded text-[10px] font-mono bg-[#21262D] text-[#8B949E] hover:bg-[#30363D] flex items-center" aria-label={t("common.toggle")}>
-            {expanded ? <Minimize2 size={10} /> : <Maximize2 size={10} />}
-          </button>
-          <button onClick={onClose} className="h-6 w-6 rounded flex items-center justify-center bg-[#21262D] text-[#8B949E] hover:bg-[#30363D] hover:text-white" aria-label={t("common.close")}>
-            <X size={10} />
-          </button>
+          {!isStandalone && (
+            <button onClick={onClose} className="h-6 w-6 rounded flex items-center justify-center bg-obd-border text-obd-text-muted hover:bg-obd-border/80 hover:text-obd-text" aria-label={t("common.close")}>
+              <X size={10} />
+            </button>
+          )}
         </div>
       </div>
 
       {/* Logs */}
-      <div ref={scrollRef} className="flex-1 overflow-y-auto px-3 py-1 font-mono text-[11px] leading-[18px]">
+      <div ref={parentRef} className="flex-1 overflow-y-auto bg-obd-bg">
         {filteredLogs.length === 0 ? (
-          <div className="flex items-center justify-center h-full text-[#484F58] text-xs">
+          <div className="flex items-center justify-center h-full text-obd-text-muted text-xs">
             {t("devConsole.waitingForLogs")}
           </div>
         ) : (
-          filteredLogs.map((log, i) => (
-            <div key={i} className="flex gap-1.5 hover:bg-[#161B22] px-1 rounded">
-              <span className="text-[#484F58] flex-shrink-0 select-all w-20">{log.timestamp}</span>
-              <span className={cn("w-12 flex-shrink-0 font-semibold", levelColors[log.level] || "text-gray-400")}>
-                [{log.level}]
-              </span>
-              <span className={cn("w-20 flex-shrink-0", sourceColors[log.source] || "text-gray-400")}>
-                {log.source}
-              </span>
-              <span className="text-[#C9D1D9] break-all select-all">{log.message}</span>
-            </div>
-          ))
+          <div style={{ height: `${virtualizer.getTotalSize()}px`, position: "relative" }}>
+            {virtualizer.getVirtualItems().map((virtualItem) => {
+              const log = filteredLogs[virtualItem.index];
+              return (
+                <div
+                  key={virtualItem.key}
+                  className="flex gap-1.5 hover:bg-obd-surface px-4 py-0 font-mono text-[11px] leading-[18px] absolute w-full"
+                  style={{ transform: `translateY(${virtualItem.start}px)` }}
+                >
+                  <span className="text-obd-text-muted flex-shrink-0 select-all w-20">{log.timestamp}</span>
+                  <span className={cn("w-12 flex-shrink-0 font-semibold", levelColors[log.level] || "text-obd-text-muted")}>
+                    [{log.level}]
+                  </span>
+                  <span className={cn("w-20 flex-shrink-0", sourceColors[log.source] || "text-obd-text-muted")}>
+                    {log.source}
+                  </span>
+                  <span className="text-obd-text break-all select-all">{log.message}</span>
+                </div>
+              );
+            })}
+          </div>
         )}
       </div>
 
       {/* Status */}
-      <div className="flex items-center justify-between px-3 py-0.5 bg-[#161B22] border-t border-[#30363D] text-[9px] text-[#484F58] font-mono flex-shrink-0">
+      <div className="flex items-center justify-between px-3 py-0.5 bg-obd-surface border-t border-obd-border text-[9px] text-obd-text-muted font-mono flex-shrink-0">
         <span>{t("devConsole.statusTotal", { total: logs.length, shown: filteredLogs.length })}</span>
         <span>{paused ? t("devConsole.paused") : t("devConsole.live")}</span>
       </div>

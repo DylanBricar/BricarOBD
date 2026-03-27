@@ -330,5 +330,69 @@
   "7SA": {
     "make": "Tesla",
     "country": "USA"
+  },
+  "1G1": {
+    "make": "Chevrolet",
+    "country": "USA"
+  },
+  "1GC": {
+    "make": "Chevrolet Truck",
+    "country": "USA"
+  },
+  "1G6": {
+    "make": "Cadillac",
+    "country": "USA"
+  },
+  "2HM": {
+    "make": "Hyundai",
+    "country": "Canada"
+  },
+  "3VW": {
+    "make": "Volkswagen",
+    "country": "Mexico"
+  },
+  "5UX": {
+    "make": "BMW",
+    "country": "USA"
+  },
+  "JN3": {
+    "make": "Nissan",
+    "country": "Japan"
+  },
+  "SAL": {
+    "make": "Land Rover",
+    "country": "UK"
+  },
+  "SAJ": {
+    "make": "Jaguar",
+    "country": "UK"
+  },
+  "ZFF": {
+    "make": "Ferrari",
+    "country": "Italy"
+  },
+  "ZHW": {
+    "make": "Lamborghini",
+    "country": "Italy"
+  },
+  "WME": {
+    "make": "Smart",
+    "country": "Germany"
+  },
+  "TRU": {
+    "make": "Audi",
+    "country": "Hungary"
+  },
+  "VNK": {
+    "make": "Toyota",
+    "country": "France"
+  },
+  "SCF": {
+    "make": "Aston Martin",
+    "country": "UK"
+  },
+  "XTA": {
+    "make": "Lada",
+    "country": "Russia"
   }
 }

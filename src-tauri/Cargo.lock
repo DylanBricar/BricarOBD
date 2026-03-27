@@ -205,7 +205,7 @@ dependencies = [
 
 [[package]]
 name = "bricarobd"
-version = "2.0.3"
+version = "2.0.4"
 dependencies = [
  "btleplug",
  "chrono",

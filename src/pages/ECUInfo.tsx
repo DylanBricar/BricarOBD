@@ -1,7 +1,7 @@
 import { useTranslation } from "react-i18next";
 import { invoke } from "@tauri-apps/api/core";
 import { Cpu, RefreshCw, ChevronRight, Send, Battery } from "lucide-react";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import type { EcuInfo } from "@/stores/vehicle";
 import { cn } from "@/lib/utils";
 
@@ -19,6 +19,22 @@ export default function ECUInfo({ ecus, isScanning = false, onScan }: ECUInfoPro
   const [loadingDid, setLoadingDid] = useState<string | null>(null);
   const [batteryVoltage, setBatteryVoltage] = useState<number | null>(null);
   const selected = ecus.find((e) => e.address === selectedEcu);
+
+  const sortedEcus = useMemo(() => [...ecus].sort((a, b) => a.address.localeCompare(b.address)), [ecus]);
+
+  const didLabels = useMemo<Record<string, string>>(() => ({
+    "F190": "VIN",
+    "F187": t("ecu.partNumber"),
+    "F18C": t("ecu.serialNumber"),
+    "F189": t("ecu.softwareVersion"),
+    "F191": t("ecu.hardwareVersion"),
+    "F194": t("ecu.supplierIdentifier"),
+    "F195": t("ecu.softwareVersionNumber"),
+  }), [t]);
+
+  useEffect(() => {
+    setDidResults({});
+  }, [selectedEcu]);
 
   // Fetch battery voltage from adapter (only when ECUs are present = connected)
   useEffect(() => {
@@ -55,6 +71,28 @@ export default function ECUInfo({ ecus, isScanning = false, onScan }: ECUInfoPro
         </button>
       </div>
 
+      {batteryVoltage !== null && (
+        <div className="glass-card p-4">
+          <div className="flex items-center gap-3">
+            <div className={cn("w-10 h-10 rounded-lg flex items-center justify-center",
+              batteryVoltage >= 12.4 ? "bg-obd-success/10" : batteryVoltage >= 11.8 ? "bg-obd-warning/10" : "bg-obd-danger/10"
+            )}>
+              <Battery size={18} className={cn(
+                batteryVoltage >= 12.4 ? "text-obd-success" : batteryVoltage >= 11.8 ? "text-obd-warning" : "text-obd-danger"
+              )} />
+            </div>
+            <div>
+              <p className={cn("text-sm font-medium",
+                batteryVoltage >= 12.4 ? "text-obd-success" : batteryVoltage >= 11.8 ? "text-obd-warning" : "text-obd-danger"
+              )}>
+                {batteryVoltage.toFixed(1)} V
+              </p>
+              <p className="text-xs text-obd-text-muted">{t("connection.batteryVoltage")}</p>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="flex flex-col md:flex-row gap-4 flex-1 min-h-0">
         {/* ECU List */}
         <div className="flex-1 glass-card overflow-y-auto">
@@ -64,7 +102,7 @@ export default function ECUInfo({ ecus, isScanning = false, onScan }: ECUInfoPro
               <p className="text-sm">{t("ecu.noModulesDetected")}</p>
             </div>
           ) : (
-            ecus.map((ecu) => (
+            sortedEcus.map((ecu) => (
             <button
               key={ecu.address}
               onClick={() => setSelectedEcu(ecu.address === selectedEcu ? null : ecu.address)}
@@ -114,28 +152,6 @@ export default function ECUInfo({ ecus, isScanning = false, onScan }: ECUInfoPro
               </div>
             </div>
 
-            {/* Battery Voltage */}
-            <div className="space-y-2">
-              <h4 className="text-xs font-semibold text-obd-text-secondary uppercase tracking-wider">{t("ecu.systemStatus")}</h4>
-              <div className="flex items-center gap-2 p-3 rounded-lg bg-white/[0.02]">
-                <div className={cn("w-8 h-8 rounded-md flex items-center justify-center",
-                  batteryVoltage && batteryVoltage >= 12.4 ? "bg-obd-success/10" : batteryVoltage && batteryVoltage >= 11.8 ? "bg-obd-warning/10" : "bg-obd-danger/10"
-                )}>
-                  <Battery size={16} className={cn(
-                    batteryVoltage && batteryVoltage >= 12.4 ? "text-obd-success" : batteryVoltage && batteryVoltage >= 11.8 ? "text-obd-warning" : "text-obd-danger"
-                  )} />
-                </div>
-                <div>
-                  <p className={cn("text-xs font-medium",
-                    batteryVoltage && batteryVoltage >= 12.4 ? "text-obd-success" : batteryVoltage && batteryVoltage >= 11.8 ? "text-obd-warning" : "text-obd-text"
-                  )}>
-                    {batteryVoltage ? `${batteryVoltage.toFixed(1)} V` : "—"}
-                  </p>
-                  <p className="text-[10px] text-obd-text-muted">{t("connection.batteryVoltage")}</p>
-                </div>
-              </div>
-            </div>
-
             {/* DIDs list */}
             {Object.entries(selected.dids).length > 0 && (
               <div className="space-y-3">
@@ -144,7 +160,7 @@ export default function ECUInfo({ ecus, isScanning = false, onScan }: ECUInfoPro
                   {Object.entries(selected.dids).map(([did, val]) => (
                     <div key={did} className="flex items-center justify-between p-2.5 rounded-lg bg-white/[0.02]">
                       <div className="flex-1 min-w-0">
-                        <p className="text-xs font-mono text-obd-accent">{did}</p>
+                        <p className="text-xs font-mono text-obd-accent">{didLabels[did] || did}</p>
                         <p className="text-xs text-obd-text truncate">{val}</p>
                       </div>
                       {didResults[did] && (

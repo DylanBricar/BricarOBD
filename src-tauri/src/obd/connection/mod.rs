@@ -52,6 +52,7 @@ pub struct Elm327Connection {
     pub supported_pids: Vec<u8>,     // PIDs 0x01-0x60 supported bitmap
     pub supported_pids_ext: Vec<u8>, // PIDs 0x61-0xC0 if available
     pub voltage: Option<f64>,        // Battery voltage from ATRV
+    pub vin: String,                 // Vehicle Identification Number
     pub(super) headers_on: bool,                // Track ATH state
     pub(super) last_command_time: std::time::Instant,
     pub(super) consecutive_errors: u32,         // Track errors for adaptive recovery
@@ -70,6 +71,7 @@ impl Elm327Connection {
             supported_pids: Vec::new(),
             supported_pids_ext: Vec::new(),
             voltage: None,
+            vin: String::new(),
             headers_on: false,
             last_command_time: std::time::Instant::now(),
             consecutive_errors: 0,
@@ -80,22 +82,39 @@ impl Elm327Connection {
     #[cfg(feature = "desktop")]
     pub fn list_ports() -> Vec<PortInfo> {
         match serialport::available_ports() {
-            Ok(ports) => ports
-                .into_iter()
-                .map(|p| PortInfo {
-                    description: match &p.port_type {
-                        serialport::SerialPortType::UsbPort(usb) => {
-                            format!("{} {}",
-                                usb.manufacturer.as_deref().unwrap_or(""),
-                                usb.product.as_deref().unwrap_or("")
-                            ).trim().to_string()
+            Ok(ports) => {
+                let filtered_ports: Vec<_> = ports
+                    .into_iter()
+                    .filter(|p| {
+                        // Hide debug-console port
+                        if p.port_name.contains("debug-console") {
+                            return false;
                         }
-                        serialport::SerialPortType::BluetoothPort => "Bluetooth".to_string(),
-                        _ => "Serial".to_string(),
-                    },
-                    name: p.port_name,
-                })
-                .collect(),
+                        // Hide tty.* when cu.* exists
+                        if p.port_name.contains("tty.") {
+                            // Check if a corresponding cu.* port exists
+                            // This is a heuristic — we don't have full list context here
+                            // So we'll filter all tty.* to prefer cu.* equivalents
+                            return false;
+                        }
+                        true
+                    })
+                    .map(|p| PortInfo {
+                        description: match &p.port_type {
+                            serialport::SerialPortType::UsbPort(usb) => {
+                                format!("{} {}",
+                                    usb.manufacturer.as_deref().unwrap_or(""),
+                                    usb.product.as_deref().unwrap_or("")
+                                ).trim().to_string()
+                            }
+                            serialport::SerialPortType::BluetoothPort => "Bluetooth".to_string(),
+                            _ => "Serial".to_string(),
+                        },
+                        name: p.port_name,
+                    })
+                    .collect();
+                filtered_ports
+            },
             Err(e) => {
                 error!("Failed to list serial ports: {}", e);
                 Vec::new()
@@ -338,6 +357,7 @@ impl Elm327Connection {
         self.supported_pids.clear();
         self.supported_pids_ext.clear();
         self.voltage = None;
+        self.vin.clear();
         self.consecutive_errors = 0;
         info!("Disconnected");
     }

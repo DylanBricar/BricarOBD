@@ -50,7 +50,7 @@ pub async fn read_all_dtcs(lang: Option<String>) -> Vec<DtcCode> {
 
         // ====== UDS 0x19 — Read DTC by Status Mask ======
         // Try on standard + extended ECU addresses
-        let uds_addresses = ["7E0", "7E1", "7E2", "7E3", "7E4", "75D"];
+        let uds_addresses = ["7E0", "7E1", "7E2", "7E3", "7E4", "75D", "7C0", "7C1", "7A0", "740", "710", "714"];
 
         for addr in uds_addresses {
             dev_log::log_debug("dtc", &format!("Probing UDS DTC at {}", addr));
@@ -95,6 +95,19 @@ pub async fn read_all_dtcs(lang: Option<String>) -> Vec<DtcCode> {
         // ====== Deduplicate ======
         let mut seen = std::collections::HashSet::new();
         all_dtcs.retain(|d| seen.insert(format!("{}:{:?}", d.code, d.status)));
+
+        // ====== Persist DTCs to database ======
+        if !all_dtcs.is_empty() {
+            let vin = "unknown".to_string();
+            if let Err(e) = super::database::with_db(|db| {
+                for dtc in &all_dtcs {
+                    let _ = db.save_dtc(&dtc.code, &dtc.description, &format!("{:?}", dtc.status), &dtc.source, &vin);
+                }
+                Ok(())
+            }) {
+                dev_log::log_warn("dtc", &format!("Failed to persist DTCs to database: {}", e));
+            }
+        }
 
         // ====== Enrich DTCs with ECU context ======
         for dtc in &mut all_dtcs {
@@ -223,7 +236,7 @@ fn parse_uds_dtc_response(response: &str, ecu_addr: &str, lang: &str) -> Vec<Dtc
 
 /// Clear all DTCs — sends OBD Mode 04 (with safety check)
 #[command]
-pub fn clear_dtcs(confirmed: Option<bool>) -> Result<String, String> {
+pub async fn clear_dtcs(confirmed: Option<bool>) -> Result<String, String> {
     let risk = crate::obd::safety::SafetyGuard::check_command("04");
     dev_log::log_info("dtc", &format!("Clear DTCs safety check: {:?}", risk));
     if risk == crate::models::RiskLevel::Blocked {
@@ -242,26 +255,58 @@ pub fn clear_dtcs(confirmed: Option<bool>) -> Result<String, String> {
         return Ok("OK".to_string());
     }
 
-    with_real_connection(|conn| {
-        dev_log::log_info("dtc", "Sending Mode 04 (Clear DTCs)");
+    tokio::task::spawn_blocking(move || {
+        with_real_connection(|conn| {
+            dev_log::log_info("dtc", "Sending Mode 04 (Clear DTCs)");
 
-        // Send TesterPresent first to ensure ECU is awake
-        conn.tester_present();
+            // Send TesterPresent first to ensure ECU is awake
+            conn.tester_present();
 
-        let response = conn.send_command_timeout("04", 5000)?;
-        if response.contains("44") {
-            dev_log::log_info("dtc", "DTCs cleared successfully");
-            tracing::info!("DTCs cleared successfully");
-            Ok("OK".to_string())
-        } else if response.is_empty() || response.contains("NO DATA") {
-            // Some vehicles don't respond to Mode 04 but still clear
-            dev_log::log_warn("dtc", "No response to Mode 04 — DTCs may have been cleared");
-            Ok("OK".to_string())
-        } else {
-            dev_log::log_error("dtc", &format!("Clear DTCs failed: {}", response));
-            Err(format!("Clear DTCs failed: {}", response))
-        }
-    })
+            let response = conn.send_command_timeout("04", 5000)?;
+            if response.contains("44") {
+                dev_log::log_info("dtc", "DTCs cleared successfully");
+                tracing::info!("DTCs cleared successfully");
+                Ok("OK".to_string())
+            } else if response.is_empty() || response.contains("NO DATA") {
+                // Empty response means ECU didn't acknowledge — treat as error
+                dev_log::log_error("dtc", "No response to Mode 04 — ECU did not acknowledge");
+                Err(crate::commands::connection::err_msg(
+                    "L'ECU n'a pas répondu au Mode 04",
+                    "ECU did not respond to Mode 04"
+                ))
+            } else if response.contains("7F 04") {
+                // Parse NRC (Negative Response Code)
+                let message = if response.contains("7F 04 22") {
+                    crate::commands::connection::err_msg(
+                        "L'ECU refuse l'effacement — conditions non remplies",
+                        "ECU refused clear — conditions not met"
+                    )
+                } else if response.contains("7F 04 31") {
+                    crate::commands::connection::err_msg(
+                        "Adresse/requête hors plage",
+                        "Request out of range"
+                    )
+                } else if response.contains("7F 04 12") {
+                    crate::commands::connection::err_msg(
+                        "Service non supporté",
+                        "Service not supported"
+                    )
+                } else {
+                    crate::commands::connection::err_msg(
+                        &format!("L'ECU a refusé l'effacement (réponse: {})", response),
+                        &format!("ECU refused the clear request (response: {})", response)
+                    )
+                };
+                dev_log::log_error("dtc", &format!("Clear DTCs failed: {}", response));
+                Err(message)
+            } else {
+                dev_log::log_error("dtc", &format!("Clear DTCs failed: {}", response));
+                // Return ECU to default session in case extended session was opened
+                let _ = conn.send_command_timeout("10 01", 2000);
+                Err(format!("Clear DTCs failed: {}", response))
+            }
+        })
+    }).await.map_err(|e| format!("Task error: {}", e))?
 }
 
 /// Export DTCs to JSON or text

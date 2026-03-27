@@ -6,19 +6,7 @@ use std::time::Duration;
 use std::net::TcpStream;
 
 use super::dev_log;
-
-#[cfg(feature = "mobile")]
-use std::sync::{Arc, Mutex};
-#[cfg(feature = "mobile")]
-use std::collections::VecDeque;
-#[cfg(feature = "mobile")]
-use std::thread;
-#[cfg(feature = "mobile")]
-use btleplug::api::{Central, Peripheral, Characteristic, WriteType, CharPropFlags};
-#[cfg(feature = "mobile")]
-use btleplug::platform::Manager;
-#[cfg(feature = "mobile")]
-use futures::StreamExt;
+pub use super::transport_ble::{BleTransport, BleDeviceInfo};
 
 /// Transport type identifier
 #[derive(Debug, Clone, Copy, PartialEq, serde::Serialize, serde::Deserialize)]
@@ -37,14 +25,12 @@ pub trait OBDTransport: Send {
     fn close(&mut self);
 }
 
-#[cfg(feature = "mobile")]
-const MAX_BLE_BUFFER: usize = 65536;
-
 // ==================== SERIAL USB (Desktop only) ====================
 
 #[cfg(feature = "desktop")]
 pub struct SerialTransport {
     port: Box<dyn serialport::SerialPort>,
+    current_timeout_ms: u64,
 }
 
 #[cfg(feature = "desktop")]
@@ -52,10 +38,49 @@ impl SerialTransport {
     pub fn new(port_name: &str, baud_rate: u32, timeout_ms: u64) -> Result<Self, String> {
         dev_log::log_info("transport", &format!("Opening serial: {} @ {} baud", port_name, baud_rate));
         let port = serialport::new(port_name, baud_rate)
+            .data_bits(serialport::DataBits::Eight)
+            .parity(serialport::Parity::None)
+            .stop_bits(serialport::StopBits::One)
             .timeout(Duration::from_millis(timeout_ms))
             .open()
-            .map_err(|e| format!("Serial open failed: {}", e))?;
-        Ok(Self { port })
+            .map_err(|e| {
+                let msg = e.to_string();
+                let detail = match e.kind() {
+                    serialport::ErrorKind::Io(io_kind) => match io_kind {
+                        std::io::ErrorKind::PermissionDenied => {
+                            #[cfg(target_os = "linux")]
+                            { format!("Permission denied on {}. Run: sudo usermod -aG dialout $USER — then log out and back in.", port_name) }
+                            #[cfg(target_os = "macos")]
+                            { format!("Permission denied on {}. The port may be in use by another app, or the adapter driver is not installed.", port_name) }
+                            #[cfg(target_os = "windows")]
+                            { format!("Access denied on {}. The port may be in use by another application (close other OBD software first).", port_name) }
+                            #[cfg(not(any(target_os = "linux", target_os = "macos", target_os = "windows")))]
+                            { format!("Permission denied on {}: {}", port_name, msg) }
+                        }
+                        std::io::ErrorKind::NotFound => {
+                            #[cfg(target_os = "linux")]
+                            { format!("Port {} not found. The adapter may be unplugged or the driver is missing (check: ls /dev/ttyUSB* /dev/ttyACM*).", port_name) }
+                            #[cfg(target_os = "macos")]
+                            { format!("Port {} not found. The adapter may be unplugged. If using a CH340/CH341 adapter, install the macOS driver from the manufacturer.", port_name) }
+                            #[cfg(target_os = "windows")]
+                            { format!("Port {} not found. The adapter may be unplugged or the driver is missing (install CH340 or FTDI driver from Device Manager).", port_name) }
+                            #[cfg(not(any(target_os = "linux", target_os = "macos", target_os = "windows")))]
+                            { format!("Port {} not found: {}", port_name, msg) }
+                        }
+                        _ => {
+                            if msg.contains("Resource busy") {
+                                format!("Port {} is busy — close any other application using this port.", port_name)
+                            } else {
+                                format!("Serial open failed on {}: {}", port_name, msg)
+                            }
+                        }
+                    }
+                    _ => format!("Serial open failed on {}: {}", port_name, msg),
+                };
+                dev_log::log_error("transport", &detail);
+                detail
+            })?;
+        Ok(Self { port, current_timeout_ms: timeout_ms })
     }
 }
 
@@ -65,7 +90,12 @@ impl OBDTransport for SerialTransport {
         self.port.write_all(data).map_err(|e| format!("Serial write: {}", e))
     }
 
-    fn read_bytes(&mut self, buf: &mut [u8], _timeout_ms: u64) -> Result<usize, String> {
+    fn read_bytes(&mut self, buf: &mut [u8], timeout_ms: u64) -> Result<usize, String> {
+        if timeout_ms != self.current_timeout_ms {
+            self.port.set_timeout(Duration::from_millis(timeout_ms))
+                .map_err(|e| format!("Failed to set timeout: {}", e))?;
+            self.current_timeout_ms = timeout_ms;
+        }
         match self.port.read(buf) {
             Ok(n) => Ok(n),
             Err(ref e) if e.kind() == std::io::ErrorKind::TimedOut => Ok(0),
@@ -99,7 +129,11 @@ impl WiFiTransport {
         let stream = TcpStream::connect_timeout(
             &addr.parse().map_err(|e| format!("Invalid address: {}", e))?,
             Duration::from_millis(timeout_ms),
-        ).map_err(|e| format!("WiFi connect failed: {}", e))?;
+        ).map_err(|e| {
+            let msg = format!("WiFi connect to {}:{} failed: {}. Check that the ELM327 WiFi adapter is powered on and your device is connected to its WiFi network.", host, port, e);
+            dev_log::log_error("transport", &msg);
+            msg
+        })?;
 
         stream.set_read_timeout(Some(Duration::from_millis(timeout_ms)))
             .map_err(|e| format!("Set timeout: {}", e))?;
@@ -115,13 +149,24 @@ impl OBDTransport for WiFiTransport {
         self.stream.write_all(data).map_err(|e| format!("WiFi write: {}", e))
     }
 
-    fn read_bytes(&mut self, buf: &mut [u8], _timeout_ms: u64) -> Result<usize, String> {
-        match self.stream.read(buf) {
+    fn read_bytes(&mut self, buf: &mut [u8], timeout_ms: u64) -> Result<usize, String> {
+        let orig = self.stream.read_timeout().ok().flatten();
+        let _ = self.stream.set_read_timeout(Some(Duration::from_millis(timeout_ms)));
+
+        let result = match self.stream.read(buf) {
             Ok(n) => Ok(n),
             Err(ref e) if e.kind() == std::io::ErrorKind::TimedOut => Ok(0),
             Err(ref e) if e.kind() == std::io::ErrorKind::WouldBlock => Ok(0),
             Err(e) => Err(format!("WiFi read: {}", e)),
+        };
+
+        if let Some(d) = orig {
+            let _ = self.stream.set_read_timeout(Some(d));
+        } else {
+            let _ = self.stream.set_read_timeout(None);
         }
+
+        result
     }
 
     fn flush(&mut self) -> Result<(), String> {
@@ -133,268 +178,6 @@ impl OBDTransport for WiFiTransport {
     fn close(&mut self) {
         self.stream.shutdown(std::net::Shutdown::Both).ok();
     }
-}
-
-// ==================== BLUETOOTH BLE ====================
-
-#[cfg(feature = "mobile")]
-pub struct BleDeviceInfo {
-    pub name: String,
-    pub address: String,
-}
-
-#[cfg(feature = "mobile")]
-pub struct BleTransport {
-    peripheral: btleplug::platform::Peripheral,
-    tx_char: Characteristic,
-    rx_buffer: Arc<Mutex<VecDeque<u8>>>,
-    runtime: tokio::runtime::Handle,
-    notification_task: Option<tokio::task::JoinHandle<()>>,
-}
-
-#[cfg(feature = "mobile")]
-impl BleTransport {
-    /// Scan and connect to a BLE ELM327 adapter
-    pub fn new(device_name: &str, timeout_ms: u64) -> Result<Self, String> {
-        dev_log::log_info("transport", &format!("BLE: scanning for device '{}'...", device_name));
-
-        let runtime = tokio::runtime::Handle::try_current()
-            .map_err(|_| "No Tokio runtime available".to_string())?;
-
-        let (peripheral, tx_char, rx_buffer, notification_task) = tokio::task::block_in_place(|| {
-            runtime.block_on(async {
-                Self::connect_async(device_name, timeout_ms).await
-            })
-        })?;
-
-        dev_log::log_info("transport", "BLE connected and subscribed");
-        Ok(Self {
-            peripheral,
-            tx_char,
-            rx_buffer,
-            runtime,
-            notification_task: Some(notification_task),
-        })
-    }
-
-    async fn connect_async(
-        device_name: &str,
-        timeout_ms: u64,
-    ) -> Result<(btleplug::platform::Peripheral, Characteristic, Arc<Mutex<VecDeque<u8>>>, tokio::task::JoinHandle<()>), String> {
-        let manager = Manager::new()
-            .await
-            .map_err(|e| format!("Failed to create BLE manager: {}", e))?;
-
-        let adapters = manager.adapters()
-            .await
-            .map_err(|e| format!("Failed to get adapters: {}", e))?;
-        let adapter = adapters.first()
-            .ok_or("No BLE adapter found")?;
-
-        dev_log::log_debug("transport", "Starting BLE scan...");
-        adapter.start_scan(btleplug::api::ScanFilter::default())
-            .await
-            .map_err(|e| format!("Failed to start scan: {}", e))?;
-
-        let scan_timeout = timeout_ms.min(5000);
-        tokio::time::sleep(tokio::time::Duration::from_millis(scan_timeout)).await;
-
-        adapter.stop_scan()
-            .await
-            .map_err(|e| format!("Failed to stop scan: {}", e))?;
-
-        dev_log::log_debug("transport", "BLE scan complete, searching for device...");
-        let peripherals = adapter.peripherals()
-            .await
-            .map_err(|e| format!("Failed to get peripherals: {}", e))?;
-
-        let device_name_lower = device_name.to_lowercase();
-        let mut peripheral_found = None;
-        for p in peripherals {
-            if let Ok(Some(properties)) = p.properties().await {
-                let name = properties.local_name.clone().unwrap_or_default().to_lowercase();
-                if name.contains(&device_name_lower) || name.contains("elm") || name.contains("obd") {
-                    peripheral_found = Some(p);
-                    break;
-                }
-            }
-        }
-        let peripheral = peripheral_found
-            .ok_or(format!("No BLE device matching '{}', 'ELM', or 'OBD' found", device_name))?;
-
-        dev_log::log_info("transport", &format!("Found device: {:?}", peripheral.properties().await.ok().flatten()));
-
-        peripheral.connect()
-            .await
-            .map_err(|e| format!("Failed to connect: {}", e))?;
-
-        dev_log::log_debug("transport", "Connected, discovering services...");
-        peripheral.discover_services()
-            .await
-            .map_err(|e| format!("Failed to discover services: {}", e))?;
-
-        let services = peripheral.services();
-        let uart_service = services.iter()
-            .find(|svc| svc.uuid.to_string().to_lowercase().starts_with("6e400001"))
-            .ok_or("Nordic UART service not found")?;
-
-        let tx_char = uart_service.characteristics.iter()
-            .find(|ch| ch.uuid.to_string().to_lowercase() == "6e400002-b5d3-4f47-8449-1934fe259dcc"
-                || ch.uuid.to_string().to_lowercase().starts_with("6e400002"))
-            .ok_or("TX characteristic not found")?
-            .clone();
-
-        let rx_char = uart_service.characteristics.iter()
-            .find(|ch| ch.uuid.to_string().to_lowercase() == "6e400003-b5d3-4f47-8449-1934fe259dcc"
-                || ch.uuid.to_string().to_lowercase().starts_with("6e400003"))
-            .ok_or("RX characteristic not found")?
-            .clone();
-
-        peripheral.subscribe(&rx_char)
-            .await
-            .map_err(|e| format!("Failed to subscribe to RX: {}", e))?;
-
-        let rx_buffer = Arc::new(Mutex::new(VecDeque::new()));
-        let rx_buffer_clone = rx_buffer.clone();
-        let peripheral_clone = peripheral.clone();
-
-        let notification_task = tokio::spawn(async move {
-            if let Ok(mut notifications) = peripheral_clone.notifications().await {
-                while let Some(notification) = notifications.next().await {
-                    let mut buf = rx_buffer_clone.lock().unwrap_or_else(|e| e.into_inner());
-                    if buf.len() < MAX_BLE_BUFFER {
-                        buf.extend_from_slice(&notification.value);
-                    }
-                }
-            }
-        });
-
-        Ok((peripheral, tx_char, rx_buffer, notification_task))
-    }
-}
-
-#[cfg(feature = "mobile")]
-impl OBDTransport for BleTransport {
-    fn write_bytes(&mut self, data: &[u8]) -> Result<(), String> {
-        tokio::task::block_in_place(|| {
-            self.runtime.block_on(async {
-                self.peripheral.write(&self.tx_char, data, WriteType::WithoutResponse)
-                    .await
-                    .map_err(|e| format!("BLE write failed: {}", e))
-            })
-        })
-    }
-
-    fn read_bytes(&mut self, buf: &mut [u8], timeout_ms: u64) -> Result<usize, String> {
-        let start = std::time::Instant::now();
-        let deadline = Duration::from_millis(timeout_ms);
-
-        loop {
-            {
-                let mut buffer = self.rx_buffer.lock().unwrap_or_else(|e| e.into_inner());
-                let count = buffer.drain(..buffer.len().min(buf.len())).zip(buf.iter_mut()).fold(0, |acc, (src, dst)| {
-                    *dst = src;
-                    acc + 1
-                });
-                if count > 0 {
-                    return Ok(count);
-                }
-            }
-
-            if start.elapsed() > deadline {
-                return Ok(0);
-            }
-
-            thread::sleep(Duration::from_millis(10));
-        }
-    }
-
-    fn flush(&mut self) -> Result<(), String> {
-        let mut buffer = self.rx_buffer.lock().unwrap_or_else(|e| e.into_inner());
-        buffer.clear();
-        Ok(())
-    }
-
-    fn transport_type(&self) -> TransportType { TransportType::Bluetooth }
-
-    fn close(&mut self) {
-        if let Some(handle) = self.notification_task.take() {
-            handle.abort();
-        }
-        tokio::task::block_in_place(|| {
-            self.runtime.block_on(async {
-                let _ = self.peripheral.disconnect().await;
-            })
-        });
-    }
-}
-
-#[cfg(feature = "mobile")]
-pub async fn scan_ble_devices(timeout_ms: u64) -> Result<Vec<BleDeviceInfo>, String> {
-    let manager = Manager::new()
-        .await
-        .map_err(|e| format!("Failed to create BLE manager: {}", e))?;
-
-    let adapters = manager.adapters()
-        .await
-        .map_err(|e| format!("Failed to get adapters: {}", e))?;
-    let adapter = adapters.first()
-        .ok_or("No BLE adapter found")?;
-
-    adapter.start_scan(btleplug::api::ScanFilter::default())
-        .await
-        .map_err(|e| format!("Failed to start scan: {}", e))?;
-
-    let scan_timeout = timeout_ms.min(5000);
-    tokio::time::sleep(tokio::time::Duration::from_millis(scan_timeout)).await;
-
-    adapter.stop_scan()
-        .await
-        .map_err(|e| format!("Failed to stop scan: {}", e))?;
-
-    let peripherals = adapter.peripherals()
-        .await
-        .map_err(|e| format!("Failed to get peripherals: {}", e))?;
-
-    let mut devices = Vec::new();
-    for p in peripherals {
-        if let Ok(Some(props)) = p.properties().await {
-            if let Some(name) = props.local_name {
-                devices.push(BleDeviceInfo {
-                    name,
-                    address: p.address().to_string(),
-                });
-            }
-        }
-    }
-
-    Ok(devices)
-}
-
-#[cfg(not(feature = "mobile"))]
-pub struct BleTransport {
-    _placeholder: (),
-}
-
-#[cfg(not(feature = "mobile"))]
-impl BleTransport {
-    pub fn new(_device_name: &str, _timeout_ms: u64) -> Result<Self, String> {
-        dev_log::log_info("transport", "BLE transport: not available (desktop build)");
-        Err("BLE transport not available on desktop – use WiFi or USB".to_string())
-    }
-}
-
-#[cfg(not(feature = "mobile"))]
-impl OBDTransport for BleTransport {
-    fn write_bytes(&mut self, _data: &[u8]) -> Result<(), String> {
-        Err("BLE not available".to_string())
-    }
-    fn read_bytes(&mut self, _buf: &mut [u8], _timeout_ms: u64) -> Result<usize, String> {
-        Err("BLE not available".to_string())
-    }
-    fn flush(&mut self) -> Result<(), String> { Ok(()) }
-    fn transport_type(&self) -> TransportType { TransportType::Bluetooth }
-    fn close(&mut self) {}
 }
 
 // ==================== FACTORY ====================

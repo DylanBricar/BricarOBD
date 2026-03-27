@@ -14,6 +14,8 @@ export const dashboard = {
     "dashboard.recording": "Enregistrement...",
     "dashboard.noData": "Aucune donnée",
     "dashboard.engineData": "Données moteur en temps réel",
+    "dashboard.configure": "Configurer les jauges",
+    "dashboard.gaugesSelected": "jauges sélectionnées",
   },
   en: {
     "dashboard.title": "Dashboard",
@@ -30,5 +32,7 @@ export const dashboard = {
     "dashboard.recording": "Recording...",
     "dashboard.noData": "No data",
     "dashboard.engineData": "Real-time engine data",
+    "dashboard.configure": "Configure Gauges",
+    "dashboard.gaugesSelected": "gauges selected",
   },
 };

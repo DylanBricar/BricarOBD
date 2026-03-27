@@ -1,4 +1,5 @@
 import React, { ReactNode } from "react";
+import i18n from "i18next";
 
 interface Props {
   children: ReactNode;
@@ -29,10 +30,9 @@ export default class ErrorBoundary extends React.Component<Props, State> {
 
   render() {
     if (this.state.hasError) {
-      const isEnglish = navigator.language.startsWith("en");
-      const title = isEnglish ? "Something went wrong" : "Une erreur s'est produite";
-      const message = isEnglish ? "The application encountered an unexpected error." : "L'application a rencontré une erreur inattendue.";
-      const buttonText = isEnglish ? "Reload" : "Recharger";
+      const title = i18n.t("common.errorBoundaryTitle");
+      const message = i18n.t("common.errorBoundaryMessage");
+      const buttonText = i18n.t("common.errorBoundaryReload");
 
       return (
         <div className="flex h-screen w-screen items-center justify-center bg-obd-bg">

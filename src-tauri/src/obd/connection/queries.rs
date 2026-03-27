@@ -50,7 +50,13 @@ impl Elm327Connection {
             }
 
             // Parse hex response: "41 0C 1A F8" (with spaces)
-            if let Some(data_str) = response.lines().find(|l| l.contains(&expected_prefix)) {
+            let matching_lines: Vec<&str> = response.lines().filter(|l| l.contains(&expected_prefix)).collect();
+            if matching_lines.len() > 1 {
+                dev_log::log_debug("obd", &format!(
+                    "PID {:02X}: {} ECUs responded (using first)", pid, matching_lines.len()
+                ));
+            }
+            if let Some(data_str) = matching_lines.first() {
                 let bytes: Vec<u8> = data_str
                     .split_whitespace()
                     .skip(2)

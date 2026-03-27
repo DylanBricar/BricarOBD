@@ -44,7 +44,7 @@ pub fn decode_dtc_bytes(b1: u8, b2: u8) -> String {
 pub fn parse_dtc_response(response: &str, status: DtcStatus, source: &str, lang: &str) -> Vec<DtcCode> {
     let mut dtcs = Vec::new();
 
-    // Response format: "43 01 23 04 56 00 00"
+    // Response format: "43 01 23 04 56 00 00" or CAN format with count byte
     let bytes: Vec<u8> = response
         .split_whitespace()
         .filter_map(|s| u8::from_str_radix(s, 16).ok())
@@ -54,8 +54,25 @@ pub fn parse_dtc_response(response: &str, status: DtcStatus, source: &str, lang:
         return dtcs;
     }
 
-    // Skip first byte (mode + 0x40), process pairs
-    let data = &bytes[1..];
+    // Skip first byte (mode + 0x40)
+    let after_header = &bytes[1..];
+
+    // Detect and skip CAN count byte if present
+    // For CAN: count byte at position 0, then DTC pairs
+    // Validation: potential_count > 0 && potential_count * 2 + 1 == after_header.len()
+    let data = if !after_header.is_empty() {
+        let potential_count = after_header[0] as usize;
+        if potential_count > 0 && potential_count * 2 + 1 == after_header.len() {
+            // Valid CAN format with count byte
+            &after_header[1..]
+        } else {
+            // Standard OBD format (no count byte)
+            after_header
+        }
+    } else {
+        after_header
+    };
+
     for chunk in data.chunks(2) {
         if chunk.len() == 2 && (chunk[0] != 0 || chunk[1] != 0) {
             let code = decode_dtc_bytes(chunk[0], chunk[1]);

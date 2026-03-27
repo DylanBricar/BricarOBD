@@ -1,15 +1,19 @@
-import { useState, useEffect, useRef, Suspense, lazy } from "react";
+import { useState, useEffect, Suspense, lazy, useMemo, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { WebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { useTranslation } from "react-i18next";
-import { cn } from "@/lib/utils";
 import ErrorBoundary from "@/components/ErrorBoundary";
 import Sidebar from "@/components/layout/Sidebar";
 import StatusBar from "@/components/layout/StatusBar";
 import { useConnectionStore } from "@/stores/connection";
 import DevConsole from "@/components/DevConsole";
 import { useVehicleData } from "@/stores/vehicle";
-import type { DtcCode, EcuInfo, MonitorStatus, VehicleOperation, WriteOperation } from "@/stores/vehicle";
+import type { DtcCode, EcuInfo, VehicleOperation, WriteOperation } from "@/stores/vehicle";
 import { devInfo, devError } from "@/lib/devlog";
+import { useThemeStore, setThemeMode, type ThemeMode } from "@/stores/theme";
+import { useToast } from "@/hooks/useToast";
+import { useConnectionEffects } from "@/hooks/useConnectionEffects";
+import { Toast } from "@/components/Toast";
 
 const Connection = lazy(() => import("@/pages/Connection"));
 const Dashboard = lazy(() => import("@/pages/Dashboard"));
@@ -26,12 +30,32 @@ export default function App() {
   const [isReading, setIsReading] = useState(false);
   const [isEcuScanning, setIsEcuScanning] = useState(false);
   const [isClearing, setIsClearing] = useState(false);
-  const [toastMessage, setToastMessage] = useState<{ message: string; type: "success" | "error" } | null>(null);
   const [showDevConsole, setShowDevConsole] = useState(false);
-  const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const { toast: toastMessage, showToast, dismissToast } = useToast();
   const connection = useConnectionStore();
   const vehicle = useVehicleData();
+  const { mode: themeMode } = useThemeStore();
+  const { discoveryProgress, isDiscoveryComplete, hasVinCache, setHasVinCache, setIsDiscoveryComplete } = useConnectionEffects(
+    connection.status,
+    connection.vehicle,
+    {
+      startDemoPolling: vehicle.startDemoPolling,
+      startRealPolling: vehicle.startRealPolling,
+      stopPolling: vehicle.stopPolling,
+      setDtcs: vehicle.setDtcs,
+      setMonitors: vehicle.setMonitors,
+      setEcus: vehicle.setEcus,
+      setVehicleOps: vehicle.setVehicleOps,
+      setVehicleWriteOps: vehicle.setVehicleWriteOps,
+    },
+    i18n.language,
+    showToast,
+    t,
+  );
 
+  const hasVin = connection.vehicle?.vin || false;
+  const isDemo = connection.status === "demo";
+  const canNavigate = ((connection.status === "connected" && (hasVin || isDemo)) || isDemo) && (isDiscoveryComplete || isDemo);
   const isConnected =
     connection.status === "connected" || connection.status === "demo";
 
@@ -43,26 +67,35 @@ export default function App() {
 
   // Load DB stats on mount
   useEffect(() => {
+    let cancelled = false;
     invoke<{ operations: number; profiles: number; ecus: number }>("get_database_stats")
       .then(stats => {
+        if (cancelled) return;
         devInfo("ui", "DB loaded: " + JSON.stringify(stats));
         vehicle.setDbStats(stats);
       })
       .catch(() => {});
+    return () => { cancelled = true; };
   }, []);
 
   // Load settings on mount
   useEffect(() => {
-    invoke<{ language: string; defaultBaudRate: number }>("get_settings")
+    let cancelled = false;
+    invoke<{ language: string; defaultBaudRate: number; theme: string }>("get_settings")
       .then(settings => {
+        if (cancelled) return;
         if (settings.language && settings.language !== i18n.language) {
           i18n.changeLanguage(settings.language);
         }
         if (settings.defaultBaudRate) {
           connection.setBaudRate(settings.defaultBaudRate);
         }
+        if (settings.theme && ["system", "dark", "light"].includes(settings.theme)) {
+          setThemeMode(settings.theme as ThemeMode);
+        }
       })
       .catch(() => {});
+    return () => { cancelled = true; };
   }, []);
 
   // Sync language with Rust backend
@@ -70,92 +103,41 @@ export default function App() {
     invoke("set_language", { lang: i18n.language }).catch(() => {});
   }, [i18n.language]);
 
-  // Persist settings when language or baud rate changes
+  // Persist settings when language, baud rate, or theme changes
   useEffect(() => {
-    invoke("save_settings", { settings: { language: i18n.language, defaultBaudRate: connection.baudRate } }).catch(() => {});
-  }, [i18n.language, connection.baudRate]);
+    invoke("save_settings", { settings: { language: i18n.language, defaultBaudRate: connection.baudRate, theme: themeMode } }).catch(() => {});
+  }, [i18n.language, connection.baudRate, themeMode]);
 
-  // Start polling + load DTCs + load vehicle operations when connected
-  useEffect(() => {
-    devInfo("ui", "Connection: " + connection.status);
-    if (connection.status === "demo") {
-      devInfo("ui", "Demo polling started");
-      invoke("discover_vehicle_params", { manufacturer: "Peugeot" }).catch(() => {});
-      vehicle.startDemoPolling();
-    } else if (connection.status === "connected") {
-      // Real vehicle: discover supported params first, then poll
-      const make = connection.vehicle?.make || "";
-      devInfo("ui", "Starting vehicle discovery for " + make);
-
-      // Run discovery, then start polling with discovered params only
-      invoke<{ standardPids: number; manufacturerDids: number }>("discover_vehicle_params", { manufacturer: make })
-        .then(result => {
-          devInfo("ui", `Discovery: ${result.standardPids} PIDs + ${result.manufacturerDids} DIDs`);
-          vehicle.startRealPolling(1000, make, true); // skipEcuScan since discovery did the heavy lifting
-        })
-        .catch(() => {
-          devInfo("ui", "Discovery failed, starting polling with fallback");
-          vehicle.startRealPolling(1000, make);
-        });
-
-      // Load ECUs and monitors in parallel with discovery
-      invoke<EcuInfo[]>("scan_ecus").then(ecus => vehicle.setEcus(ecus)).catch(() => {});
-      invoke<MonitorStatus[]>("get_monitors").then(m => vehicle.setMonitors(m)).catch(() => {});
-
-      invoke<DtcCode[]>("read_all_dtcs", { lang: i18n.language }).then(codes => {
-        devInfo("ui", "DTCs loaded: " + codes.length);
-        vehicle.setDtcs(codes);
-      }).catch(() => {});
-
-      // Load vehicle-specific operations from the 3.17M DB
-      const vehicleMake = connection.vehicle?.make || "";
-      invoke<VehicleOperation[]>("get_vehicle_operations", { vehicle: vehicleMake, limit: 500 })
-        .then(ops => {
-          devInfo("ui", "Vehicle ops: " + ops.length);
-          vehicle.setVehicleOps(ops);
-        })
-        .catch(() => {});
-      invoke<WriteOperation[]>("get_write_operations", { ecuName: "%", vehicle: vehicleMake })
-        .then(ops => vehicle.setVehicleWriteOps(ops))
-        .catch(() => {});
-    } else if (connection.status === "disconnected") {
-      vehicle.stopPolling();
-      setIsReading(false);
-    }
-  }, [connection.status]);
 
   // Navigate based on connection status
+  const handleNavigate = (page: string) => {
+    if (!canNavigate && page !== "connection" && page !== "advanced") {
+      devInfo("ui", "Navigation blocked: not ready");
+      return;
+    }
+    devInfo("ui", "Navigate: " + page);
+    setActivePage(page);
+  };
+
   useEffect(() => {
-    if (isConnected && activePage === "connection") {
+    if (isConnected && activePage === "connection" && canNavigate) {
       setActivePage("dashboard");
     } else if (!isConnected && activePage !== "connection") {
-      // Auto-save session on disconnect
+      setIsReading(false);
       if (connection.vehicle) {
         invoke("save_session_cmd", {
           vin: connection.vehicle.vin,
           make: connection.vehicle.make,
           model: connection.vehicle.model,
           dtc_count: vehicle.dtcs.length,
-          notes: vehicle.dtcs.map(d => d.code).join(", ") || "No DTCs",
+          notes: vehicle.dtcs.map(d => d.code).join(", ") || t("dtc.noCode"),
+          data: "",
         }).catch(() => {});
       }
       setActivePage("connection");
     }
-  }, [isConnected]);
+  }, [isConnected, canNavigate]);
 
-  // Cleanup toast timer on unmount
-  useEffect(() => {
-    return () => {
-      if (toastTimerRef.current) {
-        clearTimeout(toastTimerRef.current);
-      }
-    };
-  }, []);
-
-  const handleNavigate = (page: string) => {
-    devInfo("ui", "Navigate: " + page);
-    setActivePage(page);
-  };
 
   const handleReadAll = async () => {
     setIsReading(true);
@@ -173,15 +155,11 @@ export default function App() {
     try {
       await invoke("clear_dtcs", { confirmed: true });
       vehicle.clearAllDtcs();
-      setToastMessage({ message: t("dtc.clearSuccess"), type: "success" });
+      showToast(t("dtc.clearSuccess"));
     } catch (e) {
-      setToastMessage({ message: String(e), type: "error" });
+      showToast(String(e), "error");
     }
     setIsClearing(false);
-    if (toastTimerRef.current) {
-      clearTimeout(toastTimerRef.current);
-    }
-    toastTimerRef.current = setTimeout(() => setToastMessage(null), 5000);
   };
 
   const LoadingFallback = () => (
@@ -193,7 +171,19 @@ export default function App() {
     </div>
   );
 
-  const renderPage = () => {
+  const handleToggleDevConsole = useCallback(() => {
+    try {
+      new WebviewWindow("dev-console", {
+        url: "#/devconsole",
+        width: 1200,
+        height: 600,
+      });
+    } catch {
+      setShowDevConsole(!showDevConsole);
+    }
+  }, [showDevConsole]);
+
+  const renderedPage = useMemo(() => {
     switch (activePage) {
       case "connection":
         return (
@@ -211,10 +201,23 @@ export default function App() {
                 onConnectWifi={connection.connectWifi}
                 onPortChange={connection.setPort}
                 onBaudRateChange={connection.setBaudRate}
+                onScanPorts={connection.scanPorts}
+                discoveryProgress={discoveryProgress}
+                isDiscoveryComplete={isDiscoveryComplete}
+                hasVinCache={hasVinCache}
+                onClearCache={async () => {
+                  try {
+                    await invoke("clear_vin_cache", { vin: connection.vehicle?.vin });
+                    setHasVinCache(false);
+                  } catch (e) {
+                    devError("ui", "Clear cache error: " + String(e));
+                  }
+                }}
                 onVehicleUpdate={(info) => {
                   connection.updateVehicle(info);
                   const make = info.make || "";
                   if (connection.status === "connected") {
+                    setIsDiscoveryComplete(false);
                     vehicle.startRealPolling(1000, make, true);
                     invoke<DtcCode[]>("read_all_dtcs", { lang: i18n.language })
                       .then(codes => vehicle.setDtcs(codes)).catch(() => {});
@@ -300,7 +303,7 @@ export default function App() {
         return (
           <ErrorBoundary>
             <Suspense fallback={<LoadingFallback />}>
-              <Monitors monitors={vehicle.monitors} />
+              <Monitors monitors={vehicle.monitors} onRefresh={vehicle.loadMonitors} />
             </Suspense>
           </ErrorBoundary>
         );
@@ -323,7 +326,7 @@ export default function App() {
       default:
         return null;
     }
-  };
+  }, [activePage, connection.status, connection.vehicle, connection.port, connection.baudRate, connection.availablePorts, connection.connect, connection.disconnect, connection.connectDemo, connection.connectWifi, connection.setPort, connection.setBaudRate, connection.scanPorts, discoveryProgress, isDiscoveryComplete, hasVinCache, setHasVinCache, connection.updateVehicle, vehicle.pidData, vehicle.startRealPolling, vehicle.setDtcs, vehicle.setVehicleOps, vehicle.setVehicleWriteOps, vehicle.isPolling, vehicle.pausePolling, vehicle.stopPolling, vehicle.changeRefreshRate, vehicle.dtcs, vehicle.dtcHistory, vehicle.mode06Results, vehicle.isLoadingMode06, vehicle.loadMode06Results, vehicle.freezeFrame, vehicle.isLoadingFreezeFrame, vehicle.loadFreezeFrame, handleReadAll, handleClearAll, isReading, isClearing, vehicle.ecus, isEcuScanning, setIsEcuScanning, vehicle.setEcus, vehicle.monitors, vehicle.loadMonitors, i18n.language]);
 
   return (
     <ErrorBoundary>
@@ -332,21 +335,16 @@ export default function App() {
           activePage={activePage}
           onNavigate={handleNavigate}
           connectionStatus={connection.status}
-          onToggleDevConsole={() => setShowDevConsole(!showDevConsole)}
+          canNavigate={canNavigate || undefined}
+          onToggleDevConsole={handleToggleDevConsole}
+          dtcCount={vehicle.dtcs.length}
         />
         <div className="flex-1 flex flex-col overflow-hidden">
-          <main className="flex-1 overflow-y-auto">{renderPage()}</main>
-          <StatusBar status={connection.status} vehicle={connection.vehicle} />
+          <main className="flex-1 overflow-y-auto">{renderedPage}</main>
+          <StatusBar status={connection.status} vehicle={connection.vehicle} isPolling={vehicle.isPolling} />
         </div>
-        {toastMessage && (
-          <div className={cn("fixed bottom-4 right-4 max-w-md px-4 py-3 rounded-lg shadow-lg flex items-start gap-3 animate-slide-in z-50 text-white", toastMessage.type === "success" ? "bg-obd-success/90" : "bg-obd-danger/90")}>
-            <p className="text-xs flex-1 leading-relaxed">{toastMessage.message}</p>
-            <button onClick={() => setToastMessage(null)} className="flex-shrink-0 hover:opacity-70 text-white" aria-label={t("common.close")}>
-              ✕
-            </button>
-          </div>
-        )}
-        {showDevConsole && <DevConsole onClose={() => setShowDevConsole(false)} />}
+        {toastMessage && <Toast message={toastMessage.message} type={toastMessage.type} onDismiss={dismissToast} />}
+        {showDevConsole && <DevConsole isStandalone={false} onClose={() => setShowDevConsole(false)} />}
       </div>
     </ErrorBoundary>
   );

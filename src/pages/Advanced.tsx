@@ -1,24 +1,11 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { useTranslation } from "react-i18next";
-import { Wrench, AlertTriangle, Send, Terminal, ChevronDown, Zap, Settings, RefreshCw, Lock } from "lucide-react";
+import { Wrench, AlertTriangle, Send, ChevronDown, Zap, Settings, RefreshCw, Lock } from "lucide-react";
 import { cn } from "@/lib/utils";
-
-interface AdvancedOperation {
-  id: string;
-  name: string;
-  description: string;
-  risk_level: "low" | "medium" | "high" | "critical";
-  needs_value?: boolean;
-  unit?: string;
-}
-
-interface OperationCategory {
-  id: string;
-  name: string;
-  icon: React.ReactNode;
-  operations: AdvancedOperation[];
-}
+import type { AdvancedOperation, OperationCategory } from "@/components/advanced/types";
+import AdvancedConsole from "@/components/advanced/AdvancedConsole";
+import ConfirmDialog from "@/components/advanced/ConfirmDialog";
 
 const riskColors = {
   low: "bg-obd-success/10 text-obd-success border-obd-success/20",
@@ -80,6 +67,8 @@ export default function Advanced() {
   const [executingRaw, setExecutingRaw] = useState(false);
   const [showConfirmDialog, setShowConfirmDialog] = useState(false);
   const [pendingOperation, setPendingOperation] = useState<{ type: "operation" | "raw"; op?: AdvancedOperation; cmd?: string } | null>(null);
+  const [ecuAddress, setEcuAddress] = useState("0x7E0");
+  const [customEcuAddress, setCustomEcuAddress] = useState("");
 
   const isBlocked = useMemo(() => isCommandBlocked(rawCommand), [rawCommand]);
 
@@ -183,11 +172,12 @@ export default function Advanced() {
 
     try {
       let result: string;
+      const currentAddress = ecuAddress === "custom" ? customEcuAddress : ecuAddress;
       try {
-        result = await invoke<string>("send_raw_command", { ecuAddress: "0x7E0", command: op.id });
+        result = await invoke<string>("send_raw_command", { ecuAddress: currentAddress, command: op.id });
       } catch (err) {
         if (String(err) === "CONFIRM_REQUIRED") {
-          result = await invoke<string>("send_raw_command", { ecuAddress: "0x7E0", command: op.id, confirmed: true });
+          result = await invoke<string>("send_raw_command", { ecuAddress: currentAddress, command: op.id, confirmed: true });
         } else {
           throw err;
         }
@@ -220,11 +210,12 @@ export default function Advanced() {
 
     try {
       let result: string;
+      const currentAddress = ecuAddress === "custom" ? customEcuAddress : ecuAddress;
       try {
-        result = await invoke<string>("send_raw_command", { ecuAddress: "0x7E0", command: cmd });
+        result = await invoke<string>("send_raw_command", { ecuAddress: currentAddress, command: cmd });
       } catch (err) {
         if (String(err) === "CONFIRM_REQUIRED") {
-          result = await invoke<string>("send_raw_command", { ecuAddress: "0x7E0", command: cmd, confirmed: true });
+          result = await invoke<string>("send_raw_command", { ecuAddress: currentAddress, command: cmd, confirmed: true });
         } else {
           throw err;
         }
@@ -257,6 +248,21 @@ export default function Advanced() {
         <p className="text-xs text-obd-danger/80 leading-relaxed">
           {t("advanced.warning")}
         </p>
+      </div>
+
+      {/* ECU Address Selector */}
+      <div className="glass-card p-3 flex items-center gap-3">
+        <label className="text-xs text-obd-text-muted">{t("advanced.ecuAddress")}</label>
+        <select value={ecuAddress} onChange={e => setEcuAddress(e.target.value)} className="bg-obd-surface border border-obd-border rounded px-2 py-1 text-sm">
+          <option value="0x7E0">0x7E0 ({t("advanced.ecuEngine")})</option>
+          <option value="0x7E1">0x7E1 ({t("advanced.ecuTransmission")})</option>
+          <option value="0x7E2">0x7E2 ({t("advanced.ecuAbs")})</option>
+          <option value="0x7E3">0x7E3 ({t("advanced.ecuAirbag")})</option>
+          <option value="0x7E4">0x7E4 ({t("advanced.ecuHvac")})</option>
+          <option value="0x75D">0x75D ({t("advanced.ecuBsi")})</option>
+          <option value="custom">{t("advanced.ecuCustom")}</option>
+        </select>
+        {ecuAddress === "custom" && <input value={customEcuAddress} onChange={e => setCustomEcuAddress(e.target.value)} placeholder="0x7XX" className="bg-obd-surface border border-obd-border rounded px-2 py-1 text-sm w-20" />}
       </div>
 
       <div className="flex flex-col md:flex-row gap-4 md:gap-6 flex-1 min-h-0">
@@ -381,81 +387,25 @@ export default function Advanced() {
           ))}
           </div>
 
-        <div className="w-full md:w-96 glass-card p-5 flex flex-col overflow-hidden">
-          <h3 className="text-sm font-semibold text-obd-text-secondary uppercase tracking-wider mb-3">
-            {t("advanced.console")}
-          </h3>
-          <div className="flex-1 rounded-lg bg-obd-bg/80 border border-obd-border/30 p-3 overflow-y-auto font-mono text-xs space-y-2">
-            {responses.length === 0 ? (
-              <div className="flex items-center gap-2 text-obd-text-muted">
-                <Terminal size={14} />
-                <span>{t("advanced.awaitingCommands")}</span>
-              </div>
-            ) : (
-              responses.map((r, i) => (
-                <div key={i} className="space-y-0.5">
-                  <div className="flex gap-2">
-                    <span className="text-obd-text-muted">[{r.time}]</span>
-                    <span className="text-obd-accent">→</span>
-                    <span className="text-obd-text flex-1">{r.cmd}</span>
-                  </div>
-                  <div className="flex gap-2 pl-[4.5rem]">
-                    <span className={r.isError ? "text-obd-danger" : "text-obd-success"}>
-                      {r.isError ? "✗" : "✓"}
-                    </span>
-                    <span className="text-obd-text">{r.res}</span>
-                  </div>
-                </div>
-              ))
-            )}
-          </div>
-        </div>
+        <AdvancedConsole responses={responses} t={t} />
       </div>
 
-      {/* Confirmation Modal */}
-      {showConfirmDialog && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
-          <div className="glass-card p-6 max-w-sm mx-4 space-y-4">
-            <div className="flex items-start gap-3">
-              <div className="w-10 h-10 rounded-lg bg-obd-warning/10 border border-obd-warning/20 flex items-center justify-center flex-shrink-0">
-                <AlertTriangle className="text-obd-warning" size={20} />
-              </div>
-              <div className="flex-1">
-                <h3 className="font-semibold text-obd-text">{t("advanced.confirmDialog.title")}</h3>
-                <p className="text-xs text-obd-text-muted mt-1">{t("advanced.confirmDialog.message")}</p>
-                {pendingOperation && (
-                  <p className="text-xs text-obd-accent mt-2 font-mono">
-                    {pendingOperation.type === "operation" ? pendingOperation.op?.name : pendingOperation.cmd}
-                  </p>
-                )}
-              </div>
-            </div>
-            <div className="flex gap-2 pt-2">
-              <button
-                onClick={() => {
-                  setShowConfirmDialog(false);
-                  setPendingOperation(null);
-                }}
-                className="flex-1 btn-secondary px-3 py-2 text-xs font-medium"
-              >
-                {t("advanced.confirmDialog.cancel")}
-              </button>
-              <button
-                onClick={() => {
-                  if (pendingOperation?.type === "operation") {
-                    confirmOperation();
-                  } else if (pendingOperation?.type === "raw") {
-                    confirmRawCommand();
-                  }
-                }}
-                className="flex-1 btn-danger px-3 py-2 text-xs font-medium"
-              >
-                {t("advanced.confirmDialog.confirm")}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <ConfirmDialog
+        show={showConfirmDialog}
+        pendingOperation={pendingOperation}
+        onCancel={useCallback(() => {
+          setShowConfirmDialog(false);
+          setPendingOperation(null);
+        }, [])}
+        onConfirm={useCallback(() => {
+          if (pendingOperation?.type === "operation") {
+            confirmOperation();
+          } else if (pendingOperation?.type === "raw") {
+            confirmRawCommand();
+          }
+        }, [pendingOperation])}
+        t={t}
+      />
     </div>
   );
 }

@@ -1,7 +1,11 @@
 pub mod connection;
 pub mod dashboard;
+pub mod dashboard_did;
 pub mod dtc;
 pub mod ecu;
+pub mod ecu_scan;
 pub mod database;
 pub mod settings;
 pub mod diagnostic;
+pub mod mode06_names;
+pub mod vin_parser;

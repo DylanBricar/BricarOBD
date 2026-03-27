@@ -1,11 +1,11 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { useTranslation } from "react-i18next";
-import { Clock, Download, Trash2, FileText, Calendar, AlertTriangle } from "lucide-react";
+import { Clock, Download, Trash2, FileText, Calendar, AlertTriangle, Search } from "lucide-react";
 import { invoke } from "@tauri-apps/api/core";
-import { cn } from "@/lib/utils";
+import { cn, escapeCSV } from "@/lib/utils";
 import { useToast } from "@/hooks/useToast";
 import { Toast } from "@/components/Toast";
-import { makeCSVFilename } from "@/lib/csv";
+import { makeCSVFilename, saveCSVFile } from "@/lib/csv";
 
 interface Session {
   id: string;
@@ -26,12 +26,13 @@ interface SessionData {
 }
 
 export default function History() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const [sessions, setSessions] = useState<Session[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const { toast, showToast, dismissToast } = useToast();
   const [isLoading, setIsLoading] = useState(true);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
 
   // Load sessions from database on mount
   useEffect(() => {
@@ -40,54 +41,66 @@ export default function History() {
     invoke<SessionData[]>("get_sessions_cmd")
       .then((data) => {
         if (cancelled) return;
-        const mapped = data.map((s) => ({
-          id: s.id.toString(),
-          date: s.timestamp,
-          vehicle: `${s.make} ${s.model}`,
-          dtcCount: s.dtc_count,
-          notes: s.notes,
-          dtcCodes: s.notes.split(", ").filter(c => /^[PCBU]\d{4}$/i.test(c.trim())),
-        }));
+        const mapped = data.map((s) => {
+          const matches = s.notes?.match(/\b[PCBU]\d{4,5}\b/gi);
+          return {
+            id: s.id.toString(),
+            date: s.timestamp,
+            vehicle: `${s.make} ${s.model}`,
+            dtcCount: s.dtc_count,
+            notes: s.notes,
+            dtcCodes: Array.from(new Set((matches || []).map(c => c.toUpperCase()))),
+          };
+        });
         setSessions(mapped);
       })
       .catch(() => { if (!cancelled) setSessions([]); })
       .finally(() => { if (!cancelled) setIsLoading(false); });
     return () => { cancelled = true; };
-  }, []);
+  }, [i18n.language]);
 
   const selected = sessions.find((s) => s.id === selectedId);
 
-  const handleExportAll = async () => {
+  const filteredSessions = useMemo(() => sessions.filter((s) => {
+    const query = searchQuery.toLowerCase();
+    return (
+      s.vehicle.toLowerCase().includes(query) ||
+      s.notes.toLowerCase().includes(query) ||
+      (s.dtcCodes || []).some(code => code.toLowerCase().includes(query))
+    );
+  }), [sessions, searchQuery]);
+
+  const handleExportAll = useCallback(async () => {
     if (sessions.length === 0) {
       showToast(t("liveData.noExportData"), "error");
       return;
     }
-    const rows = ["Date,Vehicle,DTC Count,DTC Codes,Notes"];
+    const rows = [[t("history.csvDate"), t("history.csvVehicle"), t("history.csvDtcCount"), t("history.csvDtcCodes"), t("history.csvNotes")].join(",")];
     sessions.forEach((s) => {
-      rows.push(`${s.date},${s.vehicle},${s.dtcCount},"${(s.dtcCodes || []).join("; ")}","${s.notes}"`);
+      rows.push(`${escapeCSV(s.date)},${escapeCSV(s.vehicle)},${escapeCSV(s.dtcCount)},${escapeCSV((s.dtcCodes || []).join("; "))},${escapeCSV(s.notes)}`);
     });
     const csv = rows.join("\n");
     const filename = makeCSVFilename("bricarobd_sessions");
     try {
-      const path = await invoke<string>("save_csv_file", { filename, content: csv });
+      const path = await saveCSVFile(csv, filename);
       showToast(`${t("liveData.exportSuccess")} : ${path}`);
     } catch (e) {
       showToast(`${t("common.error")}: ${e}`, "error");
     }
-  };
+  }, [sessions, t, showToast]);
 
-  const handleExportOne = async (session: Session) => {
-    const rows = ["Date,Vehicle,DTC Count,DTC Codes,Notes"];
-    rows.push(`${session.date},${session.vehicle},${session.dtcCount},"${(session.dtcCodes || []).join("; ")}","${session.notes}"`);
+  const handleExportOne = useCallback(async (session: Session) => {
+    const rows = [[t("history.csvDate"), t("history.csvVehicle"), t("history.csvDtcCount"), t("history.csvDtcCodes"), t("history.csvNotes")].join(",")];
+    rows.push(`${escapeCSV(session.date)},${escapeCSV(session.vehicle)},${escapeCSV(session.dtcCount)},${escapeCSV((session.dtcCodes || []).join("; "))},${escapeCSV(session.notes)}`);
     const csv = rows.join("\n");
     const filename = makeCSVFilename(`bricarobd_session_${session.id}`);
     try {
-      const path = await invoke<string>("save_csv_file", { filename, content: csv });
+      const path = await saveCSVFile(csv, filename);
       showToast(`${t("liveData.exportSuccess")} : ${path}`);
     } catch (e) {
       showToast(`${t("common.error")}: ${e}`, "error");
     }
-  };
+  }, [t, showToast]);
 
   const handleDelete = async (id: string) => {
     try {
@@ -136,35 +149,56 @@ export default function History() {
               <p className="text-sm">{t("history.noSession")}</p>
             </div>
           ) : (
-            <div className="flex-1 overflow-y-auto">
-              {sessions.map((session) => (
-                <button
-                  key={session.id}
-                  onClick={() => setSelectedId(session.id === selectedId ? null : session.id)}
-                  className={cn(
-                    "data-row w-full text-left",
-                    selectedId === session.id && "bg-obd-accent/5 border-l-2 border-l-obd-accent"
-                  )}
-                >
-                  <div className="w-10 h-10 rounded-lg bg-obd-accent/5 flex items-center justify-center mr-3 flex-shrink-0">
-                    <FileText size={18} className="text-obd-accent" />
+            <>
+              <div className="p-3 border-b border-obd-border/20">
+                <div className="relative">
+                  <Search size={14} className="absolute left-3 top-1/2 transform -translate-y-1/2 text-obd-text-muted" />
+                  <input
+                    type="text"
+                    placeholder={t("common.search")}
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="w-full pl-8 pr-3 py-2 bg-white/[0.05] border border-obd-border/20 rounded-lg text-sm text-obd-text placeholder-obd-text-muted focus:outline-none focus:border-obd-accent/50"
+                  />
+                </div>
+              </div>
+              <div className="flex-1 overflow-y-auto">
+                {filteredSessions.length === 0 ? (
+                  <div className="flex-1 flex flex-col items-center justify-center text-obd-text-muted py-8">
+                    <FileText size={32} strokeWidth={1} className="mb-3 opacity-20" />
+                    <p className="text-xs">{t("common.noResults")}</p>
                   </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm font-medium text-obd-text">{session.vehicle}</span>
-                      {session.dtcCount > 0 && (
-                        <span className="badge-warning">{session.dtcCount} DTC</span>
+                ) : (
+                  filteredSessions.map((session) => (
+                    <button
+                      key={session.id}
+                      onClick={() => setSelectedId(session.id === selectedId ? null : session.id)}
+                      className={cn(
+                        "data-row w-full text-left",
+                        selectedId === session.id && "bg-obd-accent/5 border-l-2 border-l-obd-accent"
                       )}
-                    </div>
-                    <p className="text-xs text-obd-text-muted truncate mt-0.5">{session.notes}</p>
-                  </div>
-                  <div className="flex items-center gap-1.5 text-xs text-obd-text-muted">
-                    <Calendar size={12} />
-                    {session.date}
-                  </div>
-                </button>
-              ))}
-            </div>
+                    >
+                      <div className="w-10 h-10 rounded-lg bg-obd-accent/5 flex items-center justify-center mr-3 flex-shrink-0">
+                        <FileText size={18} className="text-obd-accent" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm font-medium text-obd-text">{session.vehicle}</span>
+                          {session.dtcCount > 0 && (
+                            <span className="badge-warning">{session.dtcCount} DTC</span>
+                          )}
+                        </div>
+                        <p className="text-xs text-obd-text-muted truncate mt-0.5">{session.notes}</p>
+                      </div>
+                      <div className="flex items-center gap-1.5 text-xs text-obd-text-muted">
+                        <Calendar size={12} />
+                        {new Date(session.date).toLocaleDateString(i18n.language === "fr" ? "fr-FR" : "en-US", { year: "numeric", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}
+                      </div>
+                    </button>
+                  ))
+                )}
+              </div>
+            </>
           )}
         </div>
 
@@ -174,7 +208,7 @@ export default function History() {
             <div>
               <h3 className="font-semibold text-obd-text">{selected.vehicle}</h3>
               <p className="text-xs text-obd-text-muted flex items-center gap-1.5 mt-1">
-                <Calendar size={12} /> {selected.date}
+                <Calendar size={12} /> {new Date(selected.date).toLocaleDateString(i18n.language === "fr" ? "fr-FR" : "en-US", { year: "numeric", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}
               </p>
             </div>
 

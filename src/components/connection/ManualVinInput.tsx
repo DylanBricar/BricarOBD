@@ -56,7 +56,7 @@ export default function ManualVinInput({ value: manualVin, onChange: setManualVi
         <button
           onClick={handleSubmit}
           disabled={!isValidVin(manualVin)}
-          className={cn("btn-ghost text-xs px-3", manualVin && !isValidVin(manualVin) && "opacity-50")}
+          className={cn("btn-ghost text-xs px-3 h-[34px] self-start", manualVin && !isValidVin(manualVin) && "opacity-50")}
         >{t("common.ok")}</button>
       </div>
     </div>

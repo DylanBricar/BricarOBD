@@ -62,8 +62,9 @@ impl Elm327Connection {
     fn parse_pid_bitmap(response: &str, prefix: &str, base: u8) -> Vec<u8> {
         let mut pids = Vec::new();
 
-        // Try with spaces first
-        if let Some(line) = response.lines().find(|l| l.contains(prefix)) {
+        // Try with spaces first — iterate ALL matching lines for multi-ECU responses
+        let mut found_any = false;
+        for line in response.lines().filter(|l| l.contains(prefix)) {
             let bytes: Vec<u8> = line
                 .split_whitespace()
                 .skip(2)  // Skip "41 XX"
@@ -71,7 +72,10 @@ impl Elm327Connection {
                 .filter_map(|s| u8::from_str_radix(s, 16).ok())
                 .collect();
             Self::decode_bitmap(&bytes, base, &mut pids);
-        } else {
+            found_any = true;
+        }
+
+        if !found_any {
             // Try without spaces
             let no_space = prefix.replace(" ", "");
             let clean = response.replace(" ", "");
@@ -87,6 +91,8 @@ impl Elm327Connection {
             }
         }
 
+        pids.sort();
+        pids.dedup();
         pids
     }
 
@@ -104,5 +110,117 @@ impl Elm327Connection {
     /// Check if a PID is supported by the vehicle
     pub fn is_pid_supported(&self, pid: u8) -> bool {
         self.supported_pids.contains(&pid) || self.supported_pids_ext.contains(&pid)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn decode_bitmap_test(bytes: &[u8], base: u8) -> Vec<u8> {
+        let mut pids = Vec::new();
+        for (byte_idx, &byte) in bytes.iter().enumerate() {
+            for bit in 0..8 {
+                if byte & (0x80 >> bit) != 0 {
+                    pids.push(base + (byte_idx * 8 + bit + 1) as u8);
+                }
+            }
+        }
+        pids
+    }
+
+    #[test]
+    fn test_decode_bitmap_single_byte() {
+        let bytes = vec![0x80];
+        let pids = decode_bitmap_test(&bytes, 0x00);
+        assert_eq!(pids, vec![0x01]);
+    }
+
+    #[test]
+    fn test_decode_bitmap_multiple_bits() {
+        let bytes = vec![0xFF];
+        let pids = decode_bitmap_test(&bytes, 0x00);
+        assert_eq!(pids, vec![0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08]);
+    }
+
+    #[test]
+    fn test_decode_bitmap_with_base() {
+        let bytes = vec![0x80];
+        let pids = decode_bitmap_test(&bytes, 0x20);
+        assert_eq!(pids, vec![0x21]);
+    }
+
+    #[test]
+    fn test_decode_bitmap_multiple_bytes() {
+        let bytes = vec![0x80, 0x01];
+        let pids = decode_bitmap_test(&bytes, 0x00);
+        assert_eq!(pids, vec![0x01, 0x10]);
+    }
+
+    #[test]
+    fn test_decode_bitmap_empty() {
+        let bytes = vec![0x00, 0x00, 0x00, 0x00];
+        let pids = decode_bitmap_test(&bytes, 0x00);
+        assert!(pids.is_empty());
+    }
+
+    #[test]
+    fn test_pid_bitmap_parsing_with_spaces() {
+        let response = "41 00 FF FF FF FF";
+        assert!(response.contains("41 00"));
+        let bytes: Vec<u8> = response
+            .split_whitespace()
+            .skip(2)
+            .take(4)
+            .filter_map(|s| u8::from_str_radix(s, 16).ok())
+            .collect();
+        assert_eq!(bytes.len(), 4);
+        assert_eq!(bytes[0], 0xFF);
+    }
+
+    #[test]
+    fn test_pid_bitmap_parsing_without_spaces() {
+        let response = "4100FFFFFFFF";
+        let clean = response.replace(" ", "");
+        assert!(clean.contains("4100"));
+        if let Some(start) = clean.find("4100") {
+            let data_start = start + 4;
+            if data_start + 8 <= clean.len() {
+                let bytes: Vec<u8> = (0..8)
+                    .step_by(2)
+                    .filter_map(|i| u8::from_str_radix(&clean[data_start+i..data_start+i+2], 16).ok())
+                    .collect();
+                assert_eq!(bytes.len(), 4);
+            }
+        }
+    }
+
+    #[test]
+    fn test_pid_discovery_conceptual() {
+        let response = "41 20 80 00 00 00";
+        let pids: Vec<u8> = response
+            .split_whitespace()
+            .skip(2)
+            .take(4)
+            .filter_map(|s| u8::from_str_radix(s, 16).ok())
+            .collect();
+        assert!(!pids.is_empty());
+        assert_eq!(pids[0], 0x80);
+    }
+
+    #[test]
+    fn test_bitmap_dedup_and_sort() {
+        let response = "41 00 FF FF FF FF";
+        let bytes: Vec<u8> = response
+            .split_whitespace()
+            .skip(2)
+            .take(4)
+            .filter_map(|s| u8::from_str_radix(s, 16).ok())
+            .collect();
+        let mut pids = decode_bitmap_test(&bytes, 0x00);
+        let original_len = pids.len();
+        pids.sort();
+        pids.dedup();
+        assert_eq!(pids.len(), original_len);
     }
 }

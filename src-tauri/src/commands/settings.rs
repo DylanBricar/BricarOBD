@@ -16,9 +16,11 @@ pub fn save_settings(settings: AppSettings) -> Result<(), String> {
     super::database::with_db(|db| {
         db.save_setting("language", &settings.language)?;
         db.save_setting("default_baud_rate", &settings.default_baud_rate.to_string())?;
+        db.save_setting("theme", &settings.theme)?;
+        db.save_setting("auto_connect", &settings.auto_connect.to_string())?;
         Ok(())
     })?;
-    dev_log::log_info("settings", &format!("Settings saved: lang={}, baud={}", settings.language, settings.default_baud_rate));
+    dev_log::log_info("settings", &format!("Settings saved: lang={}, baud={}, theme={}, auto_connect={}", settings.language, settings.default_baud_rate, settings.theme, settings.auto_connect));
     Ok(())
 }
 
@@ -194,4 +196,34 @@ fn dirs_next() -> Option<PathBuf> {
         return Some(profile);
     }
     None
+}
+
+/// Get the path to the logs directory
+#[command]
+pub fn get_log_dir() -> Option<String> {
+    crate::obd::dev_log::get_log_dir_path()
+        .map(|p| p.to_string_lossy().to_string())
+}
+
+/// Open the logs folder in file manager
+#[command]
+pub fn open_log_folder() -> Result<(), String> {
+    let log_dir = crate::obd::dev_log::get_log_dir_path()
+        .ok_or_else(|| "Cannot get log directory".to_string())?;
+
+    dev_log::log_info("settings", &format!("Opening logs folder: {}", log_dir.to_string_lossy()));
+
+    #[cfg(target_os = "macos")]
+    std::process::Command::new("open").arg(&log_dir).spawn()
+        .map_err(|e| format!("Failed to open folder: {}", e))?;
+
+    #[cfg(target_os = "windows")]
+    std::process::Command::new("explorer").arg(&log_dir).spawn()
+        .map_err(|e| format!("Failed to open folder: {}", e))?;
+
+    #[cfg(target_os = "linux")]
+    std::process::Command::new("xdg-open").arg(&log_dir).spawn()
+        .map_err(|e| format!("Failed to open folder: {}", e))?;
+
+    Ok(())
 }

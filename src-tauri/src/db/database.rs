@@ -274,6 +274,8 @@ impl Database {
         if let Ok(baud) = self.get_setting("default_baud_rate") {
             if let Ok(v) = baud.parse() { settings.default_baud_rate = v; }
         }
+        if let Ok(theme) = self.get_setting("theme") { settings.theme = theme; }
+        if let Ok(auto_connect) = self.get_setting("auto_connect") { settings.auto_connect = auto_connect.parse().unwrap_or(false); }
         settings
     }
 
@@ -285,6 +287,18 @@ impl Database {
     pub fn save_setting(&self, key: &str, value: &str) -> Result<(), String> {
         self.conn.execute("INSERT OR REPLACE INTO settings (key, value) VALUES (?1, ?2)", params![key, value])
             .map_err(|e| format!("Failed to save setting: {}", e))?;
+        Ok(())
+    }
+
+    pub fn save_settings_batch(&self, settings: Vec<(&str, &str)>) -> Result<(), String> {
+        self.conn.execute_batch("BEGIN").map_err(|e| format!("Failed to begin: {}", e))?;
+        for (key, value) in settings {
+            if let Err(e) = self.conn.execute("INSERT OR REPLACE INTO settings (key, value) VALUES (?1, ?2)", params![key, value]) {
+                let _ = self.conn.execute_batch("ROLLBACK");
+                return Err(format!("Failed to save '{}': {}", key, e));
+            }
+        }
+        self.conn.execute_batch("COMMIT").map_err(|e| format!("Failed to commit: {}", e))?;
         Ok(())
     }
 

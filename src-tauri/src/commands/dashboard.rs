@@ -4,98 +4,10 @@ use crate::obd::demo::DemoConnection;
 use crate::obd::pid;
 use crate::obd::dev_log;
 use crate::commands::connection::{is_demo, with_real_connection};
+use super::dashboard_did::decode_did_value;
 
 use std::collections::{HashMap, VecDeque};
 use std::sync::Mutex;
-
-/// Decode DID value with heuristic formula based on the parameter name.
-/// Order matters: more specific terms are checked first to avoid false positives
-/// (e.g., "Battery Current" must match current before battery/voltage).
-fn decode_did_value(bytes: &[u8], name: &str) -> (f64, String) {
-    let raw = if bytes.len() >= 2 {
-        (bytes[0] as f64) * 256.0 + (bytes[1] as f64)
-    } else if bytes.len() == 1 {
-        bytes[0] as f64
-    } else {
-        return (0.0, String::new());
-    };
-
-    let name_lower = name.to_lowercase();
-
-    // === Most specific terms first ===
-
-    // RPM (check before generic terms)
-    if name_lower.contains("rpm") || name_lower.contains("régime") || name_lower.contains("regime") {
-        return (raw / 4.0, "RPM".into());
-    }
-
-    // Speed (check before distance/km)
-    if name_lower.contains("speed") || name_lower.contains("vitesse") || name_lower.contains("km/h") {
-        return (raw, "km/h".into());
-    }
-
-    // Temperature (check before voltage — "temp" is unambiguous)
-    if name_lower.contains("temp") || name_lower.contains("température") || name_lower.contains("°c") {
-        if raw > 1000.0 {
-            return (raw / 10.0 - 40.0, "°C".into());
-        }
-        return (raw - 40.0, "°C".into());
-    }
-
-    // Current/Amperage (check BEFORE voltage — "Battery Current" must match here, not voltage)
-    if name_lower.contains("current") || name_lower.contains("courant") || name_lower.contains("ampère") || name_lower.contains("ampere") {
-        return (raw / 1000.0, "A".into());
-    }
-
-    // Pressure (check BEFORE percentage — "Charge Pressure" must match here, not %)
-    if name_lower.contains("press") || name_lower.contains("pression") || name_lower.contains("bar") {
-        if name_lower.contains("bar") {
-            return (raw / 1000.0, "bar".into());
-        }
-        return (raw, "kPa".into());
-    }
-
-    // Voltage (check after current and pressure)
-    if name_lower.contains("volt") || name_lower.contains("tension") || name_lower.contains("battery") || name_lower.contains("batterie") {
-        if raw > 1000.0 {
-            return (raw / 1000.0, "V".into());
-        }
-        return (raw / 100.0, "V".into());
-    }
-
-    // Percentage (check last among common types — "charge", "load" are ambiguous)
-    if name_lower.contains("%") || name_lower.contains("percent") || name_lower.contains("taux")
-        || name_lower.contains("throttle") || name_lower.contains("papillon")
-        || name_lower.contains("fuel level") || name_lower.contains("niveau") {
-        if bytes.len() == 1 {
-            return (raw * 100.0 / 255.0, "%".into());
-        }
-        return (raw * 100.0 / 65535.0, "%".into());
-    }
-    // "load" and "charge" only if no other category matched
-    if name_lower.contains("load") || name_lower.contains("charge") {
-        if bytes.len() == 1 {
-            return (raw * 100.0 / 255.0, "%".into());
-        }
-        return (raw * 100.0 / 65535.0, "%".into());
-    }
-
-    // Time (seconds or ms)
-    if name_lower.contains("time") || name_lower.contains("temps") || name_lower.contains("durée") || name_lower.contains("duration") {
-        if raw > 60000.0 {
-            return (raw / 1000.0, "s".into());
-        }
-        return (raw, "ms".into());
-    }
-
-    // Distance (km)
-    if name_lower.contains("distance") || name_lower.contains("km") || name_lower.contains("mile") {
-        return (raw, "km".into());
-    }
-
-    // Default: raw value, no unit
-    (raw, String::new())
-}
 
 static DEMO: Mutex<Option<DemoConnection>> = Mutex::new(None);
 
@@ -109,6 +21,16 @@ const MAX_PID_FAILURES: u32 = 3; // Skip PID after 3 consecutive failures
 // Discovered PIDs/DIDs — populated once by discover_vehicle_params, then used for polling
 static DISCOVERED_PIDS: Mutex<Option<Vec<u8>>> = Mutex::new(None);
 static DISCOVERED_DIDS: Mutex<Option<Vec<(String, String)>>> = Mutex::new(None); // (hex_id, name)
+
+// Discovery progress tracking (current, total, phase)
+static DISCOVERY_PROGRESS: Mutex<(u32, u32, String)> = Mutex::new((0, 0, String::new()));
+
+/// Update discovery progress
+#[allow(dead_code)]
+fn update_progress(current: u32, total: u32, phase: &str) {
+    let mut guard = DISCOVERY_PROGRESS.lock().unwrap_or_else(|e| e.into_inner());
+    *guard = (current, total, phase.to_string());
+}
 
 // Cache for DID info from SQLite DB — populated once per session, avoids per-poll DB queries
 // Key: DID hex string (e.g. "2282"), Value: (name_en, name_fr, ecu_name)
@@ -219,7 +141,19 @@ fn decode_and_record_history(
 
 /// Get current PID data — real or demo
 #[command]
-pub fn get_pid_data() -> Vec<PidValue> {
+pub async fn get_pid_data() -> Vec<PidValue> {
+    match tokio::task::spawn_blocking(|| {
+        get_pid_data_inner()
+    }).await {
+        Ok(data) => data,
+        Err(e) => {
+            dev_log::log_error("dashboard", &format!("get_pid_data task failed: {}", e));
+            Vec::new()
+        }
+    }
+}
+
+fn get_pid_data_inner() -> Vec<PidValue> {
     if is_demo() {
         dev_log::log_debug("dashboard", "Demo mode: returning simulated PID data");
         let mut demo = DEMO.lock().unwrap_or_else(|e| e.into_inner());
@@ -227,6 +161,12 @@ pub fn get_pid_data() -> Vec<PidValue> {
             *demo = Some(DemoConnection::new());
         }
         return demo.as_mut().map(|d| { d.refresh_lang(); d.get_pid_data() }).unwrap_or_default();
+    }
+
+    // Check if OBD is busy with another operation
+    if super::connection::is_obd_busy() {
+        dev_log::log_debug("dashboard", "OBD is busy, skipping PID poll");
+        return Vec::new();
     }
 
     dev_log::log_debug("dashboard", "Real mode: querying live PID data");
@@ -259,7 +199,7 @@ pub fn get_pid_data() -> Vec<PidValue> {
 
     let results = decode_and_record_history(&raw_results, now);
 
-    dev_log::log_info("dashboard", &format!(
+    dev_log::log_debug("dashboard", &format!(
         "PID poll: {} ok, {} failed, {} skipped (bitmap/blacklist)",
         raw_results.len(), fail_count, skip_count
     ));
@@ -277,9 +217,21 @@ pub fn get_all_pids() -> Vec<crate::models::PidDefinition> {
 
 /// Get extended PID data including manufacturer-specific DIDs
 #[command]
-pub fn get_pid_data_extended(manufacturer: String) -> Vec<PidValue> {
+pub async fn get_pid_data_extended(manufacturer: String) -> Vec<PidValue> {
+    match tokio::task::spawn_blocking(move || {
+        get_pid_data_extended_inner(manufacturer)
+    }).await {
+        Ok(data) => data,
+        Err(e) => {
+            dev_log::log_error("dashboard", &format!("get_pid_data_extended task failed: {}", e));
+            Vec::new()
+        }
+    }
+}
+
+fn get_pid_data_extended_inner(manufacturer: String) -> Vec<PidValue> {
     // Start with standard OBD-II PIDs
-    let mut results = get_pid_data();
+    let mut results = get_pid_data_inner();
 
     if is_demo() || manufacturer.is_empty() {
         dev_log::log_debug("dashboard", "Extended polling skipped: demo mode or empty manufacturer");
@@ -453,7 +405,12 @@ pub async fn discover_vehicle_params(manufacturer: String) -> serde_json::Value 
                 0x11, 0x1F, 0x2F, 0x33, 0x42, 0x46, 0x5C,
             ];
             let mut found = Vec::new();
+            let mut last_keepalive = std::time::Instant::now();
             for pid in &common_pids {
+                if last_keepalive.elapsed() > std::time::Duration::from_secs(4) {
+                    let _ = with_real_connection(|conn| { conn.tester_present(); Ok(()) });
+                    last_keepalive = std::time::Instant::now();
+                }
                 match with_real_connection(|conn| conn.query_pid(0x01, *pid)) {
                     Ok(_) => { found.push(*pid); }
                     Err(_) => {}
@@ -478,10 +435,16 @@ pub async fn discover_vehicle_params(manufacturer: String) -> serde_json::Value 
             dev_log::log_info("dashboard", &format!("Probing {} candidate manufacturer DIDs", all_dids.len()));
 
             let mut consecutive_failures = 0;
+            let mut last_keepalive = std::time::Instant::now();
             for (did_hex, did_name) in &all_dids {
                 if consecutive_failures >= 15 {
                     dev_log::log_warn("dashboard", "15 consecutive DID failures — stopping discovery");
                     break;
+                }
+
+                if last_keepalive.elapsed() > std::time::Duration::from_secs(4) {
+                    let _ = with_real_connection(|conn| { conn.tester_present(); Ok(()) });
+                    last_keepalive = std::time::Instant::now();
                 }
 
                 let did_id = match u16::from_str_radix(did_hex, 16).or_else(|_| u16::from_str_radix(did_hex, 10)) {
@@ -517,7 +480,10 @@ pub async fn discover_vehicle_params(manufacturer: String) -> serde_json::Value 
             "standardPids": standard_pids.len(),
             "manufacturerDids": did_count
         })
-    }).await.unwrap_or_else(|_| serde_json::json!({}))
+    }).await.unwrap_or_else(|e| {
+        dev_log::log_error("dashboard", &format!("discover_vehicle_params task failed: {}", e));
+        serde_json::json!({})
+    })
 }
 
 /// Reset the PID failure blacklist (call when reconnecting or switching vehicles)
@@ -529,21 +495,27 @@ pub fn reset_pid_blacklist() {
 }
 
 /// Clear both PID_HISTORY and PID_FAIL_COUNT statics (call on disconnect)
+/// Lock ordering: DID_INFO_CACHE → DISCOVERED_DIDS → DISCOVERED_PIDS → PID_FAIL_COUNT → PID_HISTORY
+/// This order matches get_pid_data_extended_inner to prevent deadlocks.
 pub fn clear_pid_history() {
-    let mut history_guard = PID_HISTORY.lock().unwrap_or_else(|e| e.into_inner());
-    *history_guard = None;
-
-    let mut fail_guard = PID_FAIL_COUNT.lock().unwrap_or_else(|e| e.into_inner());
-    *fail_guard = None;
-
-    let mut pids_guard = DISCOVERED_PIDS.lock().unwrap_or_else(|e| e.into_inner());
-    *pids_guard = None;
+    let mut cache_guard = DID_INFO_CACHE.lock().unwrap_or_else(|e| e.into_inner());
+    *cache_guard = None;
 
     let mut dids_guard = DISCOVERED_DIDS.lock().unwrap_or_else(|e| e.into_inner());
     *dids_guard = None;
 
-    let mut cache_guard = DID_INFO_CACHE.lock().unwrap_or_else(|e| e.into_inner());
-    *cache_guard = None;
+    let mut pids_guard = DISCOVERED_PIDS.lock().unwrap_or_else(|e| e.into_inner());
+    *pids_guard = None;
+
+    let mut fail_guard = PID_FAIL_COUNT.lock().unwrap_or_else(|e| e.into_inner());
+    *fail_guard = None;
+
+    let mut history_guard = PID_HISTORY.lock().unwrap_or_else(|e| e.into_inner());
+    *history_guard = None;
+
+    // Reset demo singleton so elapsed time is fresh on reconnect
+    let mut demo_guard = DEMO.lock().unwrap_or_else(|e| e.into_inner());
+    *demo_guard = None;
 
     dev_log::log_info("connection", "PID history and discovery data cleared");
 }
@@ -554,8 +526,35 @@ pub fn get_battery_voltage() -> Option<f64> {
     if is_demo() {
         return Some(14.1);
     }
+    if super::connection::is_obd_busy() {
+        return None;
+    }
     with_real_connection(|conn| {
         Ok(conn.get_voltage())
     }).unwrap_or(None)
 }
+
+/// Get current discovery progress
+#[command]
+pub fn get_discovery_progress() -> serde_json::Value {
+    let guard = DISCOVERY_PROGRESS.lock().unwrap_or_else(|e| e.into_inner());
+    let (current, total, phase) = guard.clone();
+    serde_json::json!({
+        "current": current,
+        "total": total,
+        "phase": phase,
+    })
+}
+
+/// Reset discovered parameters (call from connection when clearing cache)
+pub fn reset_discovered_params_inner() {
+    let mut pids_guard = DISCOVERED_PIDS.lock().unwrap_or_else(|e| e.into_inner());
+    *pids_guard = None;
+
+    let mut dids_guard = DISCOVERED_DIDS.lock().unwrap_or_else(|e| e.into_inner());
+    *dids_guard = None;
+
+    dev_log::log_info("dashboard", "Discovered parameters reset");
+}
+
 

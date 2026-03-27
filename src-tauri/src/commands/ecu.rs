@@ -7,17 +7,13 @@ use crate::obd::ecu_profiles;
 use crate::obd::advanced_ops;
 use crate::obd::dev_log;
 use crate::commands::connection::{is_demo, with_real_connection};
-
-use std::collections::HashMap;
+use crate::commands::ecu_scan::{
+    get_ecu_probes, probe_ecu_alive, read_ecu_dids, build_ecu_info
+};
 
 /// Get user's language from the global setting
 fn get_user_lang() -> String {
     super::connection::get_lang()
-}
-
-/// Helper to get bilingual ECU name
-fn ecu_name(lang: &str, fr: &str, en: &str) -> String {
-    if lang == "fr" { fr.to_string() } else { en.to_string() }
 }
 
 /// Map operation IDs to real UDS hex commands
@@ -33,124 +29,6 @@ fn resolve_operation_command(op_id: &str) -> Option<(&str, &str)> {
     }
 }
 
-/// ECU scan address definitions with discovery methods
-struct EcuProbe {
-    tx_addr: &'static str,
-    name_fr: &'static str,
-    name_en: &'static str,
-    /// DIDs to attempt reading (in order of priority)
-    dids: &'static [(&'static str, &'static str)],
-}
-
-/// Get all ECU addresses to probe — standard + manufacturer-specific
-fn get_ecu_probes() -> Vec<EcuProbe> {
-    vec![
-        // Standard OBD-II
-        EcuProbe { tx_addr: "7E0", name_fr: "Moteur (ECM)", name_en: "Engine (ECM)", dids: &[("22F190", "F190"), ("22F195", "F195"), ("22F191", "F191"), ("22F194", "F194"), ("22F18C", "F18C")] },
-        EcuProbe { tx_addr: "7E1", name_fr: "Transmission (TCM)", name_en: "Transmission (TCM)", dids: &[("22F190", "F190"), ("22F195", "F195"), ("22F191", "F191")] },
-        EcuProbe { tx_addr: "7E2", name_fr: "ABS/ESP", name_en: "ABS/ESP", dids: &[("22F190", "F190"), ("22F195", "F195"), ("22F191", "F191")] },
-        EcuProbe { tx_addr: "7E3", name_fr: "Airbag (SRS)", name_en: "Airbag (SRS)", dids: &[("22F190", "F190"), ("22F195", "F195")] },
-        EcuProbe { tx_addr: "7E4", name_fr: "Contrôle carrosserie (BCM)", name_en: "Body Control (BCM)", dids: &[("22F190", "F190"), ("22F195", "F195"), ("22F191", "F191")] },
-        EcuProbe { tx_addr: "7E5", name_fr: "Tableau de bord", name_en: "Instrument Cluster", dids: &[("22F190", "F190"), ("22F195", "F195"), ("22F18C", "F18C")] },
-        EcuProbe { tx_addr: "7E6", name_fr: "Climatisation (HVAC)", name_en: "HVAC", dids: &[("22F190", "F190"), ("22F195", "F195")] },
-        EcuProbe { tx_addr: "7E7", name_fr: "Contrôleur hybride/EV", name_en: "Hybrid/EV Controller", dids: &[("22F190", "F190"), ("22F195", "F195")] },
-        // PSA/Stellantis extended
-        EcuProbe { tx_addr: "75D", name_fr: "BSI (Boîtier Servitudes Intelligent)", name_en: "BSI (Body Systems Interface)", dids: &[("22F190", "F190"), ("22F18C", "F18C"), ("22F195", "F195"), ("22F191", "F191")] },
-        EcuProbe { tx_addr: "6A8", name_fr: "Injection/Moteur (PSA)", name_en: "Injection/Engine (PSA)", dids: &[("22F190", "F190"), ("22F194", "F194"), ("22F195", "F195")] },
-        EcuProbe { tx_addr: "6AD", name_fr: "ABS/ESP (PSA)", name_en: "ABS/ESP (PSA)", dids: &[("22F190", "F190"), ("22F195", "F195")] },
-        EcuProbe { tx_addr: "76D", name_fr: "Climatisation (PSA)", name_en: "Climate Control (PSA)", dids: &[("22F190", "F190"), ("22F195", "F195")] },
-        EcuProbe { tx_addr: "772", name_fr: "Capteurs de stationnement", name_en: "Parking Sensors", dids: &[("22F190", "F190"), ("22F195", "F195")] },
-        EcuProbe { tx_addr: "734", name_fr: "Tableau de bord (PSA)", name_en: "Instrument Panel (PSA)", dids: &[("22F190", "F190"), ("22F195", "F195")] },
-        EcuProbe { tx_addr: "7A8", name_fr: "Radio/Audio", name_en: "Radio/Audio", dids: &[("22F190", "F190"), ("22F195", "F195")] },
-        EcuProbe { tx_addr: "752", name_fr: "Module de service", name_en: "Service Module", dids: &[("22F190", "F190"), ("22F195", "F195")] },
-        // VAG extended
-        EcuProbe { tx_addr: "714", name_fr: "Direction", name_en: "Steering", dids: &[("22F190", "F190"), ("22F191", "F191")] },
-        EcuProbe { tx_addr: "710", name_fr: "Module confort", name_en: "Comfort Module", dids: &[("22F190", "F190")] },
-        EcuProbe { tx_addr: "740", name_fr: "Électronique porte (conducteur)", name_en: "Door Electronics (Driver)", dids: &[("22F190", "F190")] },
-        // BMW/Toyota/Honda
-        EcuProbe { tx_addr: "7E8", name_fr: "Moteur (réponse)", name_en: "Engine (Response)", dids: &[("22F190", "F190")] },
-        EcuProbe { tx_addr: "7DF", name_fr: "Broadcast", name_en: "Broadcast", dids: &[] }, // Broadcast probe
-    ]
-}
-
-/// Probe whether an ECU is alive using 3-method discovery (header must already be set)
-fn probe_ecu_alive(probe: &EcuProbe) -> bool {
-    // === Method 1: TesterPresent (3E 00) — fastest, most reliable ===
-    if let Ok(response) = with_real_connection(|conn| conn.send_command_timeout("3E00", 2000)) {
-        if is_valid_ecu_response(&response) {
-            dev_log::log_debug("ecu", &format!("ECU at {} responded to TesterPresent", probe.tx_addr));
-            return true;
-        }
-    }
-
-    // === Method 2: StartDiagnosticSession (10 01) — wakes up sleeping ECUs ===
-    if let Ok(response) = with_real_connection(|conn| conn.send_command_timeout("1001", 3000)) {
-        if is_valid_ecu_response(&response) {
-            dev_log::log_debug("ecu", &format!("ECU at {} responded to DiagSession", probe.tx_addr));
-            return true;
-        }
-    }
-
-    // === Method 3: ReadDataByIdentifier F190 (VIN) — slower but universal ===
-    if let Ok(response) = with_real_connection(|conn| conn.send_command_timeout("22F190", 3000)) {
-        if is_valid_ecu_response(&response) {
-            dev_log::log_debug("ecu", &format!("ECU at {} responded to ReadDID F190", probe.tx_addr));
-            return true;
-        }
-    }
-
-    false
-}
-
-/// Read all DIDs for a probe — returns (dids_map, count)
-fn read_ecu_dids(probe: &EcuProbe) -> (HashMap<String, String>, usize) {
-    let mut dids = HashMap::new();
-    let mut dids_read = 0;
-
-    for (did_cmd, did_key) in probe.dids {
-        if let Ok(r) = with_real_connection(|conn| conn.send_command_timeout(did_cmd, 3000)) {
-            if r.contains("62") {
-                // Parse response robustly: find "62" position, skip "62" + 2 DID bytes
-                let tokens: Vec<&str> = r.split_whitespace().collect();
-                if let Some(pos) = tokens.iter().position(|t| *t == "62") {
-                    // Ensure we have at least "62" + DID_high + DID_low
-                    if pos + 3 <= tokens.len() {
-                        let bytes: Vec<u8> = tokens[pos+3..]
-                            .iter()
-                            .filter_map(|s| u8::from_str_radix(s, 16).ok())
-                            .collect();
-
-                        // Try to decode as ASCII string first
-                        if let Ok(val) = String::from_utf8(bytes.clone()) {
-                            let clean: String = val.chars().filter(|c| c.is_ascii_graphic() || *c == ' ').collect();
-                            if !clean.trim().is_empty() {
-                                dids.insert(did_key.to_string(), clean.trim().to_string());
-                                dids_read += 1;
-                                continue;
-                            }
-                        }
-
-                        // If not valid ASCII, store as hex
-                        if !bytes.is_empty() {
-                            let hex: String = bytes.iter().map(|b| format!("{:02X}", b)).collect::<Vec<_>>().join(" ");
-                            dids.insert(did_key.to_string(), hex);
-                            dids_read += 1;
-                        }
-                    } else {
-                        dev_log::log_warn("ecu", &format!("DID {} response too short at position {}", did_key, pos));
-                    }
-                } else {
-                    dev_log::log_warn("ecu", &format!("DID {} response contains '62' but not as token", did_key));
-                }
-            } else if r.contains("7F") {
-                // Negative response — DID not supported, skip silently
-                continue;
-            }
-        }
-    }
-
-    (dids, dids_read)
-}
 
 /// Scan all ECUs — probes standard OBD-II + manufacturer addresses with multi-method discovery
 #[command]
@@ -164,12 +42,17 @@ pub async fn scan_ecus() -> Vec<EcuInfo> {
 
         dev_log::log_info("ecu", "Real mode: starting ECU scan with multi-method discovery");
 
-        let lang = get_user_lang();
         let probes = get_ecu_probes();
         let mut ecus = Vec::new();
         let mut found_addresses = std::collections::HashSet::new();
+        let scan_start = std::time::Instant::now();
+        let max_scan_duration = std::time::Duration::from_secs(60);
 
         for probe in &probes {
+            if scan_start.elapsed() > max_scan_duration {
+                dev_log::log_warn("ecu", "ECU scan timeout (60s) — returning partial results");
+                break;
+            }
             // Skip broadcast address for individual ECU detection
             if probe.tx_addr == "7DF" {
                 continue;
@@ -195,20 +78,9 @@ pub async fn scan_ecus() -> Vec<EcuInfo> {
 
             // ECU is alive — now read DIDs to gather info
             let (dids, dids_read) = read_ecu_dids(probe);
+            dev_log::log_info("ecu", &format!("ECU at {}: {} DIDs read", probe.tx_addr, dids_read));
 
-            // Detect protocol for this ECU (might differ from main)
-            let ecu_protocol = with_real_connection(|conn| Ok(conn.protocol.clone()))
-                .unwrap_or_else(|_| "Unknown".to_string());
-
-            let probe_name = ecu_name(&lang, probe.name_fr, probe.name_en);
-            dev_log::log_info("ecu", &format!("ECU at {} ({}): {} DIDs read", probe.tx_addr, probe_name, dids_read));
-
-            ecus.push(EcuInfo {
-                name: probe_name,
-                address: format!("0x{}", probe.tx_addr),
-                protocol: ecu_protocol,
-                dids,
-            });
+            ecus.push(build_ecu_info(probe, &dids));
         }
 
         // Reset headers to broadcast
@@ -226,25 +98,14 @@ pub async fn scan_ecus() -> Vec<EcuInfo> {
     }).await.unwrap_or_default()
 }
 
-/// Check if a response indicates the ECU is alive (not NO DATA, not empty, not error)
-fn is_valid_ecu_response(response: &str) -> bool {
-    !response.is_empty()
-        && !response.contains("NO DATA")
-        && !response.contains("ERROR")
-        && !response.contains("UNABLE")
-        && !response.contains("?")
-        && !response.trim().is_empty()
-}
-
 /// Read DID from ECU — UDS Service 0x22 with improved error handling
 #[command]
-pub fn read_did(ecu_address: String, did: String) -> Result<String, String> {
+pub async fn read_did(ecu_address: String, did: String) -> Result<String, String> {
     // Validate DID format: 1-4 hex characters only (prevents injection attacks)
     if did.len() > 4 || did.is_empty() || !did.chars().all(|c| c.is_ascii_hexdigit()) {
         return Err("Invalid DID format: must be 1-4 hex characters".to_string());
     }
 
-    let cmd = format!("22{}", did.replace(" ", ""));
     let risk = SafetyGuard::check_command(&format!("22 {}", did));
     dev_log::log_info("ecu", &format!("Read DID safety check: {:?}", risk));
     if risk == RiskLevel::Blocked {
@@ -257,35 +118,38 @@ pub fn read_did(ecu_address: String, did: String) -> Result<String, String> {
         return Ok(format!("[DEMO] 62 {} 56 46 33 4C 43 42", did));
     }
 
-    dev_log::log_info("ecu", &format!("Reading DID {} from ECU {}", did, ecu_address));
-    let addr = ecu_address.replace("0x", "");
+    tokio::task::spawn_blocking(move || {
+        let cmd = format!("22{}", did.replace(" ", ""));
+        dev_log::log_info("ecu", &format!("Reading DID {} from ECU {}", did, ecu_address));
+        let addr = ecu_address.replace("0x", "");
 
-    // Set ECU header
-    let _ = with_real_connection(|conn| conn.set_ecu_header(&addr));
+        // Set ECU header
+        let _ = with_real_connection(|conn| conn.set_ecu_header(&addr));
 
-    // Send TesterPresent to wake up ECU before DID read
-    let _ = with_real_connection(|conn| { conn.tester_present(); Ok(()) });
+        // Send TesterPresent to wake up ECU before DID read
+        let _ = with_real_connection(|conn| { conn.tester_present(); Ok(()) });
 
-    // Read DID with extended timeout (DIDs can be slow on some ECUs)
-    let result = with_real_connection(|conn| conn.send_command_timeout(&cmd, 5000));
+        // Read DID with extended timeout (DIDs can be slow on some ECUs)
+        let result = with_real_connection(|conn| conn.send_command_timeout(&cmd, 5000));
 
-    // Reset headers
-    let _ = with_real_connection(|conn| conn.reset_headers());
+        // Reset headers
+        let _ = with_real_connection(|conn| conn.reset_headers());
 
-    match result {
-        Ok(r) => {
-            if r.contains("NO DATA") {
-                Err(format!("DID {} not supported by ECU {}", did, ecu_address))
-            } else if r.contains("7F") {
-                // Parse negative response code
-                let nrc = parse_negative_response(&r);
-                Err(format!("DID {} error: {}", did, nrc))
-            } else {
-                Ok(r)
+        match result {
+            Ok(r) => {
+                if r.contains("NO DATA") {
+                    Err(format!("DID {} not supported by ECU {}", did, ecu_address))
+                } else if r.contains("7F") {
+                    // Parse negative response code
+                    let nrc = parse_negative_response(&r);
+                    Err(format!("DID {} error: {}", did, nrc))
+                } else {
+                    Ok(r)
+                }
             }
+            Err(e) => Err(e),
         }
-        Err(e) => Err(e),
-    }
+    }).await.map_err(|e| format!("Task error: {}", e))?
 }
 
 /// Helper to get bilingual NRC description
@@ -334,73 +198,75 @@ fn parse_negative_response(response: &str) -> String {
 
 /// Get OBD monitor statuses — Mode 01 PID 01, with retry and wake-up
 #[command]
-pub fn get_monitors() -> Vec<MonitorStatus> {
-    if is_demo() {
-        dev_log::log_debug("ecu", "Demo mode: returning simulated monitor statuses");
-        return DemoConnection::get_monitors();
-    }
+pub async fn get_monitors() -> Vec<MonitorStatus> {
+    tokio::task::spawn_blocking(|| {
+        if is_demo() {
+            dev_log::log_debug("ecu", "Demo mode: returning simulated monitor statuses");
+            return DemoConnection::get_monitors();
+        }
 
-    dev_log::log_info("ecu", "Real mode: reading Mode 01 PID 01 for monitor statuses");
+        dev_log::log_info("ecu", "Real mode: reading Mode 01 PID 01 for monitor statuses");
 
-    // Try up to 2 times — first attempt may fail if ECU is asleep
-    let response = match with_real_connection(|conn| conn.query_pid(0x01, 0x01)) {
-        Ok(bytes) if bytes.len() >= 4 => {
-            dev_log::log_rx("0101", &format!("{:02X?}", bytes));
-            bytes
-        },
-        _ => {
-            // Retry after wake-up
-            dev_log::log_warn("ecu", "PID 01 failed, trying wake-up + retry...");
-            let _ = with_real_connection(|conn| { conn.tester_present(); Ok(()) });
-            // Small delay for ECU to wake up (acceptable in sync command running on thread pool)
-            std::thread::sleep(std::time::Duration::from_millis(300));
+        // Try up to 2 times — first attempt may fail if ECU is asleep
+        let response = match with_real_connection(|conn| conn.query_pid(0x01, 0x01)) {
+            Ok(bytes) if bytes.len() >= 4 => {
+                dev_log::log_rx("0101", &format!("{:02X?}", bytes));
+                bytes
+            },
+            _ => {
+                // Retry after wake-up
+                dev_log::log_warn("ecu", "PID 01 failed, trying wake-up + retry...");
+                let _ = with_real_connection(|conn| { conn.tester_present(); Ok(()) });
+                // Small delay for ECU to wake up (acceptable in sync command running on thread pool)
+                std::thread::sleep(std::time::Duration::from_millis(300));
 
-            match with_real_connection(|conn| conn.query_pid(0x01, 0x01)) {
-                Ok(bytes) if bytes.len() >= 4 => bytes,
-                _ => {
-                    dev_log::log_warn("ecu", "Mode 01 PID 01 read failed after retry");
-                    return Vec::new();
+                match with_real_connection(|conn| conn.query_pid(0x01, 0x01)) {
+                    Ok(bytes) if bytes.len() >= 4 => bytes,
+                    _ => {
+                        dev_log::log_warn("ecu", "Mode 01 PID 01 read failed after retry");
+                        return Vec::new();
+                    }
                 }
             }
+        };
+
+        let b = response[1];
+        let c = response[2];
+        let d = response[3];
+
+        let mut monitors = Vec::new();
+
+        // Continuous monitors (byte B)
+        for (bit_sup, bit_comp, key, desc, spec) in [
+            (0x01, 0x10, "monitors.misfire", "monitors.misfireDesc", "monitors.misfireSpec"),
+            (0x02, 0x20, "monitors.fuelSystem", "monitors.fuelSystemDesc", "monitors.fuelSystemSpec"),
+            (0x04, 0x40, "monitors.components", "monitors.componentsDesc", "monitors.componentsSpec"),
+        ] {
+            monitors.push(MonitorStatus {
+                name_key: key.into(), available: b & bit_sup != 0, complete: b & bit_comp == 0,
+                description_key: Some(desc.into()), specification_key: Some(spec.into()),
+            });
         }
-    };
 
-    let b = response[1];
-    let c = response[2];
-    let d = response[3];
+        // Non-continuous monitors (bytes C and D)
+        for (bit, key, desc, spec) in [
+            (0x01, "monitors.catalystB1", "monitors.catalystB1Desc", "monitors.catalystB1Spec"),
+            (0x02, "monitors.o2HeaterB1S1", "monitors.o2HeaterB1S1Desc", "monitors.o2HeaterB1S1Spec"),
+            (0x04, "monitors.evap", "monitors.evapDesc", "monitors.evapSpec"),
+            (0x08, "monitors.secondaryAir", "monitors.secondaryAirDesc", "monitors.secondaryAirSpec"),
+            (0x10, "monitors.ac", "monitors.acDesc", "monitors.acSpec"),
+            (0x20, "monitors.o2B1S1", "monitors.o2B1S1Desc", "monitors.o2B1S1Spec"),
+            (0x40, "monitors.egrVvt", "monitors.egrVvtDesc", "monitors.egrVvtSpec"),
+            (0x80, "monitors.catalystB2", "monitors.catalystB2Desc", "monitors.catalystB2Spec"),
+        ] {
+            monitors.push(MonitorStatus {
+                name_key: key.into(), available: c & bit != 0, complete: d & bit == 0,
+                description_key: Some(desc.into()), specification_key: Some(spec.into()),
+            });
+        }
 
-    let mut monitors = Vec::new();
-
-    // Continuous monitors (byte B)
-    for (bit_sup, bit_comp, key, desc, spec) in [
-        (0x01, 0x10, "monitors.misfire", "monitors.misfireDesc", "monitors.misfireSpec"),
-        (0x02, 0x20, "monitors.fuelSystem", "monitors.fuelSystemDesc", "monitors.fuelSystemSpec"),
-        (0x04, 0x40, "monitors.components", "monitors.componentsDesc", "monitors.componentsSpec"),
-    ] {
-        monitors.push(MonitorStatus {
-            name_key: key.into(), available: b & bit_sup != 0, complete: b & bit_comp == 0,
-            description_key: Some(desc.into()), specification_key: Some(spec.into()),
-        });
-    }
-
-    // Non-continuous monitors (bytes C and D)
-    for (bit, key, desc, spec) in [
-        (0x01, "monitors.catalystB1", "monitors.catalystB1Desc", "monitors.catalystB1Spec"),
-        (0x02, "monitors.o2HeaterB1S1", "monitors.o2HeaterB1S1Desc", "monitors.o2HeaterB1S1Spec"),
-        (0x04, "monitors.evap", "monitors.evapDesc", "monitors.evapSpec"),
-        (0x08, "monitors.secondaryAir", "monitors.secondaryAirDesc", "monitors.secondaryAirSpec"),
-        (0x10, "monitors.ac", "monitors.acDesc", "monitors.acSpec"),
-        (0x20, "monitors.o2B1S1", "monitors.o2B1S1Desc", "monitors.o2B1S1Spec"),
-        (0x40, "monitors.egrVvt", "monitors.egrVvtDesc", "monitors.egrVvtSpec"),
-        (0x80, "monitors.catalystB2", "monitors.catalystB2Desc", "monitors.catalystB2Spec"),
-    ] {
-        monitors.push(MonitorStatus {
-            name_key: key.into(), available: c & bit != 0, complete: d & bit == 0,
-            description_key: Some(desc.into()), specification_key: Some(spec.into()),
-        });
-    }
-
-    monitors
+        monitors
+    }).await.unwrap_or_default()
 }
 
 /// Execute a UDS command against an ECU: set header → tester_present → send → log_rx → reset headers
@@ -478,25 +344,97 @@ pub fn check_anomalies(pid_data: Vec<PidValue>) -> Vec<anomaly::Anomaly> {
 
 #[command]
 pub fn get_generic_ecus() -> Vec<ecu_profiles::GenericEcu> {
+    dev_log::log_debug("ecu", "get_generic_ecus");
     ecu_profiles::get_generic_ecus()
 }
 
 #[command]
 pub fn get_manufacturer_dids(manufacturer: String) -> Vec<(String, String)> {
+    dev_log::log_debug("ecu", &format!("get_manufacturer_dids: manufacturer='{}'", manufacturer));
     ecu_profiles::get_dids_for_manufacturer(&manufacturer)
 }
 
 #[command]
 pub fn get_all_manufacturer_dids() -> std::collections::HashMap<String, Vec<(String, String)>> {
+    dev_log::log_debug("ecu", "get_all_manufacturer_dids");
     ecu_profiles::get_all_manufacturer_dids()
 }
 
 #[command]
 pub fn get_advanced_categories() -> Vec<advanced_ops::Category> {
+    dev_log::log_debug("ecu", "get_advanced_categories");
     advanced_ops::get_categories()
 }
 
 #[command]
 pub fn get_advanced_manufacturer_groups() -> std::collections::HashMap<String, advanced_ops::ManufacturerGroup> {
+    dev_log::log_debug("ecu", "get_advanced_manufacturer_groups");
     advanced_ops::get_manufacturer_groups()
+}
+
+/// Get extended vehicle information (CalID, CVN, ECU Name) via Mode 09 PIDs
+#[command]
+pub async fn get_vehicle_info_extended() -> Result<crate::models::VehicleInfoExtended, String> {
+    tokio::task::spawn_blocking(move || {
+        let mut result = crate::models::VehicleInfoExtended { calid: None, cvn: None, ecu_name: None };
+
+        if is_demo() {
+            result.calid = Some("DEMO_CALID_001".to_string());
+            result.cvn = Some("A1B2C3D4".to_string());
+            result.ecu_name = Some("Demo ECU".to_string());
+            return Ok(result);
+        }
+
+        // Mode 09 PID 04 - Calibration ID
+        if let Ok(resp) = with_real_connection(|conn| {
+            conn.send_command_timeout("0904", 3000)
+        }) {
+            let cleaned = resp.lines()
+                .filter(|l| !l.starts_with("SEARCHING") && !l.contains("NO DATA"))
+                .collect::<Vec<_>>().join(" ");
+            let bytes: Vec<u8> = cleaned.split_whitespace()
+                .filter_map(|s| u8::from_str_radix(s, 16).ok())
+                .collect();
+            // Skip response header bytes (49 04 XX)
+            let data_bytes: Vec<u8> = bytes.iter().copied()
+                .skip_while(|&b| b != 0x49).skip(3)
+                .filter(|&b| b >= 0x20 && b <= 0x7E)
+                .collect();
+            if !data_bytes.is_empty() {
+                result.calid = Some(String::from_utf8_lossy(&data_bytes).trim().to_string());
+            }
+        }
+
+        // Mode 09 PID 06 - CVN
+        if let Ok(resp) = with_real_connection(|conn| {
+            conn.send_command_timeout("0906", 3000)
+        }) {
+            let bytes: Vec<u8> = resp.split_whitespace()
+                .filter_map(|s| u8::from_str_radix(s, 16).ok())
+                .collect();
+            let hex: Vec<String> = bytes.iter().skip(3).map(|b| format!("{:02X}", b)).collect();
+            if !hex.is_empty() {
+                result.cvn = Some(hex.join(""));
+            }
+        }
+
+        // Mode 09 PID 0A - ECU Name
+        if let Ok(resp) = with_real_connection(|conn| {
+            conn.send_command_timeout("090A", 3000)
+        }) {
+            let bytes: Vec<u8> = resp.split_whitespace()
+                .filter_map(|s| u8::from_str_radix(s, 16).ok())
+                .collect();
+            let data_bytes: Vec<u8> = bytes.iter().copied()
+                .skip(3)
+                .filter(|&b| b >= 0x20 && b <= 0x7E)
+                .collect();
+            if !data_bytes.is_empty() {
+                result.ecu_name = Some(String::from_utf8_lossy(&data_bytes).trim().to_string());
+            }
+        }
+
+        dev_log::log_info("ecu", &format!("Vehicle info extended: calid={:?}, cvn={:?}, ecu_name={:?}", result.calid, result.cvn, result.ecu_name));
+        Ok(result)
+    }).await.unwrap_or_else(|_| Ok(crate::models::VehicleInfoExtended { calid: None, cvn: None, ecu_name: None }))
 }

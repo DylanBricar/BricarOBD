@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback, memo } from "react";
 import { useTranslation } from "react-i18next";
 import {
   Plug,
@@ -13,16 +13,24 @@ import {
   Terminal,
   Menu,
   X,
+  Sun,
+  Moon,
+  Monitor,
+  Gauge,
 } from "lucide-react";
 import type { LucideProps } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { ConnectionStatus } from "@/stores/connection";
+import { useThemeStore, type ThemeMode } from "@/stores/theme";
+import { useUnitSystem } from "@/lib/units";
 
 interface SidebarProps {
   activePage: string;
   onNavigate: (page: string) => void;
   connectionStatus: ConnectionStatus;
+  canNavigate?: boolean;
   onToggleDevConsole?: () => void;
+  dtcCount?: number;
 }
 
 interface NavItem {
@@ -46,16 +54,18 @@ const advancedItems: NavItem[] = [
   { id: "advanced", icon: Wrench, labelKey: "nav.advanced", danger: true },
 ];
 
-function NavItemButton({
+const NavItemButton = memo(function NavItemButton({
   item,
   isActive,
   isDisabled,
   onClick,
+  badge,
 }: {
   item: NavItem;
   isActive: boolean;
   isDisabled: boolean;
   onClick: () => void;
+  badge?: number;
 }) {
   const { t } = useTranslation();
   const Icon = item.icon;
@@ -66,6 +76,7 @@ function NavItemButton({
       onClick={onClick}
       disabled={isDisabled}
       className={cn(
+        "relative",
         item.danger
           ? isActive
             ? "nav-item-danger-active"
@@ -78,22 +89,29 @@ function NavItemButton({
     >
       <Icon size={18} strokeWidth={1.8} />
       <span>{t(item.labelKey)}</span>
+      {badge && badge > 0 && (
+        <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[10px] font-bold rounded-full w-4 h-4 flex items-center justify-center">
+          {badge}
+        </span>
+      )}
     </button>
   );
-}
+});
 
-function NavItemsSection({
+const NavItemsSection = memo(function NavItemsSection({
   items,
   sectionLabelKey,
   activePage,
   isConnected,
   onNavigate,
+  dtcCount,
 }: {
   items: NavItem[];
   sectionLabelKey: string;
   activePage: string;
   isConnected: boolean;
   onNavigate: (page: string) => void;
+  dtcCount?: number;
 }) {
   const { t } = useTranslation();
 
@@ -105,7 +123,7 @@ function NavItemsSection({
       {items.map((item) => {
         const isActive = activePage === item.id;
         const isDisabled =
-          item.id === "connection" ? false : !isConnected;
+          item.id === "connection" || item.id === "history" ? false : !isConnected;
 
         return (
           <NavItemButton
@@ -114,18 +132,20 @@ function NavItemsSection({
             isActive={isActive}
             isDisabled={isDisabled}
             onClick={() => !isDisabled && onNavigate(item.id)}
+            badge={item.id === "dtc" ? dtcCount : undefined}
           />
         );
       })}
     </div>
   );
-}
+});
 
-export default function Sidebar({ activePage, onNavigate, connectionStatus, onToggleDevConsole }: SidebarProps) {
+export default function Sidebar({ activePage, onNavigate, connectionStatus, canNavigate, onToggleDevConsole, dtcCount }: SidebarProps) {
   const { t, i18n } = useTranslation();
-  const isConnected = connectionStatus === "connected" || connectionStatus === "demo";
+  const isConnected = canNavigate ?? (connectionStatus === "connected" || connectionStatus === "demo");
   const [mobileOpen, setMobileOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
+  const { system: unitSystem, setUnitSystem } = useUnitSystem();
 
   useEffect(() => {
     const handleResize = () => setIsMobile(window.innerWidth < 768);
@@ -137,16 +157,32 @@ export default function Sidebar({ activePage, onNavigate, connectionStatus, onTo
     i18n.changeLanguage(i18n.language === "fr" ? "en" : "fr");
   };
 
-  const handleNavigate = (page: string) => {
+  const { mode: themeMode, setThemeMode } = useThemeStore();
+
+  const cycleTheme = () => {
+    const order: ThemeMode[] = ["system", "dark", "light"];
+    const next = order[(order.indexOf(themeMode) + 1) % order.length];
+    setThemeMode(next);
+  };
+
+  const ThemeIcon = themeMode === "system" ? Monitor : themeMode === "dark" ? Moon : Sun;
+
+  const handleNavigate = useCallback((page: string) => {
     onNavigate(page);
     if (isMobile) setMobileOpen(false);
+  }, [onNavigate, isMobile]);
+
+  const toggleUnitSystem = () => {
+    setUnitSystem(unitSystem === "metric" ? "imperial" : "metric");
   };
 
   const sidebarContent = (
     <>
       {/* Logo */}
       <div className="px-2 py-3 border-b border-obd-border/30 flex justify-center">
-        <img src="/logo.svg" alt="BricarOBD" className="w-40 h-auto object-contain" />
+        <svg width="160" height="40" viewBox="0 0 160 40" className="text-obd-text" style={{ color: "currentColor" }}>
+          <text x="8" y="28" fontSize="24" fontWeight="bold" fill="currentColor">BricarOBD</text>
+        </svg>
       </div>
 
       {/* Main Nav */}
@@ -157,6 +193,7 @@ export default function Sidebar({ activePage, onNavigate, connectionStatus, onTo
           activePage={activePage}
           isConnected={isConnected}
           onNavigate={handleNavigate}
+          dtcCount={dtcCount}
         />
 
         <div className="pt-3">
@@ -178,6 +215,22 @@ export default function Sidebar({ activePage, onNavigate, connectionStatus, onTo
         >
           <Terminal size={14} strokeWidth={1.8} />
           <span className="text-[10px]">{t("nav.devConsole")}</span>
+        </button>
+        <button
+          onClick={toggleUnitSystem}
+          className="nav-item w-full justify-center"
+          title={t("nav.units")}
+        >
+          <Gauge size={16} strokeWidth={1.8} />
+          <span className="text-xs">{unitSystem === "metric" ? "km/h" : "mph"}</span>
+        </button>
+        <button
+          onClick={cycleTheme}
+          className="nav-item w-full justify-center"
+          title={t("nav.theme")}
+        >
+          <ThemeIcon size={16} strokeWidth={1.8} />
+          <span className="text-xs">{t(`nav.theme.${themeMode}`)}</span>
         </button>
         <button
           onClick={toggleLanguage}

@@ -1,5 +1,4 @@
 {
-  "$schema": "https://raw.githubusercontent.com/nicegram/nicegram-ios/main/nicegram-features/src/tauri.config.schema.json",
   "identifier": "default",
   "description": "Default capabilities for BricarOBD",
   "windows": ["main"],

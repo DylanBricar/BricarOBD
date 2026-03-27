@@ -50,48 +50,56 @@ pub fn search_operations(query: String, limit: Option<u32>) -> Result<Vec<serde_
 /// Get operations for a specific vehicle make
 #[command]
 pub fn get_vehicle_operations(vehicle: String, limit: Option<u32>) -> Result<Vec<serde_json::Value>, String> {
+    crate::obd::dev_log::log_debug("db", &format!("get_vehicle_operations: vehicle='{}', limit={}", vehicle, limit.unwrap_or(500)));
     with_db(|db| db.get_operations_for_vehicle(&vehicle, limit.unwrap_or(500)))
 }
 
 /// Get read operations for ECU + vehicle (Live Data / Dashboard)
 #[command]
 pub fn get_read_operations(ecu_name: String, vehicle: String) -> Result<Vec<serde_json::Value>, String> {
+    crate::obd::dev_log::log_debug("db", &format!("get_read_operations: ecu='{}', vehicle='{}'", ecu_name, vehicle));
     with_db(|db| db.get_read_operations(&ecu_name, &vehicle))
 }
 
 /// Get write operations for ECU + vehicle (Advanced page)
 #[command]
 pub fn get_write_operations(ecu_name: String, vehicle: String) -> Result<Vec<serde_json::Value>, String> {
+    crate::obd::dev_log::log_debug("db", &format!("get_write_operations: ecu='{}', vehicle='{}'", ecu_name, vehicle));
     with_db(|db| db.get_write_operations(&ecu_name, &vehicle))
 }
 
 /// Get all vehicle profiles
 #[command]
 pub fn get_vehicle_profiles() -> Result<Vec<String>, String> {
+    crate::obd::dev_log::log_debug("db", "get_vehicle_profiles");
     with_db(|db| db.get_vehicle_profiles())
 }
 
 /// Get ECUs for a vehicle profile
 #[command]
 pub fn get_profile_ecus(profile_name: String) -> Result<Vec<serde_json::Value>, String> {
+    crate::obd::dev_log::log_debug("db", &format!("get_profile_ecus: profile='{}'", profile_name));
     with_db(|db| db.get_profile_ecus(&profile_name))
 }
 
 /// Search ECU catalog
 #[command]
 pub fn search_ecu_catalog(query: String, limit: Option<u32>) -> Result<Vec<serde_json::Value>, String> {
+    crate::obd::dev_log::log_debug("db", &format!("search_ecu_catalog: query='{}', limit={}", query, limit.unwrap_or(50)));
     with_db(|db| db.search_ecu_catalog(&query, limit.unwrap_or(50)))
 }
 
 /// Get all sessions
 #[command]
 pub fn get_sessions_cmd() -> Result<Vec<serde_json::Value>, String> {
+    crate::obd::dev_log::log_debug("db", "get_sessions_cmd");
     with_db(|db| db.get_sessions())
 }
 
 /// Delete a session
 #[command]
 pub fn delete_session_cmd(id: i64) -> Result<(), String> {
+    crate::obd::dev_log::log_info("db", &format!("delete_session_cmd: id={}", id));
     with_db(|db| db.delete_session(id))
 }
 
@@ -103,13 +111,16 @@ pub fn save_session_cmd(
     model: String,
     dtc_count: i32,
     notes: String,
+    data: String,
 ) -> Result<i64, String> {
-    with_db(|db| db.save_session(&vin, &make, &model, dtc_count, &notes, ""))
+    crate::obd::dev_log::log_info("db", &format!("save_session_cmd: vin='{}', make='{}', model='{}', dtc_count={}", vin, make, model, dtc_count));
+    with_db(|db| db.save_session(&vin, &make, &model, dtc_count, &notes, &data))
 }
 
 /// Try to find a vehicle model name from the database
 #[command]
 pub fn find_vehicle_model(make: String) -> Option<String> {
+    crate::obd::dev_log::log_debug("db", &format!("find_vehicle_model: make='{}'", make));
     with_db(|db| Ok(db.find_vehicle_model(&make))).ok().flatten()
 }
 
@@ -121,6 +132,11 @@ pub fn find_vehicle_model_sync(make: &str) -> Option<String> {
 /// Sync helper for DID info lookup (used from dashboard.rs)
 pub fn get_did_info_sync(did: &str, vehicle: &str) -> Option<(String, String, String)> {
     with_db(|db| Ok(db.get_did_info(did, vehicle))).ok().flatten()
+}
+
+/// Sync helper for saving DTCs (used from dtc.rs)
+pub fn save_dtc_sync(code: &str, desc: &str, status: &str, source: &str, vin: &str) -> Result<(), String> {
+    with_db(|db| db.save_dtc(code, desc, status, source, vin))
 }
 
 /// Get distinct ECU names that have DTC operations for a vehicle

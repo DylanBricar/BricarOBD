@@ -66,7 +66,7 @@ impl DemoConnection {
             .map(|(pid, name, value, unit, min, max)| {
                 let history = self.history.entry(pid).or_insert_with(VecDeque::new);
                 history.push_back(value);
-                if history.len() > 60 {
+                if history.len() > 120 {
                     history.pop_front();
                 }
 
@@ -244,4 +244,145 @@ fn rand_f64() -> f64 {
         .unwrap_or_default()
         .subsec_nanos();
     (nanos % 1000) as f64 / 1000.0
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_get_dtcs_en() {
+        let dtcs = DemoConnection::get_dtcs("en");
+        assert_eq!(dtcs.len(), 2);
+        assert_eq!(dtcs[0].code, "P0440");
+        assert_eq!(dtcs[0].status, DtcStatus::Active);
+        assert_eq!(dtcs[1].code, "P0500");
+        assert_eq!(dtcs[1].status, DtcStatus::Pending);
+    }
+
+    #[test]
+    fn test_get_dtcs_fr() {
+        let dtcs = DemoConnection::get_dtcs("fr");
+        assert_eq!(dtcs.len(), 2);
+        assert_eq!(dtcs[0].code, "P0440");
+        assert_eq!(dtcs[1].code, "P0500");
+    }
+
+    #[test]
+    fn test_get_dtcs_have_descriptions() {
+        let dtcs = DemoConnection::get_dtcs("en");
+        for dtc in dtcs {
+            assert!(!dtc.description.is_empty());
+        }
+    }
+
+    #[test]
+    fn test_get_ecus_en() {
+        let ecus = DemoConnection::get_ecus("en");
+        assert_eq!(ecus.len(), 7);
+        assert_eq!(ecus[0].name, "Engine (ECM)");
+        assert_eq!(ecus[0].address, "0x7E0");
+    }
+
+    #[test]
+    fn test_get_ecus_fr() {
+        let ecus = DemoConnection::get_ecus("fr");
+        assert_eq!(ecus.len(), 7);
+        assert_eq!(ecus[0].name, "Moteur (ECM)");
+    }
+
+    #[test]
+    fn test_get_ecus_have_protocol() {
+        let ecus = DemoConnection::get_ecus("en");
+        for ecu in ecus {
+            assert!(!ecu.protocol.is_empty());
+            assert!(!ecu.address.is_empty());
+        }
+    }
+
+    #[test]
+    fn test_get_monitors() {
+        let monitors = DemoConnection::get_monitors();
+        assert_eq!(monitors.len(), 11);
+        assert!(!monitors[0].name_key.is_empty());
+    }
+
+    #[test]
+    fn test_get_monitors_completeness() {
+        let monitors = DemoConnection::get_monitors();
+        let available_count = monitors.iter().filter(|m| m.available).count();
+        assert!(available_count > 0);
+        let complete_count = monitors.iter().filter(|m| m.complete).count();
+        assert!(complete_count > 0);
+    }
+
+    #[test]
+    fn test_get_mode06_results_en() {
+        let results = DemoConnection::get_mode06_results("en");
+        assert_eq!(results.len(), 9);
+        assert!(!results[0].name.is_empty());
+    }
+
+    #[test]
+    fn test_get_mode06_results_fr() {
+        let results = DemoConnection::get_mode06_results("fr");
+        assert_eq!(results.len(), 9);
+    }
+
+    #[test]
+    fn test_get_mode06_results_have_limits() {
+        let results = DemoConnection::get_mode06_results("en");
+        for result in results {
+            assert!(result.min_limit <= result.max_limit);
+        }
+    }
+
+    #[test]
+    fn test_get_freeze_frame_en() {
+        let frame = DemoConnection::get_freeze_frame("en");
+        assert!(frame.is_some());
+        let frame = frame.unwrap();
+        assert_eq!(frame.dtc_code, "P0440");
+        assert!(!frame.pids.is_empty());
+    }
+
+    #[test]
+    fn test_get_freeze_frame_fr() {
+        let frame = DemoConnection::get_freeze_frame("fr");
+        assert!(frame.is_some());
+        let frame = frame.unwrap();
+        assert_eq!(frame.dtc_code, "P0440");
+    }
+
+    #[test]
+    fn test_get_freeze_frame_has_pids() {
+        let frame = DemoConnection::get_freeze_frame("en");
+        assert!(frame.is_some());
+        let frame = frame.unwrap();
+        assert!(frame.pids.len() > 0);
+        for pid in frame.pids {
+            assert!(pid.pid > 0);
+            assert!(!pid.name.is_empty());
+            assert!(!pid.unit.is_empty());
+        }
+    }
+
+    #[test]
+    fn test_demo_connection_new() {
+        let conn = DemoConnection::new();
+        assert!(!conn.lang.is_empty());
+    }
+
+    #[test]
+    fn test_demo_connection_get_pid_data() {
+        let mut conn = DemoConnection::new();
+        let pids = conn.get_pid_data();
+        assert!(!pids.is_empty());
+        for pid in pids {
+            assert!(pid.pid > 0);
+            assert!(!pid.name.is_empty());
+            assert!(!pid.unit.is_empty());
+            assert!(pid.min <= pid.max);
+        }
+    }
 }

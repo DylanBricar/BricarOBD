@@ -61,6 +61,12 @@ src-tauri/src/          # Rust backend
 - Serial reads in 256-byte chunks (not byte-by-byte)
 - 30ms inter-command delay for ELM327 recovery time
 
+## File Size Rule
+- **Maximum 400 lines per file** — split into modules/components when approaching this limit
+- React: extract sub-components to `components/` with clear props interfaces
+- Rust: extract to sibling modules with `pub use` re-exports
+- Never sacrifice readability for arbitrary line counts — tests in Rust can exceed 400 lines if they're for a single module
+
 ## Common Pitfalls to Avoid
 1. Blob URL downloads don't work in Tauri webview — use `invoke("save_csv_file")` instead
 2. `window.open()` doesn't work in Tauri — use anchor tag with `target="_blank"`

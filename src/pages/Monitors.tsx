@@ -1,30 +1,62 @@
+import { useState, useCallback, useMemo } from "react";
 import { useTranslation } from "react-i18next";
-import { MonitorCheck, CheckCircle2, XCircle, MinusCircle } from "lucide-react";
+import { MonitorCheck, CheckCircle2, XCircle, MinusCircle, RefreshCw } from "lucide-react";
 import type { MonitorStatus } from "@/stores/vehicle";
 import { cn } from "@/lib/utils";
 
 interface MonitorsProps {
   monitors: MonitorStatus[];
+  onRefresh?: () => Promise<void>;
 }
 
-export default function Monitors({ monitors }: MonitorsProps) {
+export default function Monitors({ monitors, onRefresh }: MonitorsProps) {
   const { t } = useTranslation();
+  const [isLoading, setIsLoading] = useState(false);
 
-  const completed = monitors.filter((m) => m.available && m.complete).length;
-  const incomplete = monitors.filter((m) => m.available && !m.complete).length;
-  const notAvailable = monitors.filter((m) => !m.available).length;
+  const handleRefresh = useCallback(async () => {
+    if (!onRefresh || isLoading) return;
+    setIsLoading(true);
+    try {
+      await onRefresh();
+    } finally {
+      setIsLoading(false);
+    }
+  }, [onRefresh, isLoading]);
+
+  const { completed, incomplete, notAvailable } = useMemo(() => {
+    return monitors.reduce(
+      (acc, m) => {
+        if (m.available && m.complete) acc.completed++;
+        else if (m.available && !m.complete) acc.incomplete++;
+        else if (!m.available) acc.notAvailable++;
+        return acc;
+      },
+      { completed: 0, incomplete: 0, notAvailable: 0 }
+    );
+  }, [monitors]);
 
   if (monitors.length === 0) {
     return (
       <div className="p-6 animate-slide-in">
-        <div className="flex items-center gap-3 mb-6">
-          <div className="w-10 h-10 rounded-xl bg-obd-accent/10 border border-obd-accent/20 flex items-center justify-center">
-            <MonitorCheck className="text-obd-accent" size={20} />
+        <div className="flex items-center justify-between gap-3 mb-6">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-obd-accent/10 border border-obd-accent/20 flex items-center justify-center">
+              <MonitorCheck className="text-obd-accent" size={20} />
+            </div>
+            <div>
+              <h2 className="text-lg font-semibold">{t("monitors.title")}</h2>
+              <p className="text-xs text-obd-text-muted">{t("monitors.emissionTestStatus")}</p>
+            </div>
           </div>
-          <div>
-            <h2 className="text-lg font-semibold">{t("monitors.title")}</h2>
-            <p className="text-xs text-obd-text-muted">{t("monitors.emissionTestStatus")}</p>
-          </div>
+          {onRefresh && (
+            <button
+              onClick={handleRefresh}
+              disabled={isLoading}
+              className="p-2 rounded-lg border border-obd-border hover:border-obd-accent/50 transition-colors disabled:opacity-50"
+            >
+              <RefreshCw size={16} className={cn(isLoading && "animate-spin")} />
+            </button>
+          )}
         </div>
         <div className="glass-card p-8 flex flex-col items-center justify-center gap-3">
           <MonitorCheck size={32} className="text-obd-text-muted opacity-20" />
@@ -36,15 +68,30 @@ export default function Monitors({ monitors }: MonitorsProps) {
 
   return (
     <div className="p-6 space-y-6 animate-slide-in">
-      <div className="flex items-center gap-3">
-        <div className="w-10 h-10 rounded-xl bg-obd-accent/10 border border-obd-accent/20 flex items-center justify-center">
-          <MonitorCheck className="text-obd-accent" size={20} />
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-obd-accent/10 border border-obd-accent/20 flex items-center justify-center">
+            <MonitorCheck className="text-obd-accent" size={20} />
+          </div>
+          <div>
+            <h2 className="text-lg font-semibold">{t("monitors.title")}</h2>
+            <p className="text-xs text-obd-text-muted">{t("monitors.emissionTestStatus")}</p>
+          </div>
         </div>
-        <div>
-          <h2 className="text-lg font-semibold">{t("monitors.title")}</h2>
-          <p className="text-xs text-obd-text-muted">{t("monitors.emissionTestStatus")}</p>
-        </div>
+        {onRefresh && (
+          <button
+            onClick={handleRefresh}
+            disabled={isLoading}
+            className="p-2 rounded-lg border border-obd-border hover:border-obd-accent/50 transition-colors disabled:opacity-50"
+          >
+            <RefreshCw size={16} className={cn(isLoading && "animate-spin")} />
+          </button>
+        )}
       </div>
+
+      {onRefresh && (
+        <p className="text-xs text-obd-text-muted">{t("monitors.refreshHint")}</p>
+      )}
 
       {/* Summary */}
       <div className="flex gap-4">

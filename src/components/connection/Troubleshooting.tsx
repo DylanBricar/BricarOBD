@@ -21,7 +21,7 @@ export default function Troubleshooting({ onClose }: TroubleshootingProps) {
         <ChevronUp size={14} className="text-obd-text-muted" />
       </button>
       <ol className="mt-3 space-y-1.5 list-decimal list-inside">
-        {[1, 2, 3, 4, 5, 6].map((n) => (
+        {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11].map((n) => (
           <li key={n} className="text-xs text-obd-text-muted">
             {t(`connection.troubleshoot.tip${n}`)}
           </li>

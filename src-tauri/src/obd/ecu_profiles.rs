@@ -107,7 +107,7 @@ pub fn get_manufacturer_ecu_map() -> HashMap<String, String> {
     let mut result = HashMap::new();
 
     for (make, value) in &ECU_DATABASE.maps.manufacturer_ecu_map {
-        result.insert(make.clone(), format!("{:?}", value));
+        result.insert(make.clone(), value.to_string());
     }
 
     result
@@ -117,7 +117,7 @@ pub fn get_manufacturer_did_map() -> HashMap<String, String> {
     let mut result = HashMap::new();
 
     for (make, value) in &ECU_DATABASE.maps.manufacturer_did_map {
-        result.insert(make.clone(), format!("{:?}", value));
+        result.insert(make.clone(), value.to_string());
     }
 
     result

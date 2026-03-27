@@ -1,26 +1,32 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useTranslation } from "react-i18next";
-import {
-  Plug,
-  RefreshCw,
-  Radio,
-  ChevronDown,
-  Wifi,
-  Car,
-  KeyRound,
-  Fingerprint,
-  Clock,
-  Smartphone,
-  X,
-  AlertTriangle,
-} from "lucide-react";
+import { Plug, RefreshCw, Loader2, Wifi } from "lucide-react";
+import { cn } from "@/lib/utils";
 import WiFiSettings from "@/components/connection/WiFiSettings";
 import ManualVinInput from "@/components/connection/ManualVinInput";
 import Troubleshooting from "@/components/connection/Troubleshooting";
-import { cn } from "@/lib/utils";
+import VinHistoryPanel from "@/components/connection/VinHistoryPanel";
+import DiscoveryStatus from "@/components/connection/DiscoveryStatus";
+import ConnectionTypeSelector from "@/components/connection/ConnectionTypeSelector";
+import UsbConfiguration from "@/components/connection/UsbConfiguration";
+import DemoModeButton from "@/components/connection/DemoModeButton";
+import VehicleInfoCard from "@/components/connection/VehicleInfoCard";
 import { useToast } from "@/hooks/useToast";
 import { Toast } from "@/components/Toast";
 import type { ConnectionStatus, VehicleInfo } from "@/stores/connection";
+
+/** Android USB Serial bridge exposed by Kotlin via WebView JavaScript interface. */
+interface AndroidUsbBridge {
+  listDevices(): string;
+  requestPermission(deviceId: number): boolean;
+  startBridge(deviceId: number, baudRate: number): string;
+  stopBridge(): void;
+  isRunning(): boolean;
+}
+
+function getAndroidUsb(): AndroidUsbBridge | null {
+  return (window as unknown as { AndroidUsb?: AndroidUsbBridge }).AndroidUsb ?? null;
+}
 
 interface ConnectionProps {
   status: ConnectionStatus;
@@ -34,6 +40,11 @@ interface ConnectionProps {
   onConnectWifi: (host: string, port: number) => Promise<void>;
   onPortChange: (port: string) => void;
   onBaudRateChange: (baud: number) => void;
+  onScanPorts: () => void;
+  discoveryProgress: number;
+  isDiscoveryComplete: boolean;
+  hasVinCache: boolean;
+  onClearCache: () => Promise<void>;
   onVehicleUpdate?: (vehicle: VehicleInfo) => void;
 }
 
@@ -60,8 +71,6 @@ function saveVinHistory(entries: VinHistoryEntry[]) {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(entries));
 }
 
-const baudRates = [9600, 38400, 115200, 230400, 500000];
-
 
 export default function Connection({
   status,
@@ -75,13 +84,21 @@ export default function Connection({
   onConnectWifi,
   onPortChange,
   onBaudRateChange,
+  onScanPorts,
+  discoveryProgress,
+  isDiscoveryComplete,
+  hasVinCache,
+  onClearCache,
   onVehicleUpdate,
 }: ConnectionProps) {
   const { t, i18n } = useTranslation();
   const [manualVin, setManualVin] = useState("");
   const [vinHistory, setVinHistory] = useState<VinHistoryEntry[]>(loadVinHistory);
   const { toast, showToast, dismissToast } = useToast();
-  const [connectionType, setConnectionType] = useState<"usb" | "wifi">("usb");
+  const [connectionType, setConnectionType] = useState<"usb" | "wifi" | "usb_android">("usb");
+  const [usbDevices, setUsbDevices] = useState<Array<{ name: string; deviceId: string; vendorId: string; productId: string }>>([]);
+  const [selectedUsbDevice, setSelectedUsbDevice] = useState<string>("");
+  const isAndroid = !!getAndroidUsb();
   const [showTroubleshoot, setShowTroubleshoot] = useState(false);
   const isConnected = status === "connected" || status === "demo";
 
@@ -91,9 +108,9 @@ export default function Connection({
     if (status === "connected" || status === "demo") setShowTroubleshoot(false);
   }, [status]);
 
-  // Save vehicle to history when connected
+  // Save vehicle to history when connected (not for demo)
   useEffect(() => {
-    if (vehicle && vehicle.vin) {
+    if (vehicle && vehicle.vin && status !== "demo") {
       setVinHistory((prev) => {
         const filtered = prev.filter((e) => e.vin !== vehicle.vin);
         const updated = [
@@ -110,15 +127,72 @@ export default function Connection({
         return updated;
       });
     }
-  }, [vehicle]);
+  }, [vehicle?.vin, vehicle?.make, status]);
 
-  const removeFromHistory = (vin: string) => {
+  const handleScanUsb = useCallback(async () => {
+    try {
+      const android = getAndroidUsb();
+      if (!android) return;
+      const parsed = JSON.parse(android.listDevices());
+      if (!Array.isArray(parsed)) {
+        showToast(`${t("common.error")}: ${t("connection.invalidDeviceList")}`, "error");
+        return;
+      }
+      setUsbDevices(parsed);
+      if (parsed.length > 0 && !selectedUsbDevice) {
+        setSelectedUsbDevice(parsed[0].deviceId);
+      }
+      if (parsed.length === 0) {
+        showToast(t("connection.usbNone"), "error");
+      } else {
+        showToast(t("connection.usbFound", { count: parsed.length }));
+      }
+    } catch (e) {
+      showToast(`${t("common.error")}: ${e}`, "error");
+    }
+  }, [selectedUsbDevice, showToast, t]);
+
+  const handleConnectUsb = useCallback(async () => {
+    try {
+      const android = getAndroidUsb();
+      if (!android) return;
+      const devId = parseInt(selectedUsbDevice);
+      if (isNaN(devId)) return;
+
+      const hasPermission = android.requestPermission(devId);
+      if (!hasPermission) {
+        showToast(t("connection.usbPermission"), "error");
+        return;
+      }
+
+      showToast(t("connection.usbBridgeStarting"));
+      const result = JSON.parse(android.startBridge(devId, baudRate));
+      if (!result?.ok || typeof result.port !== "number") {
+        showToast(t("connection.usbBridgeError", { error: result?.error ?? "unknown" }), "error");
+        return;
+      }
+
+      showToast(t("connection.usbBridgeReady"));
+      await onConnectWifi("127.0.0.1", result.port);
+    } catch (e) {
+      showToast(`${t("common.error")}: ${e}`, "error");
+    }
+  }, [selectedUsbDevice, baudRate, onConnectWifi, showToast, t]);
+
+  const handleDisconnectUsb = useCallback(() => {
+    try {
+      getAndroidUsb()?.stopBridge();
+    } catch (_) { /* bridge may not be running */ }
+    onDisconnect();
+  }, [onDisconnect]);
+
+  const removeFromHistory = useCallback((vin: string) => {
     setVinHistory((prev) => {
       const updated = prev.filter((e) => e.vin !== vin);
       saveVinHistory(updated);
       return updated;
     });
-  };
+  }, []);
 
   return (
     <div className="p-6 space-y-6 animate-slide-in">
@@ -139,86 +213,29 @@ export default function Connection({
             {t("connection.configuration")}
           </h3>
 
-          {/* Connection Type Selector */}
-          <div className="flex gap-2">
-            <button
-              onClick={() => setConnectionType("usb")}
-              disabled={isConnected}
-              className={cn(
-                "flex-1 px-3 py-2 rounded-lg text-xs font-medium transition-all border",
-                connectionType === "usb"
-                  ? "bg-obd-accent text-white border-obd-accent"
-                  : "bg-obd-border/20 text-obd-text-muted border-obd-border/30 hover:bg-obd-border/40",
-                isConnected && "opacity-50 cursor-not-allowed"
-              )}
-            >
-              {t("connection.usb")}
-            </button>
-            <button
-              onClick={() => setConnectionType("wifi")}
-              disabled={isConnected}
-              className={cn(
-                "flex-1 px-3 py-2 rounded-lg text-xs font-medium transition-all border",
-                connectionType === "wifi"
-                  ? "bg-obd-accent text-white border-obd-accent"
-                  : "bg-obd-border/20 text-obd-text-muted border-obd-border/30 hover:bg-obd-border/40",
-                isConnected && "opacity-50 cursor-not-allowed"
-              )}
-            >
-              <Smartphone size={14} className="inline mr-1" />
-              {t("connection.wifi")}
-            </button>
-          </div>
+          <ConnectionTypeSelector
+            connectionType={connectionType}
+            onTypeChange={setConnectionType}
+            isConnected={isConnected}
+            isAndroid={isAndroid}
+            t={t}
+          />
 
           {/* USB Configuration */}
           {connectionType === "usb" && (
-            <>
-              {/* Port selector */}
-          <div className="space-y-1.5">
-            <label className="text-xs text-obd-text-muted">{t("connection.port")}</label>
-            <div className="relative">
-              <select
-                value={port}
-                onChange={(e) => onPortChange(e.target.value)}
-                disabled={isConnected}
-                className="input-field appearance-none pr-8"
-              >
-                <option value="">{t("connection.selectPort")}</option>
-                {availablePorts.map((p) => (
-                  <option key={p} value={p}>{p}</option>
-                ))}
-                {availablePorts.length === 0 && (
-                  <option disabled>{t("connection.noPort")}</option>
-                )}
-              </select>
-              <ChevronDown
-                size={14}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-obd-text-muted pointer-events-none"
-              />
-            </div>
-          </div>
-
-                  {/* Baud rate */}
-              <div className="space-y-1.5">
-                <label className="text-xs text-obd-text-muted">{t("connection.baudRate")}</label>
-                <div className="relative">
-                  <select
-                    value={baudRate}
-                    onChange={(e) => onBaudRateChange(Number(e.target.value))}
-                    disabled={isConnected}
-                    className="input-field appearance-none pr-8"
-                  >
-                    {baudRates.map((br) => (
-                      <option key={br} value={br}>{br.toLocaleString()}</option>
-                    ))}
-                  </select>
-                  <ChevronDown
-                    size={14}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-obd-text-muted pointer-events-none"
-                  />
-                </div>
-              </div>
-            </>
+            <UsbConfiguration
+              port={port}
+              baudRate={baudRate}
+              isConnected={isConnected}
+              status={status}
+              availablePorts={availablePorts}
+              onPortChange={onPortChange}
+              onBaudRateChange={onBaudRateChange}
+              onScanPorts={onScanPorts}
+              onConnect={onConnect}
+              onDisconnect={onDisconnect}
+              t={t}
+            />
           )}
 
           {/* WiFi Configuration */}
@@ -226,38 +243,54 @@ export default function Connection({
             <WiFiSettings isConnected={isConnected} status={status} onConnectWifi={onConnectWifi} showToast={showToast} />
           )}
 
-          {/* Connect/Disconnect buttons (USB only — WiFi has its own in WiFiSettings) */}
-          {connectionType === "usb" && (
-            <div className="flex gap-3 pt-2">
-              {!isConnected ? (
+          {/* USB Android Configuration */}
+          {connectionType === "usb_android" && !isConnected && (
+            <div className="space-y-3">
+              <div className="flex gap-2">
                 <button
-                  onClick={onConnect}
-                  disabled={!port || status === "connecting"}
-                  className={cn(
-                    "btn-accent-solid flex-1 flex items-center justify-center gap-2",
-                    (!port || status === "connecting") && "opacity-50 cursor-not-allowed"
-                  )}
+                  onClick={handleScanUsb}
+                  className="btn-accent flex items-center gap-1.5 text-xs"
                 >
-                  {status === "connecting" ? (
-                    <RefreshCw size={16} className="animate-spin" />
-                  ) : (
-                    <Wifi size={16} />
-                  )}
-                  {status === "connecting"
-                    ? t("connection.connecting")
-                    : t("connection.connect")}
+                  <RefreshCw size={14} />
+                  {t("connection.usbScan")}
                 </button>
-              ) : (
-                <button
-                  onClick={onDisconnect}
-                  className="btn-danger flex-1 flex items-center justify-center gap-2"
-                >
-                  <Wifi size={16} />
-                  {t("connection.disconnect")}
-                </button>
+              </div>
+              {usbDevices.length > 0 && (
+                <>
+                  <div className="space-y-1.5">
+                    <label className="text-xs text-obd-text-muted">{t("connection.port")}</label>
+                    <select
+                      value={selectedUsbDevice}
+                      onChange={(e) => setSelectedUsbDevice(e.target.value)}
+                      className="input-field appearance-none"
+                    >
+                      {usbDevices.map((d) => (
+                        <option key={d.deviceId} value={d.deviceId}>
+                          {d.name} (VID:{d.vendorId})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <button
+                    onClick={handleConnectUsb}
+                    disabled={!selectedUsbDevice || status === "connecting"}
+                    className={cn(
+                      "btn-accent-solid w-full flex items-center justify-center gap-2",
+                      (!selectedUsbDevice || status === "connecting") && "opacity-50 cursor-not-allowed"
+                    )}
+                  >
+                    {status === "connecting" ? (
+                      <Loader2 size={16} className="animate-spin" />
+                    ) : (
+                      <Plug size={16} />
+                    )}
+                    {status === "connecting" ? t("connection.connecting") : t("connection.connect")}
+                  </button>
+                </>
               )}
             </div>
           )}
+
           {connectionType === "wifi" && isConnected && (
             <div className="flex gap-3 pt-2">
               <button
@@ -269,35 +302,29 @@ export default function Connection({
               </button>
             </div>
           )}
-
-          {/* Demo mode */}
-          <div className="pt-2 border-t border-obd-border/30">
-            <button
-              onClick={onDemoConnect}
-              disabled={isConnected}
-              className={cn(
-                "w-full flex items-center gap-3 p-3 rounded-lg transition-all",
-                "bg-obd-warning/5 border border-obd-warning/20 hover:bg-obd-warning/10",
-                isConnected && "opacity-30 cursor-not-allowed"
-              )}
-            >
-              <Radio size={18} className="text-obd-warning" />
-              <div className="text-left">
-                <p className="text-sm font-medium text-obd-warning">{t("connection.demo")}</p>
-                <p className="text-[10px] text-obd-text-muted">{t("connection.demoDesc")}</p>
-              </div>
-            </button>
-          </div>
-
-          {/* VIN not detected alert */}
-          {status === "connected" && vehicle && !vehicle.vin && (
-            <div className="flex items-start gap-3 p-3 rounded-lg bg-obd-warning/10 border border-obd-warning/30">
-              <AlertTriangle className="w-4 h-4 text-obd-warning mt-0.5 flex-shrink-0" />
-              <p className="text-xs text-obd-warning leading-relaxed">
-                {t("connection.vinNotDetected")}
-              </p>
+          {connectionType === "usb_android" && isConnected && (
+            <div className="flex gap-3 pt-2">
+              <button
+                onClick={handleDisconnectUsb}
+                className="btn-danger flex-1 flex items-center justify-center gap-2"
+              >
+                <Plug size={16} />
+                {t("connection.disconnect")}
+              </button>
             </div>
           )}
+
+          <DemoModeButton isConnected={isConnected} onClick={onDemoConnect} t={t} />
+
+          <DiscoveryStatus
+            discoveryProgress={discoveryProgress}
+            isDiscoveryComplete={isDiscoveryComplete}
+            status={status}
+            vehicle={vehicle}
+            hasVinCache={hasVinCache}
+            onClearCache={onClearCache}
+            t={t}
+          />
 
           {/* Manual VIN */}
           <ManualVinInput value={manualVin} onChange={setManualVin} onVehicleUpdate={onVehicleUpdate} showToast={showToast} />
@@ -305,80 +332,18 @@ export default function Connection({
 
         {/* Right column: Vehicle Info + VIN History */}
         <div className="space-y-6">
-          {/* Vehicle Info */}
-          <div className="glass-card p-5 space-y-4">
-            <h3 className="text-sm font-semibold text-obd-text-secondary uppercase tracking-wider">
-              {t("connection.vehicle")}
-            </h3>
-
-            {vehicle ? (
-              <div className="space-y-3">
-                <div className="p-4 rounded-lg bg-obd-accent/5 border border-obd-accent/15">
-                  <div className="flex items-center gap-3">
-                    <Car size={24} className="text-obd-accent" />
-                    <div>
-                      <p className="font-semibold text-obd-text">
-                        {vehicle.make} {vehicle.model}
-                      </p>
-                      <p className="text-xs text-obd-text-muted">{vehicle.year}</p>
-                    </div>
-                  </div>
-                </div>
-                <div className="space-y-2">
-                  <InfoRow icon={<Fingerprint size={14} />} label={t("connection.vin")} value={vehicle.vin} mono />
-                  <InfoRow icon={<Radio size={14} />} label={t("connection.protocol")} value={vehicle.protocol} />
-                  <InfoRow icon={<KeyRound size={14} />} label={t("connection.elmVersion")} value={vehicle.elmVersion} />
-                </div>
-              </div>
-            ) : (
-              <div className="flex flex-col items-center justify-center py-8 text-obd-text-muted">
-                <Car size={48} strokeWidth={1} className="mb-3 opacity-20" />
-                <p className="text-sm">{t("connection.disconnected")}</p>
-              </div>
-            )}
-
-            {status === "error" && (
-              <div className="p-3 rounded-lg bg-obd-danger/10 border border-obd-danger/20">
-                <p className="text-xs text-obd-danger">{t("connection.errorMessage")}</p>
-              </div>
-            )}
-          </div>
+          <VehicleInfoCard vehicle={vehicle} status={status} t={t} />
 
           {/* VIN History */}
           {vinHistory.length > 0 && (
-            <div className="glass-card p-5 space-y-3">
-              <h3 className="text-sm font-semibold text-obd-text-secondary uppercase tracking-wider flex items-center gap-2">
-                <Clock size={14} />
-                {t("connection.vinHistory")}
-              </h3>
-              <div className="space-y-1.5">
-                {vinHistory.map((entry) => (
-                  <div
-                    key={entry.vin}
-                    onClick={() => setManualVin(entry.vin)}
-                    className="flex items-center gap-3 px-3 py-2 rounded-lg bg-white/[0.02] hover:bg-white/[0.04] transition-colors group cursor-pointer"
-                  >
-                    <Car size={14} className="text-obd-accent flex-shrink-0" />
-                    <div className="flex-1 min-w-0">
-                      <p className="text-xs font-medium text-obd-text">
-                        {entry.make} {entry.model} <span className="text-obd-text-muted">({entry.year})</span>
-                      </p>
-                      <p className="text-[10px] font-mono text-obd-text-muted truncate">{entry.vin}</p>
-                    </div>
-                    <span className="text-[9px] text-obd-text-muted">
-                      {new Date(entry.lastSeen).toLocaleDateString(i18n.language === "fr" ? "fr-FR" : "en-US")}
-                    </span>
-                    <button
-                      onClick={(e) => { e.stopPropagation(); removeFromHistory(entry.vin); }}
-                      className="p-1 rounded hover:bg-obd-danger/10 text-obd-text-muted hover:text-obd-danger transition-colors opacity-0 group-hover:opacity-100"
-                      aria-label={t("common.delete")}
-                    >
-                      <X size={12} />
-                    </button>
-                  </div>
-                ))}
-              </div>
-            </div>
+            <VinHistoryPanel
+              vinHistory={vinHistory}
+              onSelectVin={setManualVin}
+              onRemoveFromHistory={removeFromHistory}
+              isClearing={false}
+              t={t}
+              language={i18n.language}
+            />
           )}
         </div>
       </div>
@@ -390,26 +355,6 @@ export default function Connection({
 
       {/* Toast */}
       {toast && <Toast message={toast.message} type={toast.type} onDismiss={dismissToast} />}
-    </div>
-  );
-}
-
-function InfoRow({
-  icon,
-  label,
-  value,
-  mono,
-}: {
-  icon: React.ReactNode;
-  label: string;
-  value: string;
-  mono?: boolean;
-}) {
-  return (
-    <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-white/[0.02]">
-      <span className="text-obd-text-muted">{icon}</span>
-      <span className="text-xs text-obd-text-muted flex-1">{label}</span>
-      <span className={cn("text-xs text-obd-text", mono && "font-mono")}>{value}</span>
     </div>
   );
 }
