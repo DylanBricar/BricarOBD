@@ -17,7 +17,7 @@ impl Database {
             .map_err(|e| format!("Failed to open database: {}", e))?;
 
         conn.execute_batch(
-            "PRAGMA journal_mode = DELETE;
+            "PRAGMA journal_mode = WAL;
              PRAGMA synchronous = NORMAL;
              PRAGMA cache_size = -32000;
              PRAGMA temp_store = MEMORY;",
@@ -298,6 +298,9 @@ impl Database {
     }
 
     pub fn save_settings_batch(&self, settings: Vec<(&str, &str)>) -> Result<(), String> {
+        // Note: We use manual BEGIN/COMMIT because rusqlite's transaction() requires &mut self,
+        // but this method only has &self (the Connection is behind a Mutex already).
+        // ROLLBACK is handled explicitly on error.
         self.conn.execute_batch("BEGIN").map_err(|e| format!("Failed to begin: {}", e))?;
         for (key, value) in settings {
             if let Err(e) = self.conn.execute("INSERT OR REPLACE INTO settings (key, value) VALUES (?1, ?2)", params![key, value]) {

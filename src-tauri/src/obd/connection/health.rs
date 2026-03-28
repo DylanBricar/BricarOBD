@@ -44,7 +44,8 @@ impl Elm327Connection {
     }
 
     /// Attempt to recover a broken connection (call when consecutive errors > 3)
-    /// Times out after 15 seconds to prevent hanging the application.
+    /// Guard timeout is 15 seconds, but individual serial I/O operations add their own timeouts,
+    /// so actual worst-case recovery time can reach ~25 seconds.
     pub fn attempt_recovery(&mut self) -> Result<(), String> {
         dev_log::log_warn("obd", &format!("Attempting recovery (consecutive errors: {})", self.consecutive_errors));
 

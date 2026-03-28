@@ -93,6 +93,28 @@ export default function Monitors({ monitors, onRefresh }: MonitorsProps) {
         <p className="text-xs text-obd-text-muted">{t("monitors.refreshHint")}</p>
       )}
 
+      {/* Readiness Summary */}
+      {monitors.length > 0 && (
+        <div className={cn(
+          "glass-card p-4 flex items-center gap-4",
+          incomplete === 0 ? "border-obd-success/30" : "border-obd-warning/30"
+        )}>
+          {incomplete === 0 ? (
+            <CheckCircle2 size={32} className="text-obd-success" />
+          ) : (
+            <XCircle size={32} className="text-obd-warning" />
+          )}
+          <div>
+            <h3 className="font-semibold text-sm">
+              {incomplete === 0 ? t("monitors.readyPass") : t("monitors.readyFail")}
+            </h3>
+            <p className="text-xs text-obd-text-muted">
+              {t("monitors.readySummary", { completed, incomplete, notAvailable })}
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* Summary */}
       <div className="flex gap-4">
         <div className="glass-card px-5 py-3 flex items-center gap-3">

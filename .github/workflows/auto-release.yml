@@ -112,7 +112,12 @@ jobs:
       - name: Verify database
         run: |
           if [ -f "src-tauri/data/bricarobd.db" ]; then
-            echo "Database found: $(du -h src-tauri/data/bricarobd.db | cut -f1)"
+            SIZE=$(stat -f%z "src-tauri/data/bricarobd.db" 2>/dev/null || stat -c%s "src-tauri/data/bricarobd.db" 2>/dev/null || echo "0")
+            echo "Database found: $(du -h src-tauri/data/bricarobd.db | cut -f1) ($SIZE bytes)"
+            if [ "$SIZE" -lt 100000000 ]; then
+              echo "ERROR: Database too small ($SIZE bytes) — likely truncated download!"
+              exit 1
+            fi
           else
             echo "ERROR: Database not found!"
             exit 1
@@ -148,10 +153,15 @@ jobs:
       - name: Install frontend dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: TypeScript check
+        run: pnpm exec tsc --noEmit
+
       - name: Build Tauri app
-        uses: tauri-apps/tauri-action@v0
+        uses: tauri-apps/tauri-action@v0.5.15
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
           tagName: ${{ needs.bump-and-tag.outputs.new_tag }}
           releaseName: 'BricarOBD ${{ needs.bump-and-tag.outputs.new_tag }}'
@@ -245,11 +255,10 @@ jobs:
           KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
 
       - name: Upload APK to release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v2.2.1
         with:
           tag_name: ${{ needs.bump-and-tag.outputs.new_tag }}
           files: |
             src-tauri/gen/android/app/build/outputs/apk/universal/release/app-universal-release.apk
-            src-tauri/gen/android/app/build/outputs/apk/universal/debug/app-universal-debug.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

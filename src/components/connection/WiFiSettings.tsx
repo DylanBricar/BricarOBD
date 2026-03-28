@@ -66,9 +66,10 @@ export default function WiFiSettings({ isConnected, status, onConnectWifi, showT
           placeholder="192.168.0.10"
           disabled={isConnected}
           className={cn("input-field text-xs", wifiHost && !isValidIpAddress(wifiHost) && "border-obd-danger")}
+          aria-describedby={wifiHost && !isValidIpAddress(wifiHost) ? "wifi-host-error" : undefined}
         />
         {wifiHost && !isValidIpAddress(wifiHost) && (
-          <p className="text-xs text-obd-danger">{t("connection.wifiHostInvalid")}</p>
+          <p id="wifi-host-error" className="text-xs text-obd-danger">{t("connection.wifiHostInvalid")}</p>
         )}
       </div>
 
@@ -82,9 +83,10 @@ export default function WiFiSettings({ isConnected, status, onConnectWifi, showT
           placeholder="35000"
           disabled={isConnected}
           className={cn("input-field text-xs", wifiPort && !isValidPort(wifiPort) && "border-obd-danger")}
+          aria-describedby={wifiPort && !isValidPort(wifiPort) ? "wifi-port-error" : undefined}
         />
         {wifiPort && !isValidPort(wifiPort) && (
-          <p className="text-xs text-obd-danger">{t("connection.wifiPortInvalid")}</p>
+          <p id="wifi-port-error" className="text-xs text-obd-danger">{t("connection.wifiPortInvalid")}</p>
         )}
       </div>
 
@@ -113,7 +115,10 @@ export default function WiFiSettings({ isConnected, status, onConnectWifi, showT
             {wifiAdapters.map((adapter) => (
               <div
                 key={adapter.name}
-                onClick={() => setWifiHost(adapter.host)}
+                role="button"
+                tabIndex={0}
+                onClick={() => { setWifiHost(adapter.host); setWifiPort(String(adapter.port)); }}
+                onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setWifiHost(adapter.host); setWifiPort(String(adapter.port)); } }}
                 className="px-3 py-2 rounded-lg bg-white/[0.02] text-xs text-obd-text border border-obd-border/30 cursor-pointer hover:bg-white/[0.05] transition-colors"
               >
                 {adapter.name} ({adapter.host}:{adapter.port})

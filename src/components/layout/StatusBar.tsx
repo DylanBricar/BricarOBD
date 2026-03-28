@@ -1,6 +1,8 @@
-import { useMemo } from "react";
+import { useMemo, useState, useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import { Wifi, WifiOff, Radio, Gauge } from "lucide-react";
+import { getVersion } from "@tauri-apps/api/app";
+import { invoke } from "@tauri-apps/api/core";
 import type { ConnectionStatus, VehicleInfo } from "@/stores/connection";
 import { cn } from "@/lib/utils";
 
@@ -12,6 +14,29 @@ interface StatusBarProps {
 
 export default function StatusBar({ status, vehicle, isPolling }: StatusBarProps) {
   const { t, i18n } = useTranslation();
+  const [version, setVersion] = useState("2.0.0");
+  const [milStatus, setMilStatus] = useState<{ milOn: boolean; dtcCount: number } | null>(null);
+
+  useEffect(() => {
+    let mounted = true;
+    getVersion().then(v => { if (mounted) setVersion(v); }).catch(() => {});
+    return () => { mounted = false; };
+  }, []);
+
+  useEffect(() => {
+    if (status !== "connected" && status !== "demo") {
+      setMilStatus(null);
+      return;
+    }
+    const fetchMil = () => {
+      invoke<{ milOn: boolean; dtcCount: number }>("get_mil_status")
+        .then(s => setMilStatus(s))
+        .catch(() => {});
+    };
+    fetchMil();
+    const id = setInterval(fetchMil, 10000);
+    return () => clearInterval(id);
+  }, [status]);
 
   const statusConfig = useMemo(() => ({
     connected: {
@@ -82,6 +107,19 @@ export default function StatusBar({ status, vehicle, isPolling }: StatusBarProps
         </>
       )}
 
+      {milStatus?.milOn && (
+        <>
+          <div className="mx-3 h-3 w-px bg-obd-border/50" />
+          <div className="flex items-center gap-1.5 text-obd-danger">
+            <div className="w-2 h-2 rounded-full bg-obd-danger animate-pulse" />
+            <span className="font-medium">MIL</span>
+            {milStatus.dtcCount > 0 && (
+              <span className="text-obd-text-muted">({milStatus.dtcCount})</span>
+            )}
+          </div>
+        </>
+      )}
+
       {/* Spacer */}
       <div className="flex-1" />
 
@@ -95,7 +133,7 @@ export default function StatusBar({ status, vehicle, isPolling }: StatusBarProps
 
       {/* Right side */}
       <span className="text-obd-text-muted">
-        BricarOBD v2.0.4
+        BricarOBD v{version}
       </span>
     </footer>
   );

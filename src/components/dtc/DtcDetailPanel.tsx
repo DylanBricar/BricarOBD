@@ -1,13 +1,10 @@
 import { AlertTriangle, Wrench, ExternalLink, Youtube } from "lucide-react";
 import type { DtcCode, DtcHistoryEntry } from "@/stores/vehicle";
-import type { VehicleInfo } from "@/stores/connection";
 import { cn } from "@/lib/utils";
 
 interface DtcDetailPanelProps {
   selectedData: DtcCode | DtcHistoryEntry | null;
-  vehicle: VehicleInfo | null;
   t: (key: string) => string;
-  i18n: { language: string };
   onOpenExternal: (url: string) => void;
   onBuildSearchQuery: (code: string, platform: "google" | "youtube") => string;
 }
@@ -23,7 +20,7 @@ export default function DtcDetailPanel({
   t,
   onOpenExternal,
   onBuildSearchQuery,
-}: Omit<DtcDetailPanelProps, 'vehicle' | 'i18n'>) {
+}: DtcDetailPanelProps) {
   if (!selectedData) return null;
 
   return (

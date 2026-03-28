@@ -18,6 +18,8 @@ export const dashboard = {
     "dashboard.gaugesSelected": "jauges sélectionnées",
     "dashboard.configGauges": "Configurer les jauges",
     "dashboard.configDesc": "Sélectionnez jusqu'à 6 jauges à afficher",
+    "dashboard.alertCoolant": "⚠️ Température liquide de refroidissement élevée (>110°C) !",
+    "dashboard.alertBattery": "⚠️ Tension batterie faible (<11V) !",
   },
   en: {
     "dashboard.title": "Dashboard",
@@ -38,5 +40,7 @@ export const dashboard = {
     "dashboard.gaugesSelected": "gauges selected",
     "dashboard.configGauges": "Configure Gauges",
     "dashboard.configDesc": "Select up to 6 gauges to display",
+    "dashboard.alertCoolant": "⚠️ Coolant temperature high (>110°C)!",
+    "dashboard.alertBattery": "⚠️ Battery voltage low (<11V)!",
   },
 };

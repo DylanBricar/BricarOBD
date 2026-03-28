@@ -58,16 +58,14 @@ pub async fn read_all_dtcs(lang: Option<String>) -> Vec<DtcCode> {
         }
 
         // ====== UDS 0x19 — Read DTC by Status Mask ======
-        let uds_addresses = ["7E0", "7E1", "7E2", "7E3", "7E4", "75D", "7C0", "7C1", "7A0", "740", "710", "714"];
-
-        for addr in uds_addresses {
+        for addr in super::UDS_ECU_ADDRESSES {
             dev_log::log_debug("dtc", &format!("Probing UDS DTC at {}", addr));
 
             if with_real_connection(|conn| conn.set_ecu_header(addr)).is_err() {
                 continue;
             }
 
-            let timeout_ms = match addr {
+            let timeout_ms = match *addr {
                 "7E0" | "7E1" | "7E2" | "7E3" | "7E4" | "7E5" | "7E6" | "7E7" | "7DF" => 5000,
                 _ => 2000,
             };
@@ -118,7 +116,8 @@ pub async fn read_all_dtcs(lang: Option<String>) -> Vec<DtcCode> {
 
         // ====== Persist DTCs to database ======
         if !all_dtcs.is_empty() {
-            let vin = "unknown".to_string();
+            let vin = with_real_connection(|conn| Ok(conn.vin.clone()))
+                .unwrap_or_else(|_| "unknown".to_string());
             if let Err(e) = super::database::with_db(|db| {
                 for dtc in &all_dtcs {
                     let _ = db.save_dtc(&dtc.code, &dtc.description, &format!("{:?}", dtc.status), &dtc.source, &vin);

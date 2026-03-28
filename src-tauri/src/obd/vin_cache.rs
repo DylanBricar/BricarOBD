@@ -14,8 +14,6 @@ pub struct VinCache {
     pub failed_pids: Vec<u8>,
     #[serde(default)]
     pub failed_dids: Vec<String>,
-    pub responding_ecu_addresses: Vec<String>,
-    pub non_responding_ecu_addresses: Vec<String>,
     pub created_at: u64,
 }
 
@@ -33,8 +31,6 @@ impl VinCache {
             supported_dids: Vec::new(),
             failed_pids: Vec::new(),
             failed_dids: Vec::new(),
-            responding_ecu_addresses: Vec::new(),
-            non_responding_ecu_addresses: Vec::new(),
             created_at: now,
         }
     }
@@ -160,8 +156,6 @@ mod tests {
         assert!(cache.supported_dids.is_empty());
         assert!(cache.failed_pids.is_empty());
         assert!(cache.failed_dids.is_empty());
-        assert!(cache.responding_ecu_addresses.is_empty());
-        assert!(cache.non_responding_ecu_addresses.is_empty());
         assert!(cache.created_at > 0);
     }
 
@@ -170,11 +164,9 @@ mod tests {
         let mut cache = VinCache::new("TEST123".to_string());
         cache.supported_pids = vec![0x01, 0x05, 0x0C];
         cache.supported_dids = vec![("F190".to_string(), "VIN".to_string())];
-        cache.responding_ecu_addresses = vec!["0x7E0".to_string()];
 
         assert_eq!(cache.supported_pids.len(), 3);
         assert_eq!(cache.supported_dids.len(), 1);
-        assert_eq!(cache.responding_ecu_addresses.len(), 1);
     }
 
     #[test]

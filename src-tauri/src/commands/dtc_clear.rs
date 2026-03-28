@@ -3,6 +3,14 @@ use crate::obd::dev_log;
 use crate::commands::connection::{is_demo, with_real_connection};
 use crate::commands::OBDBusyGuard;
 
+/// Check if current protocol supports UDS (CAN: 6,7,8,9,A,B,C — KWP: 4,5)
+fn is_uds_capable_protocol() -> bool {
+    with_real_connection(|conn| {
+        let proto = conn.protocol_num.as_str();
+        Ok(matches!(proto, "4" | "5" | "6" | "7" | "8" | "9" | "A" | "B" | "C"))
+    }).unwrap_or(false)
+}
+
 /// Wait for ECU to finish processing when NRC 0x78 (ResponsePending) is received.
 /// Some ECUs need time to erase flash memory — they send 0x78 while working.
 /// The ELM327 handles 0x78 internally: it keeps waiting for the ECU's final response.
@@ -163,17 +171,10 @@ pub async fn clear_dtcs(confirmed: Option<bool>) -> Result<String, String> {
         // ====== Strategy 2: UDS 0x14 FFFFFF per ECU ======
         // UDS services only work on CAN and KWP protocols (not J1850 or ISO 9141)
         if !cleared {
-            let is_uds_capable = with_real_connection(|conn| {
-                let proto = conn.protocol_num.as_str();
-                // CAN: 6,7,8,9,A,B,C — KWP: 4,5 — ISO 9141: 3 — J1850: 1,2
-                Ok(matches!(proto, "4" | "5" | "6" | "7" | "8" | "9" | "A" | "B" | "C"))
-            }).unwrap_or(false);
-
-            if is_uds_capable {
+            if is_uds_capable_protocol() {
                 dev_log::log_info("dtc", "Strategy 2: UDS 0x14 per ECU with extended session");
-                let ecu_addresses = ["7E0", "7E1", "7E2", "7E3", "7E4", "75D", "7C0", "7C1", "7A0", "740", "710", "714"];
 
-                for addr in ecu_addresses {
+                for addr in super::UDS_ECU_ADDRESSES {
                     match clear_uds_on_ecu(addr) {
                         Ok(()) => {
                             cleared = true;
@@ -198,12 +199,7 @@ pub async fn clear_dtcs(confirmed: Option<bool>) -> Result<String, String> {
         // ====== Strategy 3: Mode 04 with extended diagnostic session ======
         // Only on CAN/KWP — extended sessions don't exist on J1850/ISO 9141
         if !cleared {
-            let is_uds_capable = with_real_connection(|conn| {
-                let proto = conn.protocol_num.as_str();
-                Ok(matches!(proto, "4" | "5" | "6" | "7" | "8" | "9" | "A" | "B" | "C"))
-            }).unwrap_or(false);
-
-            if is_uds_capable {
+            if is_uds_capable_protocol() {
                 dev_log::log_info("dtc", "Strategy 3: Mode 04 with extended diagnostic session");
                 match clear_mode04_extended_session() {
                     Ok(()) => { cleared = true; }
@@ -293,7 +289,9 @@ fn clear_with_mode04() -> Result<(), String> {
     })
 }
 
-/// Strategy 2: UDS 0x14 FFFFFF on a specific ECU with extended diagnostic session
+/// Strategy 2: UDS 0x14 FFFFFF on a specific ECU with extended diagnostic session.
+/// Safety: sends UDS 0x10 (DiagnosticSessionControl) and 0x14 (ClearDiagnosticInformation).
+/// These are pre-authorized by the SafetyGuard check at the `clear_dtcs` entry point.
 fn clear_uds_on_ecu(ecu_addr: &str) -> Result<(), String> {
     with_real_connection(|conn| {
         conn.set_ecu_header(ecu_addr)?;
@@ -333,7 +331,8 @@ fn clear_uds_on_ecu(ecu_addr: &str) -> Result<(), String> {
 }
 
 /// Strategy 4: Mode 04 after full adapter recovery — for stubborn adapters/clones
-/// that may have gotten confused by previous UDS commands or session switches
+/// that may have gotten confused by previous UDS commands or session switches.
+/// Safety: sends UDS 0x10 01 (default session) before Mode 04. Pre-authorized by `clear_dtcs`.
 fn clear_mode04_with_recovery() -> Result<(), String> {
     with_real_connection(|conn| {
         // Full recovery: flush buffer, reset adapter state, restore protocol
@@ -356,7 +355,8 @@ fn clear_mode04_with_recovery() -> Result<(), String> {
     })
 }
 
-/// Strategy 3: Mode 04 with extended diagnostic session opened first
+/// Strategy 3: Mode 04 with extended diagnostic session opened first.
+/// Safety: sends UDS 0x10 03 before Mode 04. Pre-authorized by the SafetyGuard check at `clear_dtcs`.
 fn clear_mode04_extended_session() -> Result<(), String> {
     with_real_connection(|conn| {
         conn.reset_headers()?;

@@ -1,6 +1,8 @@
 import { useTranslation } from "react-i18next";
 import { LayoutDashboard, Circle, Thermometer, Gauge, Fuel, Battery, Wind, Zap, Settings } from "lucide-react";
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback, useEffect, useRef } from "react";
+import { useToast } from "@/hooks/useToast";
+import { Toast } from "@/components/Toast";
 import CircularGauge from "@/components/gauges/CircularGauge";
 import LiveChart from "@/components/charts/LiveChart";
 import type { PidValue } from "@/stores/vehicle";
@@ -74,13 +76,6 @@ const chartLabels: Record<number, string> = {
   [PID.ENGINE_LOAD]: "dashboard.load",
 };
 
-const chartUnits: Record<number, string> = {
-  [PID.RPM]: "RPM",
-  [PID.SPEED]: "km/h",
-  [PID.COOLANT_TEMP]: "°C",
-  [PID.ENGINE_LOAD]: "%",
-};
-
 const chartColors: Record<number, string> = {
   [PID.RPM]: "var(--obd-chart-cyan)",
   [PID.SPEED]: "var(--obd-chart-cyan-light)",
@@ -118,6 +113,44 @@ export default function Dashboard({ pidData }: DashboardProps) {
   });
   const [showConfig, setShowConfig] = useState(false);
   const { system: unitSystem } = useUnitSystem();
+  const { toast, showToast, dismissToast } = useToast();
+  const alertedRef = useRef<Set<number>>(new Set());
+
+  useEffect(() => {
+    if (!showConfig) return;
+    const handleEscape = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setShowConfig(false);
+    };
+    document.addEventListener("keydown", handleEscape);
+    return () => document.removeEventListener("keydown", handleEscape);
+  }, [showConfig]);
+
+  const chartUnits = useMemo<Record<number, string>>(() => ({
+    [PID.RPM]: "RPM",
+    [PID.SPEED]: unitSystem === "imperial" ? "mph" : "km/h",
+    [PID.COOLANT_TEMP]: unitSystem === "imperial" ? "°F" : "°C",
+    [PID.ENGINE_LOAD]: "%",
+  }), [unitSystem]);
+
+  // Sensor threshold alerts
+  useEffect(() => {
+    const coolant = pidData.get(PID.COOLANT_TEMP);
+    const battery = pidData.get(PID.CONTROL_MODULE_VOLTAGE);
+
+    if (coolant && coolant.value > 110 && !alertedRef.current.has(PID.COOLANT_TEMP)) {
+      alertedRef.current.add(PID.COOLANT_TEMP);
+      showToast(t("dashboard.alertCoolant"), "error");
+    } else if (coolant && coolant.value <= 105) {
+      alertedRef.current.delete(PID.COOLANT_TEMP);
+    }
+
+    if (battery && battery.value < 11 && battery.value > 0 && !alertedRef.current.has(PID.CONTROL_MODULE_VOLTAGE)) {
+      alertedRef.current.add(PID.CONTROL_MODULE_VOLTAGE);
+      showToast(t("dashboard.alertBattery"), "error");
+    } else if (battery && battery.value >= 11.5) {
+      alertedRef.current.delete(PID.CONTROL_MODULE_VOLTAGE);
+    }
+  }, [pidData, showToast, t]);
 
   const toggleGauge = useCallback((pidCode: number) => {
     setSelectedGauges((prev) => {
@@ -267,9 +300,9 @@ export default function Dashboard({ pidData }: DashboardProps) {
 
       {/* Configuration Modal */}
       {showConfig && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 animate-fade-in">
-          <div className="glass-card max-w-md w-full mx-4 p-6 space-y-4 animate-scale-in">
-            <h3 className="text-lg font-semibold">{t("dashboard.configGauges")}</h3>
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 animate-fade-in" onClick={() => setShowConfig(false)} role="dialog" aria-modal="true" aria-labelledby="dashboard-config-title">
+          <div className="glass-card max-w-md w-full mx-4 p-6 space-y-4 animate-scale-in" onClick={(e) => e.stopPropagation()}>
+            <h3 id="dashboard-config-title" className="text-lg font-semibold">{t("dashboard.configGauges")}</h3>
             <p className="text-sm text-obd-text-muted">
               {t("dashboard.configDesc")}
             </p>
@@ -299,6 +332,7 @@ export default function Dashboard({ pidData }: DashboardProps) {
           </div>
         </div>
       )}
+      {toast && <Toast message={toast.message} type={toast.type} onDismiss={dismissToast} />}
     </>
   );
 }

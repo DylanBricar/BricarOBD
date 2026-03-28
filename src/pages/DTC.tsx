@@ -1,17 +1,6 @@
-import { useState, useCallback, useMemo } from "react";
+import { useState, useCallback, useMemo, useEffect } from "react";
 import { useTranslation } from "react-i18next";
-import {
-  AlertTriangle,
-  Trash2,
-  Search,
-  History,
-  Download,
-  RefreshCw,
-  ChevronRight,
-  ShieldAlert,
-  Clock,
-  Lock,
-} from "lucide-react";
+import { AlertTriangle, Trash2, Search, History, Download, RefreshCw, ChevronRight, ShieldAlert, Clock, Lock } from "lucide-react";
 import type { DtcCode, DtcHistoryEntry, Mode06Result, FreezeFrameData } from "@/stores/vehicle";
 import { makeCSVFilename, saveCSVFile } from "@/lib/csv";
 import type { VehicleInfo } from "@/stores/connection";
@@ -21,6 +10,7 @@ import { Toast } from "@/components/Toast";
 import Mode06 from "./Mode06";
 import FreezeFrame from "./FreezeFrame";
 import DtcDetailPanel from "@/components/dtc/DtcDetailPanel";
+import DtcClearConfirm from "@/components/dtc/DtcClearConfirm";
 
 const statusIcon = {
   active: <ShieldAlert size={14} className="text-obd-danger" />,
@@ -35,6 +25,7 @@ const statusBadge = {
 };
 
 const TAB_OPTIONS = ["dtc", "mode06", "freeze"] as const;
+const STATUS_FILTERS = ["all", "active", "pending", "permanent"] as const;
 
 interface DTCProps {
   dtcs: DtcCode[];
@@ -72,8 +63,18 @@ export default function DTC({
   const [selectedDtc, setSelectedDtc] = useState<string | null>(null);
   const [showConfirm, setShowConfirm] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState<"all" | "active" | "pending" | "permanent">("all");
 
   const { toast, showToast, dismissToast } = useToast();
+
+  useEffect(() => {
+    if (!showConfirm) return;
+    const handleEscape = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setShowConfirm(false);
+    };
+    document.addEventListener("keydown", handleEscape);
+    return () => document.removeEventListener("keydown", handleEscape);
+  }, [showConfirm]);
 
   const handleExportDtcs = useCallback(async () => {
     if (dtcs.length === 0 && dtcHistory.length === 0) {
@@ -104,11 +105,13 @@ export default function DTC({
   }, [dtcs, dtcHistory, t, showToast]);
 
   const filteredDtcs = useMemo(
-    () => dtcs.filter((d) =>
-      d.code.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      d.description.toLowerCase().includes(searchQuery.toLowerCase())
-    ),
-    [dtcs, searchQuery]
+    () => dtcs.filter((d) => {
+      const matchesSearch = d.code.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        d.description.toLowerCase().includes(searchQuery.toLowerCase());
+      const matchesStatus = statusFilter === "all" || d.status === statusFilter;
+      return matchesSearch && matchesStatus;
+    }),
+    [dtcs, searchQuery, statusFilter]
   );
 
   const filteredHistory = useMemo(() => {
@@ -256,6 +259,27 @@ export default function DTC({
               className="input-field pl-9 w-full text-xs"
             />
           </div>
+
+          {/* Status filters */}
+          <div className="flex gap-1.5">
+            {STATUS_FILTERS.map((filter) => (
+              <button
+                key={filter}
+                onClick={() => setStatusFilter(filter)}
+                className={cn(
+                  "px-2.5 py-1 text-xs font-medium rounded-md transition-colors",
+                  statusFilter === filter
+                    ? filter === "all" ? "bg-obd-accent/20 text-obd-accent"
+                      : filter === "active" ? "bg-obd-danger/20 text-obd-danger"
+                      : filter === "pending" ? "bg-obd-warning/20 text-obd-warning"
+                      : "bg-obd-info/20 text-obd-info"
+                    : "text-obd-text-muted hover:text-obd-text hover:bg-obd-surface/50"
+                )}
+              >
+                {t(`dtc.filter${filter.charAt(0).toUpperCase() + filter.slice(1)}`)}
+              </button>
+            ))}
+          </div>
         </div>
       )}
 
@@ -353,28 +377,11 @@ export default function DTC({
 
       {/* Confirm Dialog */}
       {showConfirm && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50">
-          <div className="glass-card p-6 max-w-md w-full mx-4 space-y-4">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-full bg-obd-danger/20 flex items-center justify-center">
-                <AlertTriangle className="text-obd-danger" size={20} />
-              </div>
-              <h3 className="text-lg font-semibold">{t("dtc.confirmClear")}</h3>
-            </div>
-            <p className="text-sm text-obd-text-secondary">{t("dtc.confirmClearMsg")}</p>
-            <div className="flex gap-3 justify-end">
-              <button onClick={() => setShowConfirm(false)} className="btn-ghost">
-                {t("common.cancel")}
-              </button>
-              <button
-                onClick={() => { onClearAll(); setShowConfirm(false); }}
-                className="btn-danger"
-              >
-                {t("common.confirm")}
-              </button>
-            </div>
-          </div>
-        </div>
+        <DtcClearConfirm
+          t={t}
+          onConfirm={() => { onClearAll(); setShowConfirm(false); }}
+          onCancel={() => setShowConfirm(false)}
+        />
       )}
 
       {/* Toast */}

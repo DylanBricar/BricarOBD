@@ -26,7 +26,7 @@ export default function AdvancedConsole({ responses, t }: AdvancedConsoleProps) 
           </div>
         ) : (
           responses.map((r, i) => (
-            <div key={i} className="space-y-0.5">
+            <div key={`${i}-${r.time}-${r.cmd}`} className="space-y-0.5">
               <div className="flex gap-2">
                 <span className="text-obd-text-muted">[{r.time}]</span>
                 <span className="text-obd-accent">→</span>

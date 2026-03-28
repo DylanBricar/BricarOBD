@@ -12,7 +12,6 @@ pub static DISCOVERED_DIDS: Mutex<Option<Vec<(String, String)>>> = Mutex::new(No
 static DISCOVERY_PROGRESS: Mutex<(u32, u32, String)> = Mutex::new((0, 0, String::new()));
 
 /// Update discovery progress
-#[allow(dead_code)]
 fn update_progress(current: u32, total: u32, phase: &str) {
     let mut guard = DISCOVERY_PROGRESS.lock().unwrap_or_else(|e| e.into_inner());
     *guard = (current, total, phase.to_string());
@@ -70,6 +69,7 @@ pub async fn discover_vehicle_params(manufacturer: String, vin: String) -> serde
         }
 
         // === Phase 1: Discover standard OBD-II PIDs via bitmap ===
+        update_progress(0, 100, "scanning_pids");
         let supported_pids: Vec<u8> = with_real_connection(|conn| {
             Ok(conn.supported_pids.clone())
         }).unwrap_or_default();
@@ -106,6 +106,7 @@ pub async fn discover_vehicle_params(manufacturer: String, vin: String) -> serde
             let mut guard = DISCOVERED_PIDS.lock().unwrap_or_else(|e| e.into_inner());
             *guard = Some(standard_pids.clone());
         }
+        update_progress(50, 100, "scanning_dids");
 
         // === Phase 2: Discover manufacturer-specific DIDs ===
         let mut discovered_dids: Vec<(String, String)> = Vec::new();
@@ -173,6 +174,7 @@ pub async fn discover_vehicle_params(manufacturer: String, vin: String) -> serde
 
         dev_log::log_info("dashboard", &format!("Discovered {} manufacturer DIDs", discovered_dids.len()));
         let did_count = discovered_dids.len();
+        update_progress(100, 100, "complete");
 
         // === Save to VIN cache: supportés + échoués ===
         if !vin.is_empty() {

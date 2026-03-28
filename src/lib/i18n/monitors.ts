@@ -39,6 +39,9 @@ export const monitors = {
     "monitors.notAvailable": "Non disponible",
     "monitors.emissionTestStatus": "Statut des tests d'émissions",
     "monitors.refreshHint": "Les moniteurs se mettent à jour après les cycles de conduite",
+    "monitors.readyPass": "Prêt pour le contrôle technique",
+    "monitors.readyFail": "Non prêt — moniteurs incomplets",
+    "monitors.readySummary": "{{completed}} terminé(s) · {{incomplete}} incomplet(s) · {{notAvailable}} non disponible(s)",
   },
   en: {
     "monitors.title": "OBD Monitors",
@@ -80,5 +83,8 @@ export const monitors = {
     "monitors.notAvailable": "Not Available",
     "monitors.emissionTestStatus": "Emission test status",
     "monitors.refreshHint": "Monitors update after drive cycles",
+    "monitors.readyPass": "Ready for emissions test",
+    "monitors.readyFail": "Not ready — incomplete monitors",
+    "monitors.readySummary": "{{completed}} complete · {{incomplete}} incomplete · {{notAvailable}} not available",
   },
 };

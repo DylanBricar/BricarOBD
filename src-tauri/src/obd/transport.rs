@@ -201,7 +201,7 @@ pub fn default_wifi_endpoints() -> Vec<(String, u16)> {
 pub fn auto_connect_wifi(timeout_ms: u64) -> Result<WiFiTransport, String> {
     use std::sync::{Mutex, Arc};
     let endpoints = default_wifi_endpoints();
-    let found: Arc<Mutex<Option<(String, u16)>>> = Arc::new(Mutex::new(None));
+    let found: Arc<Mutex<Option<WiFiTransport>>> = Arc::new(Mutex::new(None));
 
     std::thread::scope(|s| {
         let mut handles = vec![];
@@ -212,28 +212,19 @@ pub fn auto_connect_wifi(timeout_ms: u64) -> Result<WiFiTransport, String> {
                 if let Ok(transport) = WiFiTransport::new(&host, port, timeout_ms.min(2000)) {
                     let mut result = found.lock().unwrap_or_else(|e| e.into_inner());
                     if result.is_none() {
-                        *result = Some((host, port));
+                        dev_log::log_info("transport", &format!("WiFi connected at {}:{}", host, port));
+                        *result = Some(transport);
                     }
-                    return Some(transport);
                 }
-                None
             });
             handles.push(handle);
         }
 
         for handle in handles {
-            if let Ok(Some(_transport)) = handle.join() {
-                return;
-            }
+            let _ = handle.join();
         }
     });
 
-    let result = found.lock().unwrap_or_else(|e| e.into_inner());
-    match result.as_ref() {
-        Some((host, port)) => {
-            dev_log::log_info("transport", &format!("WiFi connected at {}:{}", host, port));
-            WiFiTransport::new(host, *port, timeout_ms.min(2000))
-        }
-        None => Err("No WiFi ELM327 found at common addresses".to_string())
-    }
+    let mut guard = found.lock().unwrap_or_else(|e| e.into_inner());
+    guard.take().ok_or_else(|| "No WiFi ELM327 found at common addresses".to_string())
 }

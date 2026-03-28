@@ -88,6 +88,14 @@ pub struct MonitorStatus {
     pub specification_key: Option<String>,
 }
 
+/// MIL status from PID 01 byte A
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MilStatus {
+    pub mil_on: bool,
+    pub dtc_count: u8,
+}
+
 /// Serial port info
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]

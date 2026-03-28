@@ -13,7 +13,9 @@ import { devInfo, devError } from "@/lib/devlog";
 import { useThemeStore, setThemeMode, type ThemeMode } from "@/stores/theme";
 import { useToast } from "@/hooks/useToast";
 import { useConnectionEffects } from "@/hooks/useConnectionEffects";
+import { useAutoUpdate } from "@/hooks/useAutoUpdate";
 import { Toast } from "@/components/Toast";
+import UpdateBanner from "@/components/UpdateBanner";
 
 const Connection = lazy(() => import("@/pages/Connection"));
 const Dashboard = lazy(() => import("@/pages/Dashboard"));
@@ -47,6 +49,7 @@ export default function App() {
   const connection = useConnectionStore();
   const vehicle = useVehicleData();
   const { mode: themeMode } = useThemeStore();
+  const autoUpdate = useAutoUpdate();
   const vehicleActions = useMemo(() => ({
     startDemoPolling: vehicle.startDemoPolling,
     startRealPolling: vehicle.startRealPolling,
@@ -131,7 +134,6 @@ export default function App() {
     invoke("save_settings", { settings: { language: i18n.language, defaultBaudRate: connection.baudRate, theme: themeMode } }).catch(() => {});
   }, [i18n.language, connection.baudRate, themeMode]);
 
-
   // Navigate based on connection status
   const handleNavigate = (page: string) => {
     if (!canNavigate && page !== "connection" && page !== "advanced") {
@@ -141,6 +143,25 @@ export default function App() {
     devInfo("ui", "Navigate: " + page);
     setActivePage(page);
   };
+
+  // Keyboard shortcuts for tab navigation
+  useEffect(() => {
+    const pages = ["connection", "dashboard", "liveData", "dtc", "ecuInfo", "monitors", "history", "advanced"];
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.ctrlKey || e.metaKey) {
+        const num = parseInt(e.key);
+        if (num >= 1 && num <= 8) {
+          e.preventDefault();
+          const page = pages[num - 1];
+          if (page === "connection" || page === "advanced" || canNavigate) {
+            handleNavigate(page);
+          }
+        }
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [canNavigate, handleNavigate]);
 
   useEffect(() => {
     if (isConnected && activePage === "connection" && canNavigate) {
@@ -229,7 +250,7 @@ export default function App() {
     }
   }, []);
 
-  const renderedPage = useMemo(() => {
+  const renderedPage = (() => {
     switch (activePage) {
       case "connection":
         return (
@@ -352,7 +373,7 @@ export default function App() {
       default:
         return null;
     }
-  }, [activePage, connection.status, connection.vehicle, connection.port, connection.baudRate, connection.availablePorts, connection.connect, connection.disconnect, connection.connectDemo, connection.connectWifi, connection.setPort, connection.setBaudRate, connection.scanPorts, discoveryProgress, isDiscoveryComplete, hasVinCache, setHasVinCache, onClearCache, onVehicleUpdate, vehicle.pidData, vehicle.startRealPolling, vehicle.setDtcs, vehicle.setVehicleOps, vehicle.setVehicleWriteOps, vehicle.isPolling, vehicle.pausePolling, vehicle.stopPolling, vehicle.changeRefreshRate, vehicle.dtcs, vehicle.dtcHistory, vehicle.mode06Results, vehicle.isLoadingMode06, vehicle.loadMode06Results, vehicle.freezeFrame, vehicle.isLoadingFreezeFrame, vehicle.loadFreezeFrame, handleReadAll, handleClearAll, isReading, isClearing, vehicle.ecus, isEcuScanning, setIsEcuScanning, vehicle.setEcus, vehicle.monitors, vehicle.loadMonitors, i18n.language]);
+  })();
 
   return (
     <ErrorBoundary>
@@ -368,6 +389,7 @@ export default function App() {
           dtcCount={vehicle.dtcs.length}
         />
         <div className="flex-1 flex flex-col overflow-hidden">
+          <UpdateBanner state={autoUpdate.state} onDownload={autoUpdate.downloadAndInstall} onDismiss={autoUpdate.dismiss} />
           <main className="flex-1 overflow-y-auto">{renderedPage}</main>
           <StatusBar status={connection.status} vehicle={connection.vehicle} isPolling={vehicle.isPolling} />
         </div>

@@ -16,6 +16,8 @@ pub fn run() {
 
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        .plugin(tauri_plugin_process::init())
         .setup(|app| {
             // Auto-initialize the SQLite database at app startup
             let resource_dir = app.path().resource_dir()
@@ -76,6 +78,7 @@ pub fn run() {
             ecu::scan_ecus,
             ecu::read_did,
             ecu::get_monitors,
+            ecu::get_mil_status,
             ecu::check_anomalies,
             ecu::get_generic_ecus,
             ecu::get_manufacturer_dids,

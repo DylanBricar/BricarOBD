@@ -87,6 +87,9 @@ pub fn log_debug(source: &str, message: &str) {
     });
 }
 
+/// Push a log entry to the buffer and optionally write to file.
+/// Lock ordering: LOG_BUFFER (via get_buffer()) is acquired first, then LOG_FILE.
+/// This ordering must be maintained everywhere to prevent deadlocks.
 fn push(entry: LogEntry) {
     let mut guard = get_buffer();
     let buf = guard.get_or_insert_with(|| VecDeque::with_capacity(MAX_ENTRIES));

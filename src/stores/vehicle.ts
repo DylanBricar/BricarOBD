@@ -65,9 +65,12 @@ export function useVehicleData() {
   const demoEcus = useMemo(() => buildDemoEcus(t), [t]);
 
   const setDtcsWithHistory = useCallback((newDtcs: DtcCode[]) => {
-    if (newDtcs.length === 0) return;
-    devInfo("ui", "DTCs updated: " + newDtcs.length);
     setDtcs(newDtcs);
+    if (newDtcs.length === 0) {
+      devInfo("ui", "DTCs cleared");
+      return;
+    }
+    devInfo("ui", "DTCs updated: " + newDtcs.length);
     setDtcHistory((prev) => {
       const now = Date.now();
       const codes = new Set(prev.map((h) => h.code));

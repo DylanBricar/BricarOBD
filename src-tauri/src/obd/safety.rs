@@ -3,6 +3,7 @@ use tracing::warn;
 
 /// Blocked UDS service IDs (never allowed in normal mode)
 const BLOCKED_SERVICES: &[u8] = &[
+    0x08, // RequestControlOfOnBoardSystem
     0x2E, // WriteDataByIdentifier
     0x2F, // InputOutputControlByIdentifier
     0x30, // InputOutputControl (actuator test)
@@ -92,7 +93,6 @@ impl SafetyGuard {
         match service_id {
             0x01..=0x03 | 0x05..=0x07 | 0x09 | 0x0A => RiskLevel::Safe,
             0x04 => RiskLevel::Caution, // Clear DTC
-            0x08 => RiskLevel::Blocked, // Control actuators
             _ => RiskLevel::Dangerous,
         }
     }
@@ -131,6 +131,7 @@ impl SafetyGuard {
 
         // Still blocked even in advanced mode — too dangerous
         const ALWAYS_BLOCKED: &[u8] = &[
+            0x08, // RequestControlOfOnBoardSystem
             0x3D, // WriteMemoryByAddress
             0x34, // RequestDownload
             0x35, // RequestUpload
@@ -207,6 +208,7 @@ mod tests {
         assert_eq!(SafetyGuard::check_command("36"), RiskLevel::Blocked);
         assert_eq!(SafetyGuard::check_command("37"), RiskLevel::Blocked);
         assert_eq!(SafetyGuard::check_command("3D"), RiskLevel::Blocked);
+        assert_eq!(SafetyGuard::check_command("08"), RiskLevel::Blocked);
 
         // Always blocked in advanced mode too
         assert_eq!(SafetyGuard::check_command_advanced("11"), RiskLevel::Blocked);
@@ -217,6 +219,7 @@ mod tests {
         assert_eq!(SafetyGuard::check_command_advanced("36"), RiskLevel::Blocked);
         assert_eq!(SafetyGuard::check_command_advanced("37"), RiskLevel::Blocked);
         assert_eq!(SafetyGuard::check_command_advanced("3D"), RiskLevel::Blocked);
+        assert_eq!(SafetyGuard::check_command_advanced("08"), RiskLevel::Blocked);
     }
 
     #[test]
