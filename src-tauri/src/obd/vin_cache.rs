@@ -50,7 +50,7 @@ pub fn get_data_dir() -> Option<PathBuf> {
         Some(PathBuf::from(app_data).join("BricarOBD"))
     }
 
-    #[cfg(target_os = "linux")]
+    #[cfg(any(target_os = "linux", target_os = "android"))]
     {
         let home = std::env::var("HOME").ok()?;
         Some(PathBuf::from(home).join(".config/BricarOBD"))
