@@ -119,9 +119,14 @@ pub async fn read_all_dtcs(lang: Option<String>) -> Vec<DtcCode> {
             let vin = with_real_connection(|conn| Ok(conn.vin.clone()))
                 .unwrap_or_else(|_| "unknown".to_string());
             if let Err(e) = super::database::with_db(|db| {
+                db.execute_batch("BEGIN")?;
                 for dtc in &all_dtcs {
-                    let _ = db.save_dtc(&dtc.code, &dtc.description, &format!("{:?}", dtc.status), &dtc.source, &vin);
+                    if let Err(e) = db.save_dtc(&dtc.code, &dtc.description, &format!("{:?}", dtc.status), &dtc.source, &vin) {
+                        let _ = db.execute_batch("ROLLBACK");
+                        return Err(e);
+                    }
                 }
+                db.execute_batch("COMMIT")?;
                 Ok(())
             }) {
                 dev_log::log_warn("dtc", &format!("Failed to persist DTCs to database: {}", e));

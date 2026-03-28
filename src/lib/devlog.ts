@@ -27,9 +27,16 @@ function scheduleFlush() {
   flushTimerId = window.setTimeout(flushBatch, BATCH_FLUSH_INTERVAL);
 }
 
-window.addEventListener("beforeunload", () => {
-  flushBatch();
-});
+const handleBeforeUnload = () => { flushBatch(); };
+window.addEventListener("beforeunload", handleBeforeUnload);
+
+// HMR cleanup: remove stale listener on module re-evaluation
+if (import.meta.hot) {
+  import.meta.hot.dispose(() => {
+    window.removeEventListener("beforeunload", handleBeforeUnload);
+    if (flushTimerId !== null) clearTimeout(flushTimerId);
+  });
+}
 
 /**
  * Send a log entry to the Rust dev_log buffer (visible in Dev Console window)

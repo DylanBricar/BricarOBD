@@ -55,7 +55,7 @@ src-tauri/src/          # Rust backend
 
 ## Performance
 - SQLite DB opened once at startup via `setup()` — never re-opened
-- PRAGMA: `journal_mode=DELETE`, `synchronous=NORMAL`, `cache_size=-32000`
+- PRAGMA: `journal_mode=WAL`, `synchronous=NORMAL`, `cache_size=-32000`
 - PID history buffer capped at 120 entries per PID
 - Dev log buffer capped at 5000 entries
 - Serial reads in 256-byte chunks (not byte-by-byte)

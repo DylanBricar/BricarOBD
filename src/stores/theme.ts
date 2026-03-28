@@ -33,12 +33,21 @@ function applyTheme() {
 }
 
 // Listen for system theme changes
-window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => {
+const systemThemeQuery = window.matchMedia("(prefers-color-scheme: dark)");
+const handleSystemThemeChange = () => {
   if (themeMode === "system") {
     applyTheme();
     emitChange();
   }
-});
+};
+systemThemeQuery.addEventListener("change", handleSystemThemeChange);
+
+// HMR cleanup: remove stale listener on module re-evaluation
+if (import.meta.hot) {
+  import.meta.hot.dispose(() => {
+    systemThemeQuery.removeEventListener("change", handleSystemThemeChange);
+  });
+}
 
 export function setThemeMode(mode: ThemeMode) {
   themeMode = mode;

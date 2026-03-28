@@ -167,42 +167,281 @@ mod tests {
         let response = "49 02 01 56 46 33\n49 02 02 4C 43 42\n49 02 03 48 5A 36";
         let bytes = parse_vin_multiframe(response);
         assert_eq!(bytes.len(), 9);
+        assert_eq!(bytes[0], 0x56); // 'V'
+        assert_eq!(bytes[1], 0x46); // 'F'
+        assert_eq!(bytes[2], 0x33); // '3'
+    }
+
+    #[test]
+    fn test_parse_vin_multiframe_empty() {
+        let response = "";
+        let bytes = parse_vin_multiframe(response);
+        assert_eq!(bytes.len(), 0);
+    }
+
+    #[test]
+    fn test_parse_vin_multiframe_no_49_02_header() {
+        let response = "48 02 01 56 46 33\n48 02 02 4C 43 42";
+        let bytes = parse_vin_multiframe(response);
+        assert_eq!(bytes.len(), 0);
+    }
+
+    #[test]
+    fn test_parse_vin_multiframe_mixed_valid_invalid() {
+        let response = "49 02 01 56 46 33\n48 02 02 4C 43 42\n49 02 03 48 5A 36";
+        let bytes = parse_vin_multiframe(response);
+        // Should collect bytes from lines with "49 02" header only
+        assert_eq!(bytes.len(), 6);
     }
 
     #[test]
     fn test_parse_vin_singleline() {
         let response = "49 02 56 46 33 4C 43 42 48 5A 36 4A 53 30 30 30 30 30 30";
         let bytes = parse_vin_singleline(response);
-        assert!(bytes.len() > 0);
+        assert_eq!(bytes.len(), 17);
+        assert_eq!(bytes[0], 0x56); // 'V'
+    }
+
+    #[test]
+    fn test_parse_vin_singleline_empty() {
+        let response = "";
+        let bytes = parse_vin_singleline(response);
+        assert_eq!(bytes.len(), 0);
+    }
+
+    #[test]
+    fn test_parse_vin_singleline_no_49_02() {
+        let response = "49 01 56 46 33 4C 43 42";
+        let bytes = parse_vin_singleline(response);
+        assert_eq!(bytes.len(), 0);
+    }
+
+    #[test]
+    fn test_parse_vin_singleline_exactly_49_02() {
+        let response = "49 02";
+        let bytes = parse_vin_singleline(response);
+        assert_eq!(bytes.len(), 0);
     }
 
     #[test]
     fn test_parse_vin_nospace() {
-        let response = "490256463334C43424835A364A5330303030303030";
+        let response = "4902564633344C434248355A364A533030303030303030";
         let bytes = parse_vin_nospace(response);
         assert!(bytes.len() > 0);
     }
 
     #[test]
-    fn test_validate_vin_valid() {
+    fn test_parse_vin_nospace_with_newlines() {
+        let response = "4902564633\n344C43424\n8355A364A5330303030303030";
+        let bytes = parse_vin_nospace(response);
+        assert!(bytes.len() > 0);
+    }
+
+    #[test]
+    fn test_parse_vin_nospace_no_4902() {
+        let response = "4903564633344C434248355A364A533030303030303030";
+        let bytes = parse_vin_nospace(response);
+        assert_eq!(bytes.len(), 0);
+    }
+
+    #[test]
+    fn test_parse_vin_nospace_empty() {
+        let response = "";
+        let bytes = parse_vin_nospace(response);
+        assert_eq!(bytes.len(), 0);
+    }
+
+    #[test]
+    fn test_parse_vin_can_header() {
+        let response = "7E8 10 14 49 02 01 56 46 33\n7E9 21 4C 43 42 48 5A 36 4A";
+        let bytes = parse_vin_can_header(response);
+        assert!(bytes.len() > 0);
+    }
+
+    #[test]
+    fn test_parse_vin_can_header_no_49_02() {
+        let response = "7E8 10 14 48 02 01 56 46 33";
+        let bytes = parse_vin_can_header(response);
+        assert_eq!(bytes.len(), 0);
+    }
+
+    #[test]
+    fn test_parse_vin_can_header_empty() {
+        let response = "";
+        let bytes = parse_vin_can_header(response);
+        assert_eq!(bytes.len(), 0);
+    }
+
+    #[test]
+    fn test_parse_vin_can_header_49_without_02_next() {
+        let response = "7E8 10 14 49 01 01 56 46 33";
+        let bytes = parse_vin_can_header(response);
+        assert_eq!(bytes.len(), 0);
+    }
+
+    #[test]
+    fn test_validate_vin_valid_17_chars() {
         let bytes = "VF3LCBHZ6JS000000".as_bytes().to_vec();
         let vin = validate_vin(bytes);
         assert_eq!(vin, "VF3LCBHZ6JS000000");
     }
 
     #[test]
-    fn test_validate_vin_invalid_length() {
+    fn test_validate_vin_invalid_length_short() {
         let bytes = "VF3LCBHZ6JS00".as_bytes().to_vec();
         let vin = validate_vin(bytes);
         assert_eq!(vin, "");
     }
 
     #[test]
-    fn test_validate_vin_with_ioq() {
-        // validate_vin does NOT reject I/O/Q when len == 17, only when len > 17
+    fn test_validate_vin_invalid_length_long() {
+        let bytes = "VF3LCBHZ6JS000000EXTRA".as_bytes().to_vec();
+        let vin = validate_vin(bytes);
+        // Should try to extract 17-char substring without I/O/Q
+        assert!(vin.is_empty() || vin.len() == 17);
+    }
+
+    #[test]
+    fn test_validate_vin_with_ioq_padded() {
         let bytes = "VF3LCBHZ6JSIOQQQQ".as_bytes().to_vec();
         let vin = validate_vin(bytes);
-        // 17 chars exactly → returned as-is
+        // 17 chars exactly → returned as-is (validate_vin doesn't filter I/O/Q at len==17)
         assert_eq!(vin.len(), 17);
+    }
+
+    #[test]
+    fn test_validate_vin_with_nonascii() {
+        let bytes = vec![0x56, 0x46, 0x33, 0xFF, 0x4C, 0x43, 0x42, 0x48, 0x5A, 0x36, 0x4A, 0x53, 0x30, 0x30, 0x30, 0x30, 0x30];
+        let vin = validate_vin(bytes);
+        // Non-ASCII bytes are filtered out by from_utf8, resulting in < 17 chars
+        assert!(vin.is_empty() || vin.len() < 17);
+    }
+
+    #[test]
+    fn test_validate_vin_numeric_17_chars() {
+        let bytes = "12345678901234567".as_bytes().to_vec();
+        let vin = validate_vin(bytes);
+        assert_eq!(vin, "12345678901234567");
+    }
+
+    #[test]
+    fn test_validate_vin_mixed_alphanumeric() {
+        let bytes = "WBADT434GG296970A".as_bytes().to_vec();
+        let vin = validate_vin(bytes);
+        assert_eq!(vin.len(), 17);
+    }
+
+    #[test]
+    fn test_parse_vin_raw_fallback() {
+        let response = "56 46 33 4C 43 42 48 5A 36 4A 53 30 30 30 30 30 30";
+        let bytes = parse_vin_raw_fallback(response);
+        assert_eq!(bytes.len(), 17);
+        assert_eq!(bytes[0], 0x56); // 'V'
+    }
+
+    #[test]
+    fn test_parse_vin_raw_fallback_empty() {
+        let response = "";
+        let bytes = parse_vin_raw_fallback(response);
+        assert_eq!(bytes.len(), 0);
+    }
+
+    #[test]
+    fn test_parse_vin_raw_fallback_invalid_hex() {
+        let response = "ZZ GG HH";
+        let bytes = parse_vin_raw_fallback(response);
+        assert_eq!(bytes.len(), 0);
+    }
+
+    #[test]
+    fn test_parse_vin_response_multiframe_strategy() {
+        let response = "49 02 01 56 46 33\n49 02 02 4C 43 42\n49 02 03 48 5A 36 4A 53 30 30 30 30 30 30";
+        let vin = parse_vin_response(response);
+        assert_eq!(vin.len(), 17);
+    }
+
+    #[test]
+    fn test_parse_vin_singleline_direct() {
+        let response = "49 02 56 46 33 4C 43 42 48 5A 36 4A 53 30 30 30 30 30 30";
+        let bytes = parse_vin_singleline(response);
+        assert_eq!(bytes.len(), 17);
+        let vin = String::from_utf8(bytes).unwrap();
+        assert_eq!(vin, "VF3LCBHZ6JS000000");
+    }
+
+    #[test]
+    fn test_parse_vin_response_empty() {
+        let response = "";
+        let vin = parse_vin_response(response);
+        assert_eq!(vin, "");
+    }
+
+    #[test]
+    fn test_parse_vin_response_no_data() {
+        let response = "NO DATA";
+        let vin = parse_vin_response(response);
+        assert_eq!(vin, "");
+    }
+
+    #[test]
+    fn test_parse_vin_response_error() {
+        let response = "ERROR";
+        let vin = parse_vin_response(response);
+        assert_eq!(vin, "");
+    }
+
+    #[test]
+    fn test_is_valid_vin_valid_format() {
+        let vin = "VF3LCBHZ6JS000001";
+        assert!(is_valid_vin(vin));
+    }
+
+    #[test]
+    fn test_is_valid_vin_with_numbers() {
+        let vin = "12345678901234567";
+        assert!(is_valid_vin(vin));
+    }
+
+    #[test]
+    fn test_is_valid_vin_too_short() {
+        let vin = "ABC";
+        assert!(!is_valid_vin(vin));
+    }
+
+    #[test]
+    fn test_is_valid_vin_too_long() {
+        let vin = "VF3LCBHZ6JS0000011";
+        assert!(!is_valid_vin(vin));
+    }
+
+    #[test]
+    fn test_is_valid_vin_contains_i() {
+        let vin = "WBADT434IG296970A";
+        assert!(!is_valid_vin(vin));
+    }
+
+    #[test]
+    fn test_is_valid_vin_contains_o() {
+        let vin = "WBADT434OG296970A";
+        assert!(!is_valid_vin(vin));
+    }
+
+    #[test]
+    fn test_is_valid_vin_contains_q() {
+        let vin = "WBADT434QG296970A";
+        assert!(!is_valid_vin(vin));
+    }
+
+    #[test]
+    fn test_is_valid_vin_special_chars() {
+        let vin = "WBADT434@G296970A";
+        assert!(!is_valid_vin(vin));
+    }
+
+    #[test]
+    fn test_is_valid_vin_lowercase() {
+        // is_valid_vin checks is_ascii_alphanumeric which includes lowercase
+        let vin = "wbadt434gg296970a";
+        assert!(is_valid_vin(vin));
     }
 }

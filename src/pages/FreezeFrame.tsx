@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import { Camera, AlertTriangle, Loader2, Download } from "lucide-react";
 import { invoke } from "@tauri-apps/api/core";
 import { escapeCSV } from "@/lib/utils";
+import { devError } from "@/lib/devlog";
 import type { FreezeFrameData } from "@/stores/vehicle";
 
 interface FreezeFrameProps {
@@ -33,7 +34,7 @@ export default function FreezeFrame({ data, isLoading }: FreezeFrameProps) {
     try {
       await invoke("save_csv_file", { filename: `bricarobd_freezeframe_frame${selectedFrame}_${Date.now()}.csv`, content: csv });
     } catch (e) {
-      console.error(`[BricarOBD] ${t("freezeFrame.exportError")}:`, e);
+      devError("ui", `${t("freezeFrame.exportError")}: ${e}`);
     }
   }, [data, selectedFrame, t]);
 

@@ -46,7 +46,7 @@ const pidColorMap: Record<number, string> = {
   [PID.CONTROL_MODULE_VOLTAGE]: "text-obd-success",
 };
 
-const DEFAULT_GAUGES = [PID.RPM, PID.SPEED, PID.COOLANT_TEMP, PID.ENGINE_LOAD];
+const DEFAULT_GAUGES: number[] = [];
 
 const gaugeLabels: Record<number, string> = {
   [PID.RPM]: "dashboard.rpm",
@@ -104,6 +104,11 @@ function getGaugeMinValue(pidValue: PidValue): number {
 
 export default function Dashboard({ pidData }: DashboardProps) {
   const { t } = useTranslation();
+  const [hasUserConfig] = useState(() => {
+    try {
+      return localStorage.getItem("bricarobd_dashboard_gauges") !== null;
+    } catch { return false; }
+  });
   const [selectedGauges, setSelectedGauges] = useState<number[]>(() => {
     try {
       const s = localStorage.getItem("bricarobd_dashboard_gauges");
@@ -115,6 +120,17 @@ export default function Dashboard({ pidData }: DashboardProps) {
   const { system: unitSystem } = useUnitSystem();
   const { toast, showToast, dismissToast } = useToast();
   const alertedRef = useRef<Set<number>>(new Set());
+
+  // Auto-select top PIDs when no user config exists
+  useEffect(() => {
+    if (!hasUserConfig && pidData.size > 0) {
+      const preferred = [PID.RPM, PID.SPEED, PID.COOLANT_TEMP, PID.ENGINE_LOAD];
+      const available = preferred.filter((p) => pidData.has(p));
+      if (available.length > 0) {
+        setSelectedGauges(available);
+      }
+    }
+  }, [hasUserConfig, pidData]);
 
   useEffect(() => {
     if (!showConfig) return;

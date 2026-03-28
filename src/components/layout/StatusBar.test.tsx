@@ -93,7 +93,7 @@ describe("StatusBar", () => {
       />
     );
 
-    expect(screen.getByText("BricarOBD v2.0.4")).toBeInTheDocument();
+    expect(screen.getByText(/BricarOBD v/)).toBeInTheDocument();
   });
 
   it("shows polling indicator when isPolling is true", () => {

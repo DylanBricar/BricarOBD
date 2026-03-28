@@ -1,6 +1,7 @@
 import { useState, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { useTranslation } from "react-i18next";
+import { devInfo } from "@/lib/devlog";
 
 interface AndroidUsbBridge {
   listDevices(): string;
@@ -90,13 +91,14 @@ export function useAndroidBridge(
 
       showToast(t("connection.usbBridgeStarting"));
       const result = JSON.parse(android.startBridge(devId, baudRate));
-      if (!result?.ok || typeof result.port !== "number") {
+      const port = result?.port;
+      if (!result?.ok || typeof port !== "number" || port < 1 || port > 65535) {
         showToast(t("connection.usbBridgeError", { error: result?.error ?? "unknown" }), "error");
         return;
       }
 
       showToast(t("connection.usbBridgeReady"));
-      await onConnectWifi("127.0.0.1", result.port);
+      await onConnectWifi("127.0.0.1", port);
     } catch (e) {
       showToast(`${t("common.error")}: ${e}`, "error");
     }
@@ -138,17 +140,18 @@ export function useAndroidBridge(
 
   const handleConnectBle = useCallback(async () => {
     if (!selectedBleDevice) return;
-    console.log("[BricarOBD] BLE connecting to", selectedBleDevice);
+    devInfo("connection", "BLE connecting to " + selectedBleDevice);
     try {
       const androidBle = getAndroidBle();
       if (androidBle) {
         showToast(t("connection.usbBridgeStarting"));
         const result = JSON.parse(androidBle.startBridge(selectedBleDevice));
-        if (!result?.ok || typeof result.port !== "number") {
+        const port = result?.port;
+        if (!result?.ok || typeof port !== "number" || port < 1 || port > 65535) {
           showToast(t("connection.usbBridgeError", { error: result?.error ?? "unknown" }), "error");
           return;
         }
-        await onConnectWifi("127.0.0.1", result.port);
+        await onConnectWifi("127.0.0.1", port);
         return;
       }
       if (onConnectBle) {

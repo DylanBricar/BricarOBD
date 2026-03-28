@@ -150,3 +150,119 @@ pub fn build_ecu_info(probe: &EcuProbe, dids: &HashMap<String, String>) -> EcuIn
         dids: dids.clone(),
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_get_ecu_probes_count() {
+        let probes = get_ecu_probes();
+        assert!(probes.len() >= 20, "Should have at least 20 ECU probes");
+    }
+
+    #[test]
+    fn test_get_ecu_probes_has_engine() {
+        let probes = get_ecu_probes();
+        assert!(probes.iter().any(|p| p.tx_addr == "7E0"), "Should have engine ECU 7E0");
+    }
+
+    #[test]
+    fn test_get_ecu_probes_has_transmission() {
+        let probes = get_ecu_probes();
+        assert!(probes.iter().any(|p| p.tx_addr == "7E1"), "Should have transmission ECU 7E1");
+    }
+
+    #[test]
+    fn test_get_ecu_probes_has_abs() {
+        let probes = get_ecu_probes();
+        assert!(probes.iter().any(|p| p.tx_addr == "7E2"), "Should have ABS ECU 7E2");
+    }
+
+    #[test]
+    fn test_get_ecu_probes_has_psa_bsi() {
+        let probes = get_ecu_probes();
+        assert!(probes.iter().any(|p| p.tx_addr == "75D"), "Should have PSA BSI 75D");
+    }
+
+    #[test]
+    fn test_get_ecu_probes_engine_has_dids() {
+        let probes = get_ecu_probes();
+        let engine = probes.iter().find(|p| p.tx_addr == "7E0").unwrap();
+        assert!(engine.dids.len() >= 4, "Engine ECU should have at least 4 DIDs");
+    }
+
+    #[test]
+    fn test_ecu_name_fr() {
+        assert_eq!(ecu_name("fr", "Moteur", "Engine"), "Moteur");
+    }
+
+    #[test]
+    fn test_ecu_name_en() {
+        assert_eq!(ecu_name("en", "Moteur", "Engine"), "Engine");
+    }
+
+    #[test]
+    fn test_ecu_name_default_en() {
+        assert_eq!(ecu_name("de", "Moteur", "Engine"), "Engine");
+    }
+
+    #[test]
+    fn test_is_valid_ecu_response_valid() {
+        assert!(is_valid_ecu_response("62 F1 90 41 42 43"));
+    }
+
+    #[test]
+    fn test_is_valid_ecu_response_no_data() {
+        assert!(!is_valid_ecu_response("NO DATA"));
+    }
+
+    #[test]
+    fn test_is_valid_ecu_response_error() {
+        assert!(!is_valid_ecu_response("ERROR"));
+    }
+
+    #[test]
+    fn test_is_valid_ecu_response_unable() {
+        assert!(!is_valid_ecu_response("UNABLE TO CONNECT"));
+    }
+
+    #[test]
+    fn test_is_valid_ecu_response_question_mark() {
+        assert!(!is_valid_ecu_response("?"));
+    }
+
+    #[test]
+    fn test_is_valid_ecu_response_empty() {
+        assert!(!is_valid_ecu_response(""));
+    }
+
+    #[test]
+    fn test_is_valid_ecu_response_whitespace_only() {
+        assert!(!is_valid_ecu_response("   "));
+    }
+
+    #[test]
+    fn test_is_valid_ecu_response_contains_no_data() {
+        assert!(!is_valid_ecu_response("7E0 NO DATA"));
+    }
+
+    #[test]
+    fn test_get_ecu_probes_all_have_names() {
+        let probes = get_ecu_probes();
+        for probe in &probes {
+            assert!(!probe.name_fr.is_empty(), "Probe {} should have FR name", probe.tx_addr);
+            assert!(!probe.name_en.is_empty(), "Probe {} should have EN name", probe.tx_addr);
+        }
+    }
+
+    #[test]
+    fn test_get_ecu_probes_unique_addresses() {
+        let probes = get_ecu_probes();
+        let mut addrs: Vec<&str> = probes.iter().map(|p| p.tx_addr).collect();
+        let count = addrs.len();
+        addrs.sort();
+        addrs.dedup();
+        assert_eq!(addrs.len(), count, "All ECU addresses should be unique");
+    }
+}

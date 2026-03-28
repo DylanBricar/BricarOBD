@@ -46,6 +46,8 @@ export function useConnectionEffects(
     let cancelled = false;
     devInfo("ui", "Connection: " + status);
 
+    handleClearDiscoveryTimeout();
+
     if (status === "demo") {
       devInfo("ui", "Demo polling started");
       setIsDiscoveryComplete(true);

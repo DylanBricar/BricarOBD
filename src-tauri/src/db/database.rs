@@ -11,6 +11,11 @@ pub struct Database {
 }
 
 impl Database {
+    /// Execute raw SQL batch (for transaction control: BEGIN, COMMIT, ROLLBACK)
+    pub fn execute_batch(&self, sql: &str) -> Result<(), String> {
+        self.conn.execute_batch(sql).map_err(|e| format!("SQL batch failed: {}", e))
+    }
+
     /// Open pre-built database
     pub fn open(path: &Path) -> Result<Self, String> {
         let conn = Connection::open(path)

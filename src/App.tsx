@@ -10,6 +10,7 @@ import { useConnectionStore } from "@/stores/connection";
 import DevConsole from "@/components/DevConsole";
 import { useVehicleData } from "@/stores/vehicle";
 import type { DtcCode, EcuInfo, VehicleOperation, WriteOperation } from "@/stores/vehicle";
+import { buildDemoEcus } from "@/stores/vehicleDemoData";
 import { devInfo, devError } from "@/lib/devlog";
 import { useThemeStore, setThemeMode, type ThemeMode } from "@/stores/theme";
 import { useToast } from "@/hooks/useToast";
@@ -128,7 +129,7 @@ export default function App() {
   useEffect(() => {
     const pages = ["connection", "dashboard", "liveData", "dtc", "ecuInfo", "monitors", "history", "advanced"];
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.ctrlKey || e.metaKey) {
+      if (e.altKey) {
         const num = parseInt(e.key);
         if (num >= 1 && num <= 8) {
           e.preventDefault();
@@ -233,13 +234,17 @@ export default function App() {
   const handleEcuScan = useCallback(async () => {
     setIsEcuScanning(true);
     try {
-      const ecus = await invoke<EcuInfo[]>("scan_ecus");
-      vehicle.setEcus(ecus);
+      if (connection.status === "demo") {
+        vehicle.setEcus(buildDemoEcus(t));
+      } else {
+        const ecus = await invoke<EcuInfo[]>("scan_ecus");
+        vehicle.setEcus(ecus);
+      }
     } catch (e) {
       devInfo("ui", "ECU scan error: " + String(e));
     }
     setIsEcuScanning(false);
-  }, [vehicle.setEcus]);
+  }, [vehicle.setEcus, connection.status, t]);
 
   return (
     <ErrorBoundary>

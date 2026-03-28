@@ -58,8 +58,9 @@ export default function WiFiSettings({ isConnected, status, onConnectWifi, showT
     <>
       {/* WiFi Host */}
       <div className="space-y-1.5">
-        <label className="text-xs text-obd-text-muted">{t("connection.wifiHost")}</label>
+        <label htmlFor="wifi-host" className="text-xs text-obd-text-muted">{t("connection.wifiHost")}</label>
         <input
+          id="wifi-host"
           type="text"
           value={wifiHost}
           onChange={(e) => setWifiHost(e.target.value)}
@@ -75,8 +76,9 @@ export default function WiFiSettings({ isConnected, status, onConnectWifi, showT
 
       {/* WiFi Port */}
       <div className="space-y-1.5">
-        <label className="text-xs text-obd-text-muted">{t("connection.wifiPort")}</label>
+        <label htmlFor="wifi-port" className="text-xs text-obd-text-muted">{t("connection.wifiPort")}</label>
         <input
+          id="wifi-port"
           type="text"
           value={wifiPort}
           onChange={(e) => setWifiPort(e.target.value)}

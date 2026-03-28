@@ -138,6 +138,11 @@ export default function LiveData({ pidData, isPolling, onStartPolling, onPausePo
 
   const { toast, showToast, dismissToast } = useToast();
 
+  // Clear recording buffer on unmount to free memory
+  useEffect(() => {
+    return () => { recordBufferRef.current = []; };
+  }, []);
+
   const handleStopRecording = useCallback(async () => {
     setIsRecording(false);
     const snapshots = recordBufferRef.current.length;
@@ -154,6 +159,7 @@ export default function LiveData({ pidData, isPolling, onStartPolling, onPausePo
     } else {
       showToast(t("liveData.noRecordingData"), "error");
     }
+    recordBufferRef.current = [];
   }, [pidData, showToast, t]);
 
   const handleExportCSV = useCallback(async () => {

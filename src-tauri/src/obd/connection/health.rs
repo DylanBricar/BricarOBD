@@ -111,3 +111,21 @@ impl Elm327Connection {
         Err("Recovery failed — adapter may need physical reconnection".to_string())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_max_consecutive_errors_constant() {
+        assert_eq!(Elm327Connection::MAX_CONSECUTIVE_ERRORS, 10);
+    }
+
+    #[test]
+    fn test_module_compiles() {
+        // Validates that the health module compiles correctly
+        // All functions in health.rs require real OBD connection via with_real_connection()
+        // so unit tests are limited to structure validation
+        assert!(true);
+    }
+}

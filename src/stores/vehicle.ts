@@ -22,7 +22,12 @@ function createRealPollFn(
       if (pids.length === 0) return;
       setPidData(prev => {
         const merged = new Map(prev);
-        for (const p of pids) merged.set(p.pid, p);
+        for (const p of pids) {
+          if (p.history && p.history.length > 300) {
+            p.history = p.history.slice(-300);
+          }
+          merged.set(p.pid, p);
+        }
         return merged;
       });
     } catch (e) {
@@ -78,7 +83,10 @@ export function useVehicleData() {
         .filter((d) => !codes.has(d.code))
         .map((d) => ({ ...d, seenAt: now }));
       const updated = [...prev, ...newEntries].slice(-500);
-      try { localStorage.setItem("bricarobd_dtc_history", JSON.stringify(updated)); } catch {}
+      try {
+        const light = updated.map(({ repairTips, ...rest }) => rest);
+        localStorage.setItem("bricarobd_dtc_history", JSON.stringify(light));
+      } catch {}
       return updated;
     });
   }, []);

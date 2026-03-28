@@ -25,7 +25,6 @@ const statusBadge = {
 };
 
 const TAB_OPTIONS = ["dtc", "mode06", "freeze"] as const;
-const STATUS_FILTERS = ["all", "active", "pending", "permanent"] as const;
 
 interface DTCProps {
   dtcs: DtcCode[];
@@ -262,7 +261,7 @@ export default function DTC({
 
           {/* Status filters */}
           <div className="flex gap-1.5">
-            {STATUS_FILTERS.map((filter) => (
+            {(["all", "active", "pending", "permanent"] as const).map((filter) => (
               <button
                 key={filter}
                 onClick={() => setStatusFilter(filter)}

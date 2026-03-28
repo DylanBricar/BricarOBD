@@ -1,4 +1,4 @@
-import { useMemo, useId } from "react";
+import { useMemo, useCallback, useId } from "react";
 import {
   AreaChart,
   Area,
@@ -8,6 +8,16 @@ import {
   Tooltip,
 } from "recharts";
 import { cn } from "@/lib/utils";
+
+const TOOLTIP_CONTENT_STYLE = {
+  backgroundColor: "var(--obd-chart-tooltip-bg)",
+  border: "1px solid var(--obd-chart-tooltip-border)",
+  borderRadius: "8px",
+  fontSize: "11px",
+  color: "var(--obd-chart-text)",
+} as const;
+
+const EMPTY_LABEL_FORMATTER = () => "";
 
 interface LiveChartProps {
   data: number[];
@@ -33,6 +43,11 @@ export default function LiveChart({
   maxDomain,
 }: LiveChartProps) {
   const gradientId = useId();
+
+  const tooltipFormatter = useCallback(
+    (val: number) => [`${val.toFixed(1)} ${unit}`, label],
+    [unit, label]
+  );
 
   const chartData = useMemo(
     () => data.map((value, i) => ({ index: i, value })),
@@ -67,15 +82,9 @@ export default function LiveChart({
             </>
           )}
           <Tooltip
-            contentStyle={{
-              backgroundColor: "var(--obd-chart-tooltip-bg)",
-              border: "1px solid var(--obd-chart-tooltip-border)",
-              borderRadius: "8px",
-              fontSize: "11px",
-              color: "var(--obd-chart-text)",
-            }}
-            formatter={(val: number) => [`${val.toFixed(1)} ${unit}`, label]}
-            labelFormatter={() => ""}
+            contentStyle={TOOLTIP_CONTENT_STYLE}
+            formatter={tooltipFormatter}
+            labelFormatter={EMPTY_LABEL_FORMATTER}
           />
           <Area
             type="monotone"

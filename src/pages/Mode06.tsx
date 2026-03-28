@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import { FlaskConical, CheckCircle2, XCircle, Loader2, Download } from "lucide-react";
 import { invoke } from "@tauri-apps/api/core";
 import { escapeCSV } from "@/lib/utils";
+import { devError } from "@/lib/devlog";
 import type { Mode06Result } from "@/stores/vehicle";
 
 interface Mode06Props {
@@ -23,7 +24,7 @@ export default function Mode06({ results, isLoading }: Mode06Props) {
     try {
       await invoke("save_csv_file", { filename: `bricarobd_mode06_${Date.now()}.csv`, content: csv });
     } catch (e) {
-      console.error(`[BricarOBD] ${t("mode06.exportError")}:`, e);
+      devError("ui", `${t("mode06.exportError")}: ${e}`);
     }
   }, [results, t]);
 

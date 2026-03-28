@@ -1,5 +1,5 @@
 /// Helper to get bilingual NRC description
-fn nrc_description(lang: &str, fr: &str, en: &str) -> String {
+pub(crate) fn nrc_description(lang: &str, fr: &str, en: &str) -> String {
     if lang == "fr" {
         fr.to_string()
     } else {
@@ -98,5 +98,100 @@ pub fn parse_negative_response(response: &str, lang: &str) -> String {
         }
     } else {
         response.to_string()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_parse_nrc_general_reject_en() {
+        assert_eq!(parse_negative_response("7F 22 10", "en"), "General reject");
+    }
+
+    #[test]
+    fn test_parse_nrc_general_reject_fr() {
+        assert_eq!(parse_negative_response("7F 22 10", "fr"), "Rejet général");
+    }
+
+    #[test]
+    fn test_parse_nrc_service_not_supported() {
+        assert_eq!(parse_negative_response("7F 22 11", "en"), "Service not supported");
+    }
+
+    #[test]
+    fn test_parse_nrc_sub_function_not_supported() {
+        assert_eq!(parse_negative_response("7F 22 12", "en"), "Sub-function not supported");
+    }
+
+    #[test]
+    fn test_parse_nrc_invalid_message_length() {
+        assert_eq!(parse_negative_response("7F 22 13", "en"), "Invalid message length");
+    }
+
+    #[test]
+    fn test_parse_nrc_conditions_not_correct() {
+        assert_eq!(parse_negative_response("7F 22 22", "en"), "Conditions not correct");
+    }
+
+    #[test]
+    fn test_parse_nrc_request_out_of_range() {
+        assert_eq!(parse_negative_response("7F 22 31", "en"), "Request out of range");
+    }
+
+    #[test]
+    fn test_parse_nrc_security_access_denied() {
+        assert_eq!(parse_negative_response("7F 27 33", "en"), "Security access denied");
+    }
+
+    #[test]
+    fn test_parse_nrc_response_pending() {
+        assert_eq!(parse_negative_response("7F 22 78", "en"), "Response pending (still processing)");
+    }
+
+    #[test]
+    fn test_parse_nrc_unknown_code() {
+        assert_eq!(parse_negative_response("7F 22 FF", "en"), "NRC 0xFF");
+    }
+
+    #[test]
+    fn test_parse_nrc_non_negative_response() {
+        assert_eq!(parse_negative_response("62 F1 90 41 42", "en"), "62 F1 90 41 42");
+    }
+
+    #[test]
+    fn test_parse_nrc_empty() {
+        assert_eq!(parse_negative_response("", "en"), "");
+    }
+
+    #[test]
+    fn test_parse_nrc_too_short() {
+        assert_eq!(parse_negative_response("7F 22", "en"), "7F 22");
+    }
+
+    #[test]
+    fn test_parse_nrc_response_too_long() {
+        assert_eq!(parse_negative_response("7F 22 14", "en"), "Response too long");
+    }
+
+    #[test]
+    fn test_parse_nrc_exceeded_attempts() {
+        assert_eq!(parse_negative_response("7F 27 36", "en"), "Exceeded number of attempts");
+    }
+
+    #[test]
+    fn test_parse_nrc_upload_not_accepted() {
+        assert_eq!(parse_negative_response("7F 34 70", "en"), "Upload/download not accepted");
+    }
+
+    #[test]
+    fn test_nrc_description_fr() {
+        assert_eq!(nrc_description("fr", "Bonjour", "Hello"), "Bonjour");
+    }
+
+    #[test]
+    fn test_nrc_description_en() {
+        assert_eq!(nrc_description("en", "Bonjour", "Hello"), "Hello");
     }
 }

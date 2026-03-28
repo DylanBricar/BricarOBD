@@ -291,6 +291,7 @@ mod tests {
         let response = "46 00 80 00 00 00";
         let bitmap = parse_mode06_bitmap(response);
         assert!(bitmap.contains(&0x01));
+        assert_eq!(bitmap.len(), 1);
     }
 
     #[test]
@@ -299,6 +300,36 @@ mod tests {
         let bitmap = parse_mode06_bitmap(response);
         assert!(bitmap.contains(&0x01));
         assert!(bitmap.contains(&0x08));
+        assert_eq!(bitmap.len(), 2);
+    }
+
+    #[test]
+    fn test_parse_mode06_bitmap_all_bits_set() {
+        let response = "46 00 FF FF FF FF";
+        let bitmap = parse_mode06_bitmap(response);
+        assert!(bitmap.len() > 0);
+    }
+
+    #[test]
+    fn test_parse_mode06_bitmap_no_46_prefix() {
+        let response = "45 00 80 00 00 00";
+        let bitmap = parse_mode06_bitmap(response);
+        assert_eq!(bitmap.len(), 0);
+    }
+
+    #[test]
+    fn test_parse_mode06_bitmap_second_byte_only() {
+        let response = "46 00 00 80 00 00";
+        let bitmap = parse_mode06_bitmap(response);
+        assert!(bitmap.contains(&0x09)); // Bit 0 of byte 1 → TID 9
+    }
+
+    #[test]
+    fn test_parse_mode06_bitmap_tid_exceeds_0xa0() {
+        let response = "46 00 00 00 00 80"; // Would be TID > 0xA0
+        let bitmap = parse_mode06_bitmap(response);
+        // Should exclude TIDs > 0xA0
+        assert!(bitmap.iter().all(|tid| *tid <= 0xA0));
     }
 
     #[test]
@@ -314,6 +345,7 @@ mod tests {
         let results = parse_mode06_results(response, "en");
         assert_eq!(results.len(), 1);
         assert_eq!(results[0].tid, 0x01);
+        assert_eq!(results[0].mid, 0x00);
         assert_eq!(results[0].test_value, 80.0);
     }
 
@@ -321,6 +353,7 @@ mod tests {
     fn test_parse_mode06_results_test_passed() {
         let response = "46 01 00 00 50 00 40 00 60";
         let results = parse_mode06_results(response, "en");
+        assert_eq!(results.len(), 1);
         assert!(results[0].passed);
     }
 
@@ -328,7 +361,102 @@ mod tests {
     fn test_parse_mode06_results_test_failed() {
         let response = "46 01 00 00 20 00 40 00 60";
         let results = parse_mode06_results(response, "en");
+        assert_eq!(results.len(), 1);
         assert!(!results[0].passed);
+    }
+
+    #[test]
+    fn test_parse_mode06_results_test_at_lower_bound() {
+        let response = "46 01 00 00 40 00 40 00 60";
+        let results = parse_mode06_results(response, "en");
+        assert!(results[0].passed);
+    }
+
+    #[test]
+    fn test_parse_mode06_results_test_at_upper_bound() {
+        let response = "46 01 00 00 60 00 40 00 60";
+        let results = parse_mode06_results(response, "en");
+        assert!(results[0].passed);
+    }
+
+    #[test]
+    fn test_parse_mode06_results_test_below_lower_bound() {
+        let response = "46 01 00 00 39 00 40 00 60";
+        let results = parse_mode06_results(response, "en");
+        assert!(!results[0].passed);
+    }
+
+    #[test]
+    fn test_parse_mode06_results_test_above_upper_bound() {
+        let response = "46 01 00 00 61 00 40 00 60";
+        let results = parse_mode06_results(response, "en");
+        assert!(!results[0].passed);
+    }
+
+    #[test]
+    fn test_parse_mode06_results_multiple_results() {
+        let response = "46 01 00 00 50 00 40 00 60\n46 02 00 00 25 00 20 00 30";
+        let results = parse_mode06_results(response, "en");
+        assert_eq!(results.len(), 2);
+        assert_eq!(results[0].tid, 0x01);
+        assert_eq!(results[1].tid, 0x02);
+    }
+
+    #[test]
+    fn test_parse_mode06_results_skips_bitmap() {
+        let response = "46 00 80 00 00 00\n46 01 00 00 50 00 40 00 60";
+        let results = parse_mode06_results(response, "en");
+        // Should skip "46 00" bitmap response
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].tid, 0x01);
+    }
+
+    #[test]
+    fn test_parse_mode06_results_insufficient_data() {
+        let response = "46 01 00";
+        let results = parse_mode06_results(response, "en");
+        assert_eq!(results.len(), 0);
+    }
+
+    #[test]
+    fn test_parse_mode06_results_no_46_marker() {
+        let response = "45 01 00 00 50 00 40 00 60";
+        let results = parse_mode06_results(response, "en");
+        assert_eq!(results.len(), 0);
+    }
+
+    #[test]
+    fn test_parse_mode06_results_large_test_values() {
+        let response = "46 01 00 FF FF 00 00 FF FF";
+        let results = parse_mode06_results(response, "en");
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].test_value, 65535.0);
+        assert_eq!(results[0].max_limit, 65535.0);
+    }
+
+    #[test]
+    fn test_parse_mode06_results_lang_en() {
+        let response = "46 01 00 00 50 00 40 00 60";
+        let results = parse_mode06_results(response, "en");
+        assert_eq!(results.len(), 1);
+        // Name should be set (get_mode06_name will return defaults if not found)
+        assert!(!results[0].name.is_empty());
+    }
+
+    #[test]
+    fn test_parse_mode06_results_lang_fr() {
+        let response = "46 01 00 00 50 00 40 00 60";
+        let results = parse_mode06_results(response, "fr");
+        assert_eq!(results.len(), 1);
+        assert!(!results[0].name.is_empty());
+    }
+
+    #[test]
+    fn test_parse_mode06_results_with_extra_bytes() {
+        let response = "46 01 00 00 50 00 40 00 60 EXTRA";
+        let results = parse_mode06_results(response, "en");
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].tid, 0x01);
     }
 }
 

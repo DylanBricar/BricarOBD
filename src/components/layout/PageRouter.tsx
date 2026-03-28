@@ -1,4 +1,4 @@
-import { Suspense, lazy } from "react";
+import { Suspense, lazy, useCallback } from "react";
 import { useTranslation } from "react-i18next";
 import ErrorBoundary from "@/components/ErrorBoundary";
 import type { PidValue, DtcCode, DtcHistoryEntry, EcuInfo, MonitorStatus, Mode06Result, FreezeFrameData } from "@/stores/vehicle";
@@ -82,6 +82,14 @@ export default function PageRouter({
   onReadAll, onClearAll, isReading, isClearing,
   isEcuScanning, onEcuScan,
 }: PageRouterProps) {
+  const handleStartPolling = useCallback((ms: number) => {
+    if (connection.status === "connected") {
+      vehicle.startRealPolling(ms, connection.vehicle?.make || "");
+    } else {
+      vehicle.startDemoPolling(ms);
+    }
+  }, [connection.status, connection.vehicle?.make, vehicle.startRealPolling, vehicle.startDemoPolling]);
+
   switch (activePage) {
     case "connection":
       return (
@@ -125,13 +133,7 @@ export default function PageRouter({
             <LiveData
               pidData={vehicle.pidData}
               isPolling={vehicle.isPolling}
-              onStartPolling={(ms: number) => {
-                if (connection.status === "connected") {
-                  vehicle.startRealPolling(ms, connection.vehicle?.make || "");
-                } else {
-                  vehicle.startDemoPolling(ms);
-                }
-              }}
+              onStartPolling={handleStartPolling}
               onPausePolling={vehicle.pausePolling}
               onChangeRefreshRate={vehicle.changeRefreshRate}
             />

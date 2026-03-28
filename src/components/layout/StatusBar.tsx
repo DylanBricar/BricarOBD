@@ -69,7 +69,7 @@ export default function StatusBar({ status, vehicle, isPolling }: StatusBarProps
       dotClass: "status-dot-disconnected",
       textClass: "text-obd-danger",
     },
-  }), [t, i18n.language]);
+  }), [t]);
 
   const config = statusConfig[status];
   const Icon = config.icon;
@@ -108,7 +108,7 @@ export default function StatusBar({ status, vehicle, isPolling }: StatusBarProps
       )}
 
       {milStatus?.milOn && (
-        <>
+        <div role="status" aria-live="assertive" className="contents">
           <div className="mx-3 h-3 w-px bg-obd-border/50" />
           <div className="flex items-center gap-1.5 text-obd-danger">
             <div className="w-2 h-2 rounded-full bg-obd-danger animate-pulse" />
@@ -117,7 +117,7 @@ export default function StatusBar({ status, vehicle, isPolling }: StatusBarProps
               <span className="text-obd-text-muted">({milStatus.dtcCount})</span>
             )}
           </div>
-        </>
+        </div>
       )}
 
       {/* Spacer */}

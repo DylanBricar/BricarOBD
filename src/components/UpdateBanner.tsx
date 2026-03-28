@@ -24,7 +24,7 @@ export default function UpdateBanner({ state, onDownload, onDismiss }: UpdateBan
 
   if (state.status === "available") {
     return (
-      <div className="mx-4 mb-2 px-3 py-2 rounded-lg bg-obd-accent/10 border border-obd-accent/20 flex items-center gap-2 text-xs animate-slide-in">
+      <div role="status" aria-live="polite" className="mx-4 mb-2 px-3 py-2 rounded-lg bg-obd-accent/10 border border-obd-accent/20 flex items-center gap-2 text-xs animate-slide-in">
         <Download size={14} className="text-obd-accent flex-shrink-0" />
         <span className="flex-1 text-obd-text">
           {t("update.available", { version: state.version })}
@@ -35,7 +35,7 @@ export default function UpdateBanner({ state, onDownload, onDismiss }: UpdateBan
         >
           {t("update.install")}
         </button>
-        <button onClick={onDismiss} className="p-0.5 text-obd-text-muted hover:text-obd-text transition-colors">
+        <button onClick={onDismiss} aria-label={t("common.close")} className="p-0.5 text-obd-text-muted hover:text-obd-text transition-colors">
           <X size={12} />
         </button>
       </div>
@@ -44,7 +44,7 @@ export default function UpdateBanner({ state, onDownload, onDismiss }: UpdateBan
 
   if (state.status === "downloading") {
     return (
-      <div className="mx-4 mb-2 px-3 py-2 rounded-lg bg-obd-accent/10 border border-obd-accent/20 flex items-center gap-2 text-xs animate-slide-in">
+      <div role="status" aria-live="polite" className="mx-4 mb-2 px-3 py-2 rounded-lg bg-obd-accent/10 border border-obd-accent/20 flex items-center gap-2 text-xs animate-slide-in">
         <RefreshCw size={14} className="text-obd-accent animate-spin flex-shrink-0" />
         <span className="text-obd-text">{t("update.downloading")}</span>
       </div>
@@ -53,7 +53,7 @@ export default function UpdateBanner({ state, onDownload, onDismiss }: UpdateBan
 
   if (state.status === "ready") {
     return (
-      <div className="mx-4 mb-2 px-3 py-2 rounded-lg bg-obd-success/10 border border-obd-success/20 flex items-center gap-2 text-xs text-obd-success animate-slide-in">
+      <div role="status" aria-live="polite" className="mx-4 mb-2 px-3 py-2 rounded-lg bg-obd-success/10 border border-obd-success/20 flex items-center gap-2 text-xs text-obd-success animate-slide-in">
         <CheckCircle2 size={14} />
         <span>{t("update.restarting")}</span>
       </div>
@@ -62,9 +62,9 @@ export default function UpdateBanner({ state, onDownload, onDismiss }: UpdateBan
 
   if (state.status === "error") {
     return (
-      <div className="mx-4 mb-2 px-3 py-2 rounded-lg bg-obd-danger/10 border border-obd-danger/20 flex items-center gap-2 text-xs animate-slide-in">
+      <div role="alert" className="mx-4 mb-2 px-3 py-2 rounded-lg bg-obd-danger/10 border border-obd-danger/20 flex items-center gap-2 text-xs animate-slide-in">
         <span className="text-obd-danger flex-1">{t("update.error")}</span>
-        <button onClick={onDismiss} className="p-0.5 text-obd-text-muted hover:text-obd-text transition-colors">
+        <button onClick={onDismiss} aria-label={t("common.close")} className="p-0.5 text-obd-text-muted hover:text-obd-text transition-colors">
           <X size={12} />
         </button>
       </div>
