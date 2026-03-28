@@ -110,6 +110,7 @@ fn update_fail_counts(fail_updates: &[(u16, bool)]) {
 /// Step 4: Lock PID_HISTORY, decode raw bytes, record history, return PidValue results
 fn decode_and_record_history(
     raw_results: &[(u16, String, String, Vec<u8>)],
+    definitions: &[crate::models::PidDefinition],
     now: u64,
 ) -> Vec<PidValue> {
     let mut results = Vec::new();
@@ -122,8 +123,12 @@ fn decode_and_record_history(
             hist.push_back(value);
             if hist.len() > 120 { hist.pop_front(); }
 
-            let min = hist.iter().cloned().fold(f64::INFINITY, f64::min);
-            let max = hist.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
+            // Use definition min/max as bounds, then narrow to observed range
+            let def = definitions.iter().find(|d| d.pid == *pid);
+            let hist_min = hist.iter().cloned().fold(f64::INFINITY, f64::min);
+            let hist_max = hist.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
+            let min = if let Some(d) = def { d.min.min(hist_min) } else { hist_min };
+            let max = if let Some(d) = def { d.max.max(hist_max) } else { hist_max };
 
             results.push(PidValue {
                 pid: *pid,
@@ -203,7 +208,7 @@ fn get_pid_data_inner() -> Vec<PidValue> {
 
     update_fail_counts(&fail_updates);
 
-    let results = decode_and_record_history(&raw_results, now);
+    let results = decode_and_record_history(&raw_results, &definitions, now);
 
     dev_log::log_debug("dashboard", &format!(
         "PID poll: {} ok, {} failed, {} skipped (bitmap/blacklist)",
@@ -247,11 +252,13 @@ fn get_pid_data_extended_inner(manufacturer: String) -> Vec<PidValue> {
     dev_log::log_info("dashboard", &format!("Extended polling for manufacturer: {}", manufacturer));
 
     // Use discovered DIDs if available, else fallback to full manufacturer list
-    let dids = {
+    let dids: Vec<(String, String)> = {
         let guard = DISCOVERED_DIDS.lock().unwrap_or_else(|e| e.into_inner());
-        guard.clone()
+        match guard.as_ref() {
+            Some(d) => d.clone(),
+            None => crate::obd::ecu_profiles::get_dids_for_manufacturer(&manufacturer),
+        }
     };
-    let dids = dids.unwrap_or_else(|| crate::obd::ecu_profiles::get_dids_for_manufacturer(&manufacturer));
     dev_log::log_debug("dashboard", &format!("Polling {} DIDs for {}", dids.len(), manufacturer));
 
     let now = std::time::SystemTime::now()
@@ -266,31 +273,36 @@ fn get_pid_data_extended_inner(manufacturer: String) -> Vec<PidValue> {
         fail_snapshot = fail_guard.get_or_insert_with(HashMap::new).clone();
     }
 
-    // Step 2: Query DIDs — only CONNECTION lock held per query
+    // Step 2: Query DIDs — single CONNECTION lock for entire batch
     let mut did_results: Vec<(u16, String, Vec<u8>)> = Vec::new();
     let mut fail_updates: Vec<(u16, bool)> = Vec::new();
 
-    for (did_hex, did_name) in &dids {
-        let did_id = match u16::from_str_radix(did_hex, 16).or_else(|_| u16::from_str_radix(did_hex, 10)) {
-            Ok(id) => id,
-            Err(_) => continue,
-        };
+    // Pre-parse DID IDs to avoid parsing inside the lock
+    let parsed_dids: Vec<(u16, &str)> = dids.iter()
+        .filter_map(|(did_hex, did_name)| {
+            let did_id = u16::from_str_radix(did_hex, 16).or_else(|_| u16::from_str_radix(did_hex, 10)).ok()?;
+            if did_id < 0x100 { return None; }
+            let did_fails = fail_snapshot.get(&did_id).copied().unwrap_or(0);
+            if did_fails >= MAX_PID_FAILURES { return None; }
+            Some((did_id, did_name.as_str()))
+        })
+        .collect();
 
-        if did_id < 0x100 { continue; }
-
-        let did_fails = fail_snapshot.get(&did_id).copied().unwrap_or(0);
-        if did_fails >= MAX_PID_FAILURES { continue; }
-
-        match with_real_connection(|conn| conn.query_did(did_id)) {
-            Ok(bytes) => {
-                fail_updates.push((did_id, true));
-                did_results.push((did_id, did_name.clone(), bytes));
-            }
-            Err(_) => {
-                fail_updates.push((did_id, false));
+    // Acquire CONNECTION mutex ONCE for entire DID batch
+    let _ = with_real_connection(|conn| {
+        for &(did_id, did_name) in &parsed_dids {
+            match conn.query_did(did_id) {
+                Ok(bytes) => {
+                    fail_updates.push((did_id, true));
+                    did_results.push((did_id, did_name.to_string(), bytes));
+                }
+                Err(_) => {
+                    fail_updates.push((did_id, false));
+                }
             }
         }
-    }
+        Ok(())
+    });
 
     // Step 3: Update fail counts (short lock)
     {
@@ -311,7 +323,7 @@ fn get_pid_data_extended_inner(manufacturer: String) -> Vec<PidValue> {
         let mut cache_guard = DID_INFO_CACHE.lock().unwrap_or_else(|e| e.into_inner());
         if cache_guard.is_none() {
             let mut cache = HashMap::new();
-            for (did_id, _did_name, _) in &did_results {
+            for &(did_id, _) in &parsed_dids {
                 let did_hex = format!("{:04X}", did_id);
                 if let Some(info) = super::database::get_did_info_sync(&did_hex, &manufacturer) {
                     cache.insert(did_hex, info);
@@ -322,20 +334,22 @@ fn get_pid_data_extended_inner(manufacturer: String) -> Vec<PidValue> {
         }
     }
 
-    // Step 5: Decode values + update history (short lock, no DB queries)
-    let did_cache = {
-        let cache_guard = DID_INFO_CACHE.lock().unwrap_or_else(|e| e.into_inner());
-        cache_guard.clone().unwrap_or_default()
-    };
+    // Step 5: Decode values + update history
+    // Hold DID_INFO_CACHE lock for read-only lookups (no clone needed)
     let mut success_count = 0;
     {
+        let cache_guard = DID_INFO_CACHE.lock().unwrap_or_else(|e| e.into_inner());
+        let did_cache = cache_guard.as_ref();
+        let empty_cache = HashMap::new();
+        let cache = did_cache.unwrap_or(&empty_cache);
+
         let mut history_guard = PID_HISTORY.lock().unwrap_or_else(|e| e.into_inner());
         let history = history_guard.get_or_insert_with(HashMap::new);
 
         for (did_id, did_name, response_bytes) in &did_results {
-            // Look up from cache (no DB query in hot loop)
+            // Format hex once per DID
             let did_hex = format!("{:04X}", did_id);
-            let db_info = did_cache.get(&did_hex);
+            let db_info = cache.get(&did_hex);
 
             // Choose best name: DB name (localized) > ecu_profiles name > fallback
             let display_name = if let Some((name_en, name_fr, _ecu)) = db_info {

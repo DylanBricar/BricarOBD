@@ -9,12 +9,12 @@ pub static DISCOVERED_PIDS: Mutex<Option<Vec<u8>>> = Mutex::new(None);
 pub static DISCOVERED_DIDS: Mutex<Option<Vec<(String, String)>>> = Mutex::new(None); // (hex_id, name)
 
 // Discovery progress tracking (current, total, phase)
-static DISCOVERY_PROGRESS: Mutex<(u32, u32, String)> = Mutex::new((0, 0, String::new()));
+static DISCOVERY_PROGRESS: Mutex<(u32, u32, &'static str)> = Mutex::new((0, 0, ""));
 
 /// Update discovery progress
-fn update_progress(current: u32, total: u32, phase: &str) {
+fn update_progress(current: u32, total: u32, phase: &'static str) {
     let mut guard = DISCOVERY_PROGRESS.lock().unwrap_or_else(|e| e.into_inner());
-    *guard = (current, total, phase.to_string());
+    *guard = (current, total, phase);
 }
 
 /// Discover all supported parameters for the connected vehicle (run ONCE after connection)
@@ -222,7 +222,7 @@ pub fn reset_discovered_params_inner() {
 #[command]
 pub fn get_discovery_progress() -> serde_json::Value {
     let guard = DISCOVERY_PROGRESS.lock().unwrap_or_else(|e| e.into_inner());
-    let (current, total, phase) = guard.clone();
+    let (current, total, phase) = *guard;
     serde_json::json!({
         "current": current,
         "total": total,

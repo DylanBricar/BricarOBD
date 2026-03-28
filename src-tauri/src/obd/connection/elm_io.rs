@@ -85,7 +85,7 @@ impl Elm327Connection {
                     }
                 }
                 Ok(_) => {
-                    std::thread::sleep(Duration::from_millis(1));
+                    // Transport read timeout (100ms) already provides backoff; no additional sleep needed
                 }
                 Err(_) => {
                     self.consecutive_errors += 1;
@@ -113,36 +113,43 @@ impl Elm327Connection {
 
     /// Clean ELM327 response — filter noise, errors, control chars
     fn clean_response(raw: &str) -> String {
-        raw.replace('\r', "\n")
-            .lines()
-            .map(|l| l.trim())
-            .filter(|l| {
-                !l.is_empty()
-                && !l.starts_with("SEARCHING")
-                && !l.starts_with("BUS INIT")
-                && !l.starts_with("UNABLE TO CONNECT")
-                && !l.starts_with("CAN ERROR")
-                && !l.starts_with("FB ERROR")
-                && !l.starts_with("DATA ERROR")
-                && !l.starts_with("BUFFER FULL")
-                && !l.starts_with("STOPPED")
-                && !l.starts_with("BUS BUSY")
-                && !l.starts_with("LP ALERT")
-                && !l.starts_with("LV RESET")
-                && !l.starts_with("ACT ALERT")
-                && !l.starts_with("ERR")
+        let mut result = String::with_capacity(raw.len());
+        let mut first = true;
+        for line in raw.split(|c| c == '\r' || c == '\n') {
+            let l = line.trim();
+            if l.is_empty()
+                || l.starts_with("SEARCHING")
+                || l.starts_with("BUS INIT")
+                || l.starts_with("UNABLE TO CONNECT")
+                || l.starts_with("CAN ERROR")
+                || l.starts_with("FB ERROR")
+                || l.starts_with("DATA ERROR")
+                || l.starts_with("BUFFER FULL")
+                || l.starts_with("STOPPED")
+                || l.starts_with("BUS BUSY")
+                || l.starts_with("LP ALERT")
+                || l.starts_with("LV RESET")
+                || l.starts_with("ACT ALERT")
+                || l.starts_with("ERR")
                 // NOTE: "NO DATA" is NOT filtered — it carries semantic meaning
                 // (PID not supported, ECU not responding) that callers check for
-                && !l.starts_with("TIMEOUT")
-                && *l != "?"
+                || l.starts_with("TIMEOUT")
+                || l == "?"
                 // NOTE: "OK" is kept for AT commands (only valid response),
                 // but filtered from OBD data responses where it's noise
                 // Filter echo residues (AT commands echoed back)
-                && !l.starts_with("AT")
-                && !l.starts_with("at")
-            })
-            .collect::<Vec<_>>()
-            .join("\n")
+                || l.starts_with("AT")
+                || l.starts_with("at")
+            {
+                continue;
+            }
+            if !first {
+                result.push('\n');
+            }
+            result.push_str(l);
+            first = false;
+        }
+        result
     }
 
     /// Flush input buffer (discard any pending data)

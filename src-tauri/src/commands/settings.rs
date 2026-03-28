@@ -156,10 +156,8 @@ pub fn open_exports_folder() -> Result<(), String> {
 /// Get dev console logs — NO logging here to avoid infinite loop
 #[command]
 pub fn get_dev_logs(since_index: Option<usize>) -> Vec<crate::obd::dev_log::LogEntry> {
-    match since_index {
-        Some(idx) => crate::obd::dev_log::get_logs_since(idx),
-        None => crate::obd::dev_log::get_all_logs(),
-    }
+    // Always use incremental API — avoids cloning all 5000 entries at once
+    crate::obd::dev_log::get_logs_since(since_index.unwrap_or(0))
 }
 
 /// Get dev log count — NO logging here to avoid spam

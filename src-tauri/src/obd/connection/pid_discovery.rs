@@ -107,9 +107,9 @@ impl Elm327Connection {
         }
     }
 
-    /// Check if a PID is supported by the vehicle
+    /// Check if a PID is supported by the vehicle (binary search on sorted vecs)
     pub fn is_pid_supported(&self, pid: u8) -> bool {
-        self.supported_pids.contains(&pid) || self.supported_pids_ext.contains(&pid)
+        self.supported_pids.binary_search(&pid).is_ok() || self.supported_pids_ext.binary_search(&pid).is_ok()
     }
 }
 

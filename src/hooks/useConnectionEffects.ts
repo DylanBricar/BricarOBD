@@ -36,6 +36,10 @@ export function useConnectionEffects(
   const [hasVinCache, setHasVinCache] = useState(false);
   const discoveryPollRef = useRef<number | null>(null);
   const progressIntervalRef = useRef<number | null>(null);
+  const tRef = useRef(t);
+  tRef.current = t;
+  const langRef = useRef(language);
+  langRef.current = language;
 
   const handleClearDiscoveryTimeout = useCallback(() => {
     if (discoveryPollRef.current) clearTimeout(discoveryPollRef.current);
@@ -61,7 +65,7 @@ export function useConnectionEffects(
       vehicleActions.startRealPolling(1000, make, true);
 
       // Sequence: DTCs first, then ECU scan + monitors (backend waits via acquire_with_wait)
-      invoke<DtcCode[]>("read_all_dtcs", { lang: language })
+      invoke<DtcCode[]>("read_all_dtcs", { lang: langRef.current })
         .then(codes => {
           if (cancelled) return;
           devInfo("ui", "DTCs loaded: " + codes.length);
@@ -104,7 +108,7 @@ export function useConnectionEffects(
           setIsDiscoveryComplete(true);
           setHasVinCache(true);
           if (discoveryPollRef.current) clearTimeout(discoveryPollRef.current);
-          showToast(t("connection.analysisComplete"));
+          showToast(tRef.current("connection.analysisComplete"));
         } catch (e) {
           if (cancelled) return;
           devInfo("ui", "Discovery failed: " + String(e));
@@ -139,7 +143,7 @@ export function useConnectionEffects(
       cancelled = true;
       handleClearDiscoveryTimeout();
     };
-  }, [status, vehicle?.make, vehicleActions, language, showToast, t, handleClearDiscoveryTimeout]);
+  }, [status, vehicle?.make, vehicleActions, showToast, handleClearDiscoveryTimeout]);
 
   return {
     discoveryProgress,

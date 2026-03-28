@@ -200,7 +200,9 @@ impl OBDTransport for BleTransport {
                 return Ok(0);
             }
 
-            thread::sleep(Duration::from_millis(10));
+            // Poll interval: 20ms balances latency vs CPU usage.
+            // TODO: Replace with Condvar for zero-CPU-cost blocking reads.
+            thread::sleep(Duration::from_millis(20));
         }
     }
 

@@ -208,6 +208,11 @@ pub fn auto_connect_wifi(timeout_ms: u64) -> Result<WiFiTransport, String> {
         for (host, port) in endpoints {
             let found = Arc::clone(&found);
             let handle = s.spawn(move || {
+                // Skip connection attempt if another thread already succeeded
+                {
+                    let result = found.lock().unwrap_or_else(|e| e.into_inner());
+                    if result.is_some() { return; }
+                }
                 dev_log::log_debug("transport", &format!("Probing WiFi {}:{}", host, port));
                 if let Ok(transport) = WiFiTransport::new(&host, port, timeout_ms.min(2000)) {
                     let mut result = found.lock().unwrap_or_else(|e| e.into_inner());
@@ -215,6 +220,7 @@ pub fn auto_connect_wifi(timeout_ms: u64) -> Result<WiFiTransport, String> {
                         dev_log::log_info("transport", &format!("WiFi connected at {}:{}", host, port));
                         *result = Some(transport);
                     }
+                    // Loser transport is dropped here — TCP stream closed cleanly
                 }
             });
             handles.push(handle);

@@ -44,8 +44,8 @@ fn parse_mode06_results(response: &str, lang: &str) -> Vec<Mode06Result> {
             .collect();
 
         // Need at least: 46 TID MID TV_hi TV_lo MIN_hi MIN_lo MAX_hi MAX_lo = 9 bytes
-        // Find "46" marker
-        let pos = match bytes.iter().position(|&b| b == 0x46) {
+        // Find "46" marker followed by non-zero TID
+        let pos = match bytes.windows(2).position(|w| w[0] == 0x46 && w[1] != 0x00) {
             Some(p) => p,
             None => continue,
         };
@@ -53,7 +53,6 @@ fn parse_mode06_results(response: &str, lang: &str) -> Vec<Mode06Result> {
         if pos + 8 >= bytes.len() { continue; }
 
         let tid = bytes[pos + 1];
-        if tid == 0x00 { continue; } // Skip bitmap response
 
         let mid = bytes[pos + 2];
         let test_value = (bytes[pos + 3] as f64) * 256.0 + (bytes[pos + 4] as f64);

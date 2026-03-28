@@ -13,7 +13,7 @@ interface StatusBarProps {
 }
 
 export default function StatusBar({ status, vehicle, isPolling }: StatusBarProps) {
-  const { t, i18n } = useTranslation();
+  const { t } = useTranslation();
   const [version, setVersion] = useState("2.0.0");
   const [milStatus, setMilStatus] = useState<{ milOn: boolean; dtcCount: number } | null>(null);
 

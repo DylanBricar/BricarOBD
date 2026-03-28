@@ -46,8 +46,8 @@ static ECU_DATABASE: LazyLock<EcuDatabaseRoot> = LazyLock::new(|| {
     })
 });
 
-pub fn get_generic_ecus() -> Vec<GenericEcu> {
-    ECU_DATABASE.generic_ecus.clone()
+pub fn get_generic_ecus() -> &'static [GenericEcu] {
+    &ECU_DATABASE.generic_ecus
 }
 
 /// Map VIN-decoded make names to DID group keys in the database

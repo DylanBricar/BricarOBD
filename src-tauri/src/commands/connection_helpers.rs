@@ -24,7 +24,8 @@ impl OBDBusyGuard {
         Ok(OBDBusyGuard)
     }
 
-    /// Acquire the OBD lock with timeout (capped at 10s), retrying every 100ms
+    /// Acquire the OBD lock with timeout (capped at 10s), retrying every 200ms.
+    /// Runs inside spawn_blocking threads — uses thread::sleep (not async) intentionally.
     pub fn acquire_with_wait(timeout_secs: u64) -> Result<Self, String> {
         let start = std::time::Instant::now();
         let timeout = std::time::Duration::from_secs(timeout_secs.min(10));
@@ -40,7 +41,7 @@ impl OBDBusyGuard {
                 return Err(format!("OBD lock timeout after {} seconds", timeout_secs));
             }
 
-            std::thread::sleep(std::time::Duration::from_millis(100));
+            std::thread::sleep(std::time::Duration::from_millis(200));
         }
     }
 }

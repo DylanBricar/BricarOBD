@@ -20,7 +20,13 @@ pub(crate) fn parse_vin_multiframe(response: &str) -> Vec<u8> {
 pub(crate) fn parse_vin_singleline(response: &str) -> Vec<u8> {
     let all_parts: Vec<&str> = response.split_whitespace().collect();
     if all_parts.len() > 2 && all_parts[0] == "49" && all_parts[1] == "02" {
-        return all_parts[2..].iter()
+        // If 20+ tokens and part[2] looks like a small counter byte (01-05), skip it
+        let data_start = if all_parts.len() >= 20 {
+            if let Ok(counter) = u8::from_str_radix(all_parts[2], 16) {
+                if counter >= 1 && counter <= 5 { 3 } else { 2 }
+            } else { 2 }
+        } else { 2 };
+        return all_parts[data_start..].iter()
             .filter_map(|s| u8::from_str_radix(s, 16).ok())
             .collect();
     }
@@ -85,9 +91,15 @@ pub(crate) fn validate_vin(bytes: Vec<u8>) -> String {
         .filter(|c| c.is_ascii_alphanumeric())
         .collect();
 
-    // VIN must be exactly 17 characters
+    // VIN must be exactly 17 characters, no I/O/Q (ISO 3779)
     if vin.len() == 17 {
-        vin
+        if vin.chars().all(|c| c != 'I' && c != 'O' && c != 'Q') {
+            vin
+        } else {
+            // Filter forbidden characters and check if still 17
+            let filtered: String = vin.chars().filter(|c| *c != 'I' && *c != 'O' && *c != 'Q').collect();
+            if filtered.len() == 17 { filtered } else { String::new() }
+        }
     } else if vin.len() > 17 {
         // Some adapters pad with extra bytes — try to extract 17-char VIN
         // VIN never contains I, O, Q
@@ -305,8 +317,8 @@ mod tests {
     fn test_validate_vin_with_ioq_padded() {
         let bytes = "VF3LCBHZ6JSIOQQQQ".as_bytes().to_vec();
         let vin = validate_vin(bytes);
-        // 17 chars exactly → returned as-is (validate_vin doesn't filter I/O/Q at len==17)
-        assert_eq!(vin.len(), 17);
+        // 17 chars with I/O/Q → filtered out, remaining < 17 → empty
+        assert!(vin.is_empty());
     }
 
     #[test]

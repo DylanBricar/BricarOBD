@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import type { LucideIcon } from "lucide-react";
 
 export interface AdvancedOperation {
   id: string;
@@ -12,6 +12,6 @@ export interface AdvancedOperation {
 export interface OperationCategory {
   id: string;
   name: string;
-  icon: ReactNode;
+  Icon: LucideIcon;
   operations: AdvancedOperation[];
 }

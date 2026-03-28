@@ -31,7 +31,7 @@ pub fn decode_pid(pid: u16, data: &[u8]) -> Option<f64> {
         0x11 => (a * 100.0) / 255.0,                                  // Throttle Position
         0x12 => a,                                                     // Commanded Secondary Air
         0x13 => a,                                                     // O2 Sensors Present
-        0x14 | 0x15 | 0x16 | 0x17 | 0x18 | 0x19 | 0x1A | 0x1B => (a * 256.0 + b) / 200.0, // O2 Sensor Voltages (2 bytes)
+        0x14 | 0x15 | 0x16 | 0x17 | 0x18 | 0x19 | 0x1A | 0x1B => a / 200.0, // O2 Sensor Voltage (byte A only; B = fuel trim)
         0x1C => a,                                                     // OBD Standard
         0x1E => a,                                                     // Auxiliary Input Status
         0x1F => a * 256.0 + b,                                         // Run Time Since Start
@@ -267,14 +267,17 @@ mod tests {
 
     #[test]
     fn test_decode_o2_sensor() {
-        // (A*256+B)/200 → (0*256+100)/200 = 0.5V
-        assert!(approx_eq(decode_pid(0x14, &[0x00, 0x64]).unwrap(), 0.5));
+        // A/200 → 0/200 = 0.0V (byte A = voltage, byte B = fuel trim — only voltage returned)
+        assert!(approx_eq(decode_pid(0x14, &[0x00, 0x64]).unwrap(), 0.0));
+        // A/200 → 255/200 = 1.275V (max voltage)
+        assert!(approx_eq(decode_pid(0x14, &[0xFF, 0x00]).unwrap(), 1.275));
     }
 
     #[test]
     fn test_decode_o2_sensor_all_pids() {
         for pid in [0x14u16, 0x15, 0x16, 0x17, 0x18, 0x19, 0x1A, 0x1B] {
-            assert!(approx_eq(decode_pid(pid, &[0x00, 0x64]).unwrap(), 0.5), "Failed for PID 0x{:02X}", pid);
+            // A/200 → 100/200 = 0.5V
+            assert!(approx_eq(decode_pid(pid, &[0x64, 0x00]).unwrap(), 0.5), "Failed for PID 0x{:02X}", pid);
         }
     }
 

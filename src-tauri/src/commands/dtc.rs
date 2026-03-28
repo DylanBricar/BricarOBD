@@ -102,7 +102,7 @@ pub async fn read_all_dtcs(lang: Option<String>) -> Vec<DtcCode> {
         // ====== Deduplicate ======
         // First pass: remove exact duplicates (same code + status)
         let mut seen = std::collections::HashSet::new();
-        all_dtcs.retain(|d| seen.insert(format!("{}:{:?}", d.code, d.status)));
+        all_dtcs.retain(|d| seen.insert((d.code.clone(), format!("{:?}", d.status))));
 
         // Second pass: if same code appears as both Active and Pending, keep only Active
         // A DTC cannot logically be "pending confirmation" if it's already confirmed/active
@@ -192,7 +192,7 @@ fn parse_uds_dtc_response(response: &str, ecu_addr: &str, lang: &str) -> Vec<Dtc
 
     let data_start = if bytes.len() > 3 && bytes[0] == 0x59 {
         3
-    } else if let Some(pos) = bytes.windows(2).position(|w| w[0] == 0x59) {
+    } else if let Some(pos) = bytes.windows(2).position(|w| w[0] == 0x59 && (w[1] == 0x02 || w[1] == 0x0F)) {
         pos + 3
     } else {
         return dtcs;

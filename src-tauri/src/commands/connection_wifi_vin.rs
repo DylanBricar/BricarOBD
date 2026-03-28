@@ -62,30 +62,45 @@ pub async fn connect_wifi(host: String, port: u16) -> Result<VehicleInfo, String
     Ok(info)
 }
 
-/// Scan for WiFi ELM327 adapters on common addresses
+/// Scan for WiFi ELM327 adapters on common addresses (parallel probe)
 #[command]
 pub async fn scan_wifi() -> Vec<serde_json::Value> {
     tokio::task::spawn_blocking(|| {
+        use std::sync::{Mutex, Arc};
         let endpoints = transport::default_wifi_endpoints();
-        let mut found = Vec::new();
+        let found: Arc<Mutex<Vec<serde_json::Value>>> = Arc::new(Mutex::new(Vec::new()));
 
-        for (host, port) in &endpoints {
-            crate::obd::dev_log::log_debug("connection", &format!("Probing WiFi {}:{}", host, port));
-            match transport::WiFiTransport::new(host, *port, 1500) {
-                Ok(mut t) => {
-                    crate::obd::dev_log::log_info("connection", &format!("WiFi adapter found at {}:{}", host, port));
-                    t.close();
-                    found.push(serde_json::json!({
-                        "host": host,
-                        "port": port,
-                        "name": format!("WiFi ELM327 ({}:{})", host, port),
-                    }));
-                }
-                Err(_) => continue,
+        std::thread::scope(|s| {
+            let mut handles = vec![];
+            for (host, port) in &endpoints {
+                let found = Arc::clone(&found);
+                let host = host.clone();
+                let port = *port;
+                let handle = s.spawn(move || {
+                    crate::obd::dev_log::log_debug("connection", &format!("Probing WiFi {}:{}", host, port));
+                    match transport::WiFiTransport::new(&host, port, 1500) {
+                        Ok(mut t) => {
+                            crate::obd::dev_log::log_info("connection", &format!("WiFi adapter found at {}:{}", host, port));
+                            t.close();
+                            let mut results = found.lock().unwrap_or_else(|e| e.into_inner());
+                            results.push(serde_json::json!({
+                                "host": host,
+                                "port": port,
+                                "name": format!("WiFi ELM327 ({}:{})", host, port),
+                            }));
+                        }
+                        Err(_) => {}
+                    }
+                });
+                handles.push(handle);
             }
-        }
+            for handle in handles {
+                let _ = handle.join();
+            }
+        });
 
-        found
+        let guard = found.lock().unwrap_or_else(|e| e.into_inner());
+        guard.clone()
     })
     .await
     .unwrap_or_else(|e| {

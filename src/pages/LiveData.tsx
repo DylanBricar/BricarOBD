@@ -286,10 +286,11 @@ export default function LiveData({ pidData, isPolling, onStartPolling, onPausePo
             ) : (
               filteredPids.map((pid) => {
                 const theoreticalMax = theoreticalMaxCache[pid.pid];
-                const range = Math.max(pid.max - pid.min, theoreticalMax) || 1;
                 const displayValue = convertValue(pid.value, pid.unit, unitSystem);
                 const displayMin = convertValue(pid.min, pid.unit, unitSystem);
                 const displayMax = convertValue(pid.max, pid.unit, unitSystem);
+                const displayTheoreticalMax = convertValue(theoreticalMax, pid.unit, unitSystem).value;
+                const range = Math.max(displayMax.value - displayMin.value, displayTheoreticalMax) || 1;
                 const percent = ((displayValue.value - displayMin.value) / range) * 100;
                 return (
                   <button

@@ -28,7 +28,7 @@ export default function Advanced() {
     {
       id: "entretien",
       name: t("advanced.cat.entretien"),
-      icon: <Settings size={18} />,
+      Icon: Settings,
       operations: [
         {
           id: "reset_service",
@@ -50,7 +50,7 @@ export default function Advanced() {
     {
       id: "config_vehicle",
       name: t("advanced.cat.configVehicle"),
-      icon: <Settings size={18} />,
+      Icon: Settings,
       operations: [
         {
           id: "write_config",
@@ -64,7 +64,7 @@ export default function Advanced() {
     {
       id: "regen_fap",
       name: t("advanced.cat.regenFap"),
-      icon: <Zap size={18} />,
+      Icon: Zap,
       operations: [
         {
           id: "force_regen",
@@ -77,7 +77,7 @@ export default function Advanced() {
     {
       id: "test_actuators",
       name: t("advanced.cat.testActuators"),
-      icon: <Zap size={18} />,
+      Icon: Zap,
       operations: [
         {
           id: "test_injectors",
@@ -95,15 +95,17 @@ export default function Advanced() {
     },
   ], [t]);
 
-  const toggleCategory = (categoryId: string) => {
-    const newExpanded = new Set(expandedCategories);
-    if (newExpanded.has(categoryId)) {
-      newExpanded.delete(categoryId);
-    } else {
-      newExpanded.add(categoryId);
-    }
-    setExpandedCategories(newExpanded);
-  };
+  const toggleCategory = useCallback((categoryId: string) => {
+    setExpandedCategories(prev => {
+      const newExpanded = new Set(prev);
+      if (newExpanded.has(categoryId)) {
+        newExpanded.delete(categoryId);
+      } else {
+        newExpanded.add(categoryId);
+      }
+      return newExpanded;
+    });
+  }, []);
 
   const executeOperation = async (op: AdvancedOperation) => {
     const value = operationValues[op.id];
@@ -274,7 +276,7 @@ export default function Advanced() {
                 className="w-full flex items-center gap-3 p-4 hover:bg-white/[0.02] transition-colors"
               >
                 <div className="text-obd-accent">
-                  {category.icon}
+                  <category.Icon size={18} />
                 </div>
                 <div className="flex-1 text-left">
                   <h3 className="text-sm font-semibold text-obd-text">{category.name}</h3>

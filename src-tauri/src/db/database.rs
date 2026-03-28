@@ -55,14 +55,24 @@ impl Database {
 
     // ==================== OPERATIONS (3.27M) ====================
 
-    /// Get total operations count
+    /// Get total operations count (cached after first call — pre-built DB is read-only)
     pub fn operations_count(&self) -> u64 {
-        self.conn
+        use std::sync::atomic::{AtomicU64, Ordering};
+        static CACHED_OPS_COUNT: AtomicU64 = AtomicU64::new(0);
+        static CACHED_INITIALIZED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+        if CACHED_INITIALIZED.load(Ordering::Relaxed) {
+            return CACHED_OPS_COUNT.load(Ordering::Relaxed);
+        }
+        let count: u64 = self.conn
             .query_row("SELECT COUNT(*) FROM operations", [], |r| r.get(0))
-            .unwrap_or(0)
+            .unwrap_or(0);
+        CACHED_OPS_COUNT.store(count, Ordering::Relaxed);
+        CACHED_INITIALIZED.store(true, Ordering::Relaxed);
+        count
     }
 
-    /// Get database stats
+    /// Get database stats (operations count is cached; profiles/ecus are small tables)
     pub fn get_stats(&self) -> (u64, u64, u64) {
         let ops = self.operations_count();
         let profiles: u64 = self.conn
@@ -74,8 +84,12 @@ impl Database {
         (ops, profiles, ecus)
     }
 
-    /// Search operations by keyword (name, ECU, DID)
+    /// Search operations by keyword (name, ECU, DID).
+    /// Requires at least 2 characters to avoid full-table scans on 3.27M rows.
     pub fn search_operations(&self, query: &str, limit: u32) -> Result<Vec<serde_json::Value>, String> {
+        if query.trim().len() < 2 {
+            return Ok(Vec::new());
+        }
         let mut stmt = self.conn.prepare(
             "SELECT o.id, n.name, o.name_fr, o.sentbytes, o.service, o.did, o.op_type,
                     e.name, o.ecu_tx, o.ecu_rx, v.name, o.risk

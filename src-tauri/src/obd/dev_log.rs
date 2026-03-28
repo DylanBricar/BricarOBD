@@ -88,24 +88,26 @@ pub fn log_debug(source: &str, message: &str) {
 }
 
 /// Push a log entry to the buffer and optionally write to file.
-/// Lock ordering: LOG_BUFFER (via get_buffer()) is acquired first, then LOG_FILE.
-/// This ordering must be maintained everywhere to prevent deadlocks.
+/// File write is decoupled from buffer lock to reduce contention.
 fn push(entry: LogEntry) {
-    let mut guard = get_buffer();
-    let buf = guard.get_or_insert_with(|| VecDeque::with_capacity(MAX_ENTRIES));
-    if buf.len() >= MAX_ENTRIES {
-        buf.pop_front();
-        EVICTED_COUNT.fetch_add(1, Relaxed);
-    }
+    // Clone entry for file write before taking the buffer lock
+    let file_entry = entry.clone();
 
-    // Write to file if available
+    {
+        let mut guard = get_buffer();
+        let buf = guard.get_or_insert_with(|| VecDeque::with_capacity(MAX_ENTRIES));
+        if buf.len() >= MAX_ENTRIES {
+            buf.pop_front();
+            EVICTED_COUNT.fetch_add(1, Relaxed);
+        }
+        buf.push_back(entry);
+    }
+    // Buffer lock released — now write to file without holding it
     if let Ok(mut file_guard) = LOG_FILE.lock() {
         if let Some(ref mut file) = *file_guard {
-            let _ = writeln!(file, "[{}] {} {} — {}", entry.timestamp, entry.level, entry.source, entry.message);
+            let _ = writeln!(file, "[{}] {} {} — {}", file_entry.timestamp, file_entry.level, file_entry.source, file_entry.message);
         }
     }
-
-    buf.push_back(entry);
 }
 
 /// Get all logs (for the dev console)

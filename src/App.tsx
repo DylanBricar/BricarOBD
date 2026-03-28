@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback } from "react";
+import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { WebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { useTranslation } from "react-i18next";
@@ -9,7 +9,7 @@ import PageRouter from "@/components/layout/PageRouter";
 import { useConnectionStore } from "@/stores/connection";
 import DevConsole from "@/components/DevConsole";
 import { useVehicleData } from "@/stores/vehicle";
-import type { DtcCode, EcuInfo, VehicleOperation, WriteOperation } from "@/stores/vehicle";
+import type { DtcCode, EcuInfo } from "@/stores/vehicle";
 import { buildDemoEcus } from "@/stores/vehicleDemoData";
 import { devInfo, devError } from "@/lib/devlog";
 import { useThemeStore, setThemeMode, type ThemeMode } from "@/stores/theme";
@@ -59,6 +59,12 @@ export default function App() {
     showToast,
     t,
   );
+
+  // Refs for values read in effects but that shouldn't trigger re-runs
+  const dtcsRef = useRef(vehicle.dtcs);
+  dtcsRef.current = vehicle.dtcs;
+  const vehicleRef = useRef(connection.vehicle);
+  vehicleRef.current = connection.vehicle;
 
   const hasVin = !!connection.vehicle?.vin;
   const isDemo = connection.status === "demo";
@@ -149,19 +155,21 @@ export default function App() {
       setActivePage("dashboard");
     } else if (!isConnected && activePage !== "connection") {
       setIsReading(false);
-      if (connection.vehicle) {
+      const lastVehicle = vehicleRef.current;
+      if (lastVehicle) {
+        const currentDtcs = dtcsRef.current;
         invoke("save_session_cmd", {
-          vin: connection.vehicle.vin,
-          make: connection.vehicle.make,
-          model: connection.vehicle.model,
-          dtc_count: vehicle.dtcs.length,
-          notes: vehicle.dtcs.map(d => d.code).join(", ") || t("dtc.noCode"),
+          vin: lastVehicle.vin,
+          make: lastVehicle.make,
+          model: lastVehicle.model,
+          dtcCount: currentDtcs.length,
+          notes: currentDtcs.map(d => d.code).join(", ") || t("dtc.noCode"),
           data: "",
         }).catch(() => {});
       }
       setActivePage("connection");
     }
-  }, [isConnected, canNavigate]);
+  }, [isConnected, canNavigate, activePage, t]);
 
 
   const handleReadAll = async () => {
@@ -202,18 +210,10 @@ export default function App() {
 
   const onVehicleUpdate = useCallback((info: any) => {
     connection.updateVehicle(info);
-    const make = info.make || "";
     if (connection.status === "connected") {
       setIsDiscoveryComplete(false);
-      vehicle.startRealPolling(1000, make, true);
-      invoke<DtcCode[]>("read_all_dtcs", { lang: i18n.language })
-        .then(codes => vehicle.setDtcs(codes)).catch(() => {});
     }
-    invoke<VehicleOperation[]>("get_vehicle_operations", { vehicle: make, limit: 500 })
-      .then(ops => vehicle.setVehicleOps(ops)).catch(() => {});
-    invoke<WriteOperation[]>("get_write_operations", { ecuName: "%", vehicle: make })
-      .then(ops => vehicle.setVehicleWriteOps(ops)).catch(() => {});
-  }, [connection, vehicle, i18n.language, setIsDiscoveryComplete]);
+  }, [connection, setIsDiscoveryComplete]);
 
   const handleToggleDevConsole = useCallback(async () => {
     try {
@@ -223,9 +223,11 @@ export default function App() {
         width: 1200,
         height: 600,
       });
-      webview.once("tauri://error", () => {
+      const unlisten = await webview.once("tauri://error", () => {
         setShowDevConsole(prev => !prev);
       });
+      // unlisten is auto-cleaned when webview closes; no manual cleanup needed
+      void unlisten;
     } catch {
       setShowDevConsole(prev => !prev);
     }

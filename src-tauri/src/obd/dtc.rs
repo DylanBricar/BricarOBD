@@ -62,7 +62,10 @@ pub fn parse_dtc_response(response: &str, status: DtcStatus, source: &str, lang:
     // Validation: potential_count > 0 && potential_count * 2 + 1 == after_header.len()
     let data = if !after_header.is_empty() {
         let potential_count = after_header[0] as usize;
-        if potential_count > 0 && potential_count * 2 + 1 == after_header.len() {
+        if potential_count > 0 && potential_count <= 127
+            && after_header.len() >= 3
+            && potential_count * 2 + 1 == after_header.len()
+        {
             // Valid CAN format with count byte
             &after_header[1..]
         } else {

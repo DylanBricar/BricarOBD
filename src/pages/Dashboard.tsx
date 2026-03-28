@@ -6,7 +6,7 @@ import { Toast } from "@/components/Toast";
 import CircularGauge from "@/components/gauges/CircularGauge";
 import LiveChart from "@/components/charts/LiveChart";
 import type { PidValue } from "@/stores/vehicle";
-import { convertValue, useUnitSystem } from "@/lib/units";
+import { convertValue, useUnitSystem, type UnitSystem } from "@/lib/units";
 
 interface DashboardProps {
   pidData: Map<number, PidValue>;
@@ -83,21 +83,21 @@ const chartColors: Record<number, string> = {
   [PID.ENGINE_LOAD]: "var(--obd-chart-green)",
 };
 
-function getGaugeMaxValue(pidValue: PidValue): number {
+function getGaugeMaxValue(pidValue: PidValue, unitSystem: UnitSystem): number {
   const u = pidValue.unit;
   if (u?.includes("tr/min") || u?.includes("rpm")) return 8000;
-  if (u?.includes("km/h") || u?.includes("mph")) return 260;
-  if (u?.includes("°C") || u?.includes("°F")) return 150;
+  if (u?.includes("km/h")) return unitSystem === "imperial" ? 160 : 260;
+  if (u?.includes("°C")) return unitSystem === "imperial" ? 302 : 150;
   if (u === "%") return 100;
   if (u === "V") return 16;
-  if (u?.includes("kPa")) return 800;
+  if (u?.includes("kPa")) return unitSystem === "imperial" ? 116 : 800;
   if (u === "λ") return 2;
   return 100;
 }
 
-function getGaugeMinValue(pidValue: PidValue): number {
+function getGaugeMinValue(pidValue: PidValue, unitSystem: UnitSystem): number {
   const u = pidValue.unit;
-  if (u?.includes("°C") || u?.includes("°F")) return -40;
+  if (u?.includes("°C")) return unitSystem === "imperial" ? -40 : -40;
   if (u === "λ") return 0;
   return 0;
 }
@@ -121,12 +121,14 @@ export default function Dashboard({ pidData }: DashboardProps) {
   const { toast, showToast, dismissToast } = useToast();
   const alertedRef = useRef<Set<number>>(new Set());
 
-  // Auto-select top PIDs when no user config exists
+  // Auto-select top PIDs when no user config exists (only once)
+  const autoSelectedRef = useRef(false);
   useEffect(() => {
-    if (!hasUserConfig && pidData.size > 0) {
+    if (!hasUserConfig && pidData.size > 0 && !autoSelectedRef.current) {
       const preferred = [PID.RPM, PID.SPEED, PID.COOLANT_TEMP, PID.ENGINE_LOAD];
       const available = preferred.filter((p) => pidData.has(p));
       if (available.length > 0) {
+        autoSelectedRef.current = true;
         setSelectedGauges(available);
       }
     }
@@ -248,8 +250,8 @@ export default function Dashboard({ pidData }: DashboardProps) {
           {availableGauges.map((pidCode) => {
             const pidValue = pidData.get(pidCode)!;
             const converted = convertValue(pidValue.value ?? 0, pidValue.unit, unitSystem);
-            const maxValue = getGaugeMaxValue(pidValue);
-            const minValue = getGaugeMinValue(pidValue);
+            const maxValue = getGaugeMaxValue(pidValue, unitSystem);
+            const minValue = getGaugeMinValue(pidValue, unitSystem);
 
             return (
               <div key={pidCode} className="glass-card p-4 flex items-center justify-center">
@@ -260,8 +262,8 @@ export default function Dashboard({ pidData }: DashboardProps) {
                   label={t(gaugeLabels[pidCode] ?? "")}
                   unit={converted.unit}
                   size={170}
-                  warningThreshold={gaugeWarnings[pidCode]}
-                  dangerThreshold={gaugeDangers[pidCode]}
+                  warningThreshold={gaugeWarnings[pidCode] != null ? convertValue(gaugeWarnings[pidCode]!, pidValue.unit, unitSystem).value : undefined}
+                  dangerThreshold={gaugeDangers[pidCode] != null ? convertValue(gaugeDangers[pidCode]!, pidValue.unit, unitSystem).value : undefined}
                 />
               </div>
             );

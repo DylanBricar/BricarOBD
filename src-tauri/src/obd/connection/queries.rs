@@ -73,7 +73,9 @@ impl Elm327Connection {
             if let Some(start) = hex_str.find(&no_space_prefix) {
                 let data_start = start + no_space_prefix.len();
                 if data_start < hex_str.len() {
-                    let data_hex = &hex_str[data_start..];
+                    // Limit to 4 data bytes (8 hex chars) to avoid consuming data from other ECUs
+                    let data_end = std::cmp::min(data_start + 8, hex_str.len());
+                    let data_hex = &hex_str[data_start..data_end];
                     let bytes: Vec<u8> = (0..data_hex.len())
                         .step_by(2)
                         .filter_map(|i| {

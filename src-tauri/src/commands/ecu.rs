@@ -238,13 +238,16 @@ pub async fn get_monitors() -> Vec<MonitorStatus> {
 }
 
 /// Execute a UDS command against an ECU: set header → tester_present → send → log_rx → reset headers
+/// All operations run under a single CONNECTION lock to prevent interleaved commands.
 fn execute_uds_command(addr: &str, hex_cmd: &str) -> Result<String, String> {
-    let _ = with_real_connection(|conn| conn.set_ecu_header(addr));
-    let _ = with_real_connection(|conn| { conn.tester_present(); Ok(()) });
-    let result = with_real_connection(|conn| conn.send_command_timeout(hex_cmd, 8000));
-    dev_log::log_rx(hex_cmd, result.as_deref().unwrap_or("(error)"));
-    let _ = with_real_connection(|conn| conn.reset_headers());
-    result
+    with_real_connection(|conn| {
+        let _ = conn.set_ecu_header(addr);
+        conn.tester_present();
+        let result = conn.send_command_timeout(hex_cmd, 8000);
+        dev_log::log_rx(hex_cmd, result.as_deref().unwrap_or("(error)"));
+        let _ = conn.reset_headers();
+        result
+    })
 }
 
 /// Send raw UDS command or named operation (Advanced mode — uses elevated safety)
@@ -322,7 +325,7 @@ pub fn check_anomalies(pid_data: Vec<PidValue>) -> Vec<anomaly::Anomaly> {
 #[command]
 pub fn get_generic_ecus() -> Vec<ecu_profiles::GenericEcu> {
     dev_log::log_debug("ecu", "get_generic_ecus");
-    ecu_profiles::get_generic_ecus()
+    ecu_profiles::get_generic_ecus().to_vec()
 }
 
 #[command]

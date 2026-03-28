@@ -31,8 +31,8 @@ const handleBeforeUnload = () => { flushBatch(); };
 window.addEventListener("beforeunload", handleBeforeUnload);
 
 // HMR cleanup: remove stale listener on module re-evaluation
-if (import.meta.hot) {
-  import.meta.hot.dispose(() => {
+if ((import.meta as any).hot) {
+  (import.meta as any).hot.dispose(() => {
     window.removeEventListener("beforeunload", handleBeforeUnload);
     if (flushTimerId !== null) clearTimeout(flushTimerId);
   });
