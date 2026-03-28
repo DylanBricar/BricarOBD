@@ -1,5 +1,5 @@
 use tauri::command;
-use crate::models::{EcuInfo, MonitorStatus, PidValue, RiskLevel, MilStatus};
+use crate::models::{EcuInfo, MonitorStatus, PidValue, RiskLevel};
 use crate::obd::demo::DemoConnection;
 use crate::obd::safety::SafetyGuard;
 use crate::obd::anomaly;
@@ -237,49 +237,6 @@ pub async fn get_monitors() -> Vec<MonitorStatus> {
     }).await.unwrap_or_default()
 }
 
-/// Get MIL status from PID 01 byte A — indicates if check engine light is on
-#[command]
-pub async fn get_mil_status() -> Result<MilStatus, String> {
-    tokio::task::spawn_blocking(move || {
-        if is_demo() {
-            dev_log::log_debug("ecu", "Demo mode: returning simulated MIL status");
-            return Ok(MilStatus { mil_on: false, dtc_count: 0 });
-        }
-
-        dev_log::log_info("ecu", "Real mode: reading MIL status from Mode 01 PID 01");
-
-        // Ensure headers are reset to broadcast
-        let _ = with_real_connection(|conn| conn.reset_headers());
-
-        let response = match with_real_connection(|conn| conn.query_pid(0x01, 0x01)) {
-            Ok(bytes) if bytes.len() >= 1 => {
-                dev_log::log_rx("0101", &format!("{:02X?}", bytes));
-                bytes
-            },
-            _ => {
-                // Retry after wake-up
-                dev_log::log_warn("ecu", "PID 01 failed, trying wake-up + retry...");
-                let _ = with_real_connection(|conn| { conn.tester_present(); Ok(()) });
-                std::thread::sleep(std::time::Duration::from_millis(300));
-
-                match with_real_connection(|conn| conn.query_pid(0x01, 0x01)) {
-                    Ok(bytes) if bytes.len() >= 1 => bytes,
-                    _ => {
-                        dev_log::log_warn("ecu", "Mode 01 PID 01 read failed after retry");
-                        return Ok(MilStatus { mil_on: false, dtc_count: 0 });
-                    }
-                }
-            }
-        };
-
-        let byte_a = response[0];
-        Ok(MilStatus {
-            mil_on: byte_a & 0x80 != 0,
-            dtc_count: byte_a & 0x7F,
-        })
-    }).await.map_err(|e| format!("Task error: {}", e))?
-}
-
 /// Execute a UDS command against an ECU: set header → tester_present → send → log_rx → reset headers
 fn execute_uds_command(addr: &str, hex_cmd: &str) -> Result<String, String> {
     let _ = with_real_connection(|conn| conn.set_ecu_header(addr));
@@ -392,69 +349,3 @@ pub fn get_advanced_manufacturer_groups() -> std::collections::HashMap<String, a
     advanced_ops::get_manufacturer_groups()
 }
 
-/// Get extended vehicle information (CalID, CVN, ECU Name) via Mode 09 PIDs
-#[command]
-pub async fn get_vehicle_info_extended() -> Result<crate::models::VehicleInfoExtended, String> {
-    tokio::task::spawn_blocking(move || {
-        let mut result = crate::models::VehicleInfoExtended { calid: None, cvn: None, ecu_name: None };
-
-        if is_demo() {
-            result.calid = Some("DEMO_CALID_001".to_string());
-            result.cvn = Some("A1B2C3D4".to_string());
-            result.ecu_name = Some("Demo ECU".to_string());
-            return Ok(result);
-        }
-
-        // Mode 09 PID 04 - Calibration ID
-        if let Ok(resp) = with_real_connection(|conn| {
-            conn.send_command_timeout("0904", 3000)
-        }) {
-            let cleaned = resp.lines()
-                .filter(|l| !l.starts_with("SEARCHING") && !l.contains("NO DATA"))
-                .collect::<Vec<_>>().join(" ");
-            let bytes: Vec<u8> = cleaned.split_whitespace()
-                .filter_map(|s| u8::from_str_radix(s, 16).ok())
-                .collect();
-            // Skip response header bytes (49 04 XX)
-            let data_bytes: Vec<u8> = bytes.iter().copied()
-                .skip_while(|&b| b != 0x49).skip(3)
-                .filter(|&b| b >= 0x20 && b <= 0x7E)
-                .collect();
-            if !data_bytes.is_empty() {
-                result.calid = Some(String::from_utf8_lossy(&data_bytes).trim().to_string());
-            }
-        }
-
-        // Mode 09 PID 06 - CVN
-        if let Ok(resp) = with_real_connection(|conn| {
-            conn.send_command_timeout("0906", 3000)
-        }) {
-            let bytes: Vec<u8> = resp.split_whitespace()
-                .filter_map(|s| u8::from_str_radix(s, 16).ok())
-                .collect();
-            let hex: Vec<String> = bytes.iter().skip(3).map(|b| format!("{:02X}", b)).collect();
-            if !hex.is_empty() {
-                result.cvn = Some(hex.join(""));
-            }
-        }
-
-        // Mode 09 PID 0A - ECU Name
-        if let Ok(resp) = with_real_connection(|conn| {
-            conn.send_command_timeout("090A", 3000)
-        }) {
-            let bytes: Vec<u8> = resp.split_whitespace()
-                .filter_map(|s| u8::from_str_radix(s, 16).ok())
-                .collect();
-            let data_bytes: Vec<u8> = bytes.iter().copied()
-                .skip(3)
-                .filter(|&b| b >= 0x20 && b <= 0x7E)
-                .collect();
-            if !data_bytes.is_empty() {
-                result.ecu_name = Some(String::from_utf8_lossy(&data_bytes).trim().to_string());
-            }
-        }
-
-        dev_log::log_info("ecu", &format!("Vehicle info extended: calid={:?}, cvn={:?}, ecu_name={:?}", result.calid, result.cvn, result.ecu_name));
-        Ok(result)
-    }).await.unwrap_or_else(|_| Ok(crate::models::VehicleInfoExtended { calid: None, cvn: None, ecu_name: None }))
-}

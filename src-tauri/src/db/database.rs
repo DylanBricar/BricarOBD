@@ -16,6 +16,7 @@ impl Database {
         let conn = Connection::open(path)
             .map_err(|e| format!("Failed to open database: {}", e))?;
 
+        // WAL mode: better read concurrency, creates -wal/-shm sidecar files
         conn.execute_batch(
             "PRAGMA journal_mode = WAL;
              PRAGMA synchronous = NORMAL;

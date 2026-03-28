@@ -9,6 +9,8 @@ pub mod dtc;
 pub mod dtc_clear;
 pub mod ecu;
 pub mod ecu_scan;
+pub mod mil;
+pub mod vehicle_info;
 pub mod database;
 pub mod settings;
 pub mod diagnostic;

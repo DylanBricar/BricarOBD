@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { check, type Update } from "@tauri-apps/plugin-updater";
 import { relaunch } from "@tauri-apps/plugin-process";
 import { devInfo, devError } from "@/lib/devlog";
@@ -15,11 +15,17 @@ export type UpdateState =
 export function useAutoUpdate() {
   const [state, setState] = useState<UpdateState>({ status: "idle" });
   const [update, setUpdate] = useState<Update | null>(null);
+  const mountedRef = useRef(true);
+
+  useEffect(() => {
+    return () => { mountedRef.current = false; };
+  }, []);
 
   const checkForUpdate = useCallback(async () => {
     setState({ status: "checking" });
     try {
       const result = await check();
+      if (!mountedRef.current) return;
       if (result?.available) {
         devInfo("updater", `Update available: ${result.version}`);
         setUpdate(result);
@@ -32,9 +38,10 @@ export function useAutoUpdate() {
         devInfo("updater", "App is up to date");
         setState({ status: "upToDate" });
         // Reset to idle after 5s
-        setTimeout(() => setState({ status: "idle" }), 5000);
+        setTimeout(() => { if (mountedRef.current) setState({ status: "idle" }); }, 5000);
       }
     } catch (e) {
+      if (!mountedRef.current) return;
       devError("updater", `Check failed: ${e}`);
       setState({ status: "error", message: String(e) });
     }
@@ -59,10 +66,12 @@ export function useAutoUpdate() {
         }
       });
 
+      if (!mountedRef.current) return;
       setState({ status: "ready" });
       devInfo("updater", "Update installed, relaunching...");
       await relaunch();
     } catch (e) {
+      if (!mountedRef.current) return;
       devError("updater", `Download/install failed: ${e}`);
       setState({ status: "error", message: String(e) });
     }

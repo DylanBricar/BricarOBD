@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useTranslation } from "react-i18next";
 import { Plug, RefreshCw, Loader2, Wifi, Bluetooth } from "lucide-react";
 import { invoke } from "@tauri-apps/api/core";
@@ -17,8 +17,8 @@ import { useAndroidBridge } from "@/hooks/useAndroidBridge";
 import { Toast } from "@/components/Toast";
 import type { ConnectionStatus, VehicleInfo } from "@/stores/connection";
 
-function getAndroidUsb(): any {
-  return (window as any).AndroidUsb ?? null;
+function getAndroidUsb(): unknown {
+  return (window as unknown as Record<string, unknown>).AndroidUsb ?? null;
 }
 
 interface ConnectionProps {
@@ -137,15 +137,15 @@ export default function Connection({
     }
   }, [vehicle?.vin, vehicle?.make, status]);
 
-  const removeFromHistory = (vin: string) => {
+  const removeFromHistory = useCallback((vin: string) => {
     setVinHistory((prev) => {
       const updated = prev.filter((e) => e.vin !== vin);
       saveVinHistory(updated);
       return updated;
     });
-  };
+  }, []);
 
-  const handleVinHistorySelect = async (vin: string) => {
+  const handleVinHistorySelect = useCallback(async (vin: string) => {
     setManualVin(vin);
     try {
       const info = await invoke<any>("set_manual_vin", { vin });
@@ -154,7 +154,7 @@ export default function Connection({
     } catch (e) {
       showToast(String(e), "error");
     }
-  };
+  }, [onVehicleUpdate, showToast, t]);
 
   return (
     <div className="p-6 space-y-6 animate-slide-in">

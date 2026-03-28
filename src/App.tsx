@@ -1,10 +1,11 @@
-import { useState, useEffect, Suspense, lazy, useMemo, useCallback } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { WebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { useTranslation } from "react-i18next";
 import ErrorBoundary from "@/components/ErrorBoundary";
 import Sidebar from "@/components/layout/Sidebar";
 import StatusBar from "@/components/layout/StatusBar";
+import PageRouter from "@/components/layout/PageRouter";
 import { useConnectionStore } from "@/stores/connection";
 import DevConsole from "@/components/DevConsole";
 import { useVehicleData } from "@/stores/vehicle";
@@ -16,27 +17,6 @@ import { useConnectionEffects } from "@/hooks/useConnectionEffects";
 import { useAutoUpdate } from "@/hooks/useAutoUpdate";
 import { Toast } from "@/components/Toast";
 import UpdateBanner from "@/components/UpdateBanner";
-
-const Connection = lazy(() => import("@/pages/Connection"));
-const Dashboard = lazy(() => import("@/pages/Dashboard"));
-const LiveData = lazy(() => import("@/pages/LiveData"));
-const DTC = lazy(() => import("@/pages/DTC"));
-const ECUInfo = lazy(() => import("@/pages/ECUInfo"));
-const Monitors = lazy(() => import("@/pages/Monitors"));
-const History = lazy(() => import("@/pages/History"));
-const Advanced = lazy(() => import("@/pages/Advanced"));
-
-function LoadingFallback() {
-  const { t } = useTranslation();
-  return (
-    <div className="flex items-center justify-center h-full">
-      <div className="text-center">
-        <div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-obd-border border-t-obd-accent"></div>
-        <p className="mt-4 text-obd-text/60">{t("common.loading")}</p>
-      </div>
-    </div>
-  );
-}
 
 export default function App() {
   const { t, i18n } = useTranslation();
@@ -135,14 +115,14 @@ export default function App() {
   }, [i18n.language, connection.baudRate, themeMode]);
 
   // Navigate based on connection status
-  const handleNavigate = (page: string) => {
+  const handleNavigate = useCallback((page: string) => {
     if (!canNavigate && page !== "connection" && page !== "advanced") {
       devInfo("ui", "Navigation blocked: not ready");
       return;
     }
     devInfo("ui", "Navigate: " + page);
     setActivePage(page);
-  };
+  }, [canNavigate]);
 
   // Keyboard shortcuts for tab navigation
   useEffect(() => {
@@ -250,130 +230,16 @@ export default function App() {
     }
   }, []);
 
-  const renderedPage = (() => {
-    switch (activePage) {
-      case "connection":
-        return (
-          <ErrorBoundary>
-            <Suspense fallback={<LoadingFallback />}>
-              <Connection
-                status={connection.status}
-                port={connection.port}
-                baudRate={connection.baudRate}
-                vehicle={connection.vehicle}
-                availablePorts={connection.availablePorts}
-                onConnect={connection.connect}
-                onDisconnect={connection.disconnect}
-                onDemoConnect={connection.connectDemo}
-                onConnectWifi={connection.connectWifi}
-                onConnectBle={connection.connectBle}
-                onPortChange={connection.setPort}
-                onBaudRateChange={connection.setBaudRate}
-                onScanPorts={connection.scanPorts}
-                discoveryProgress={discoveryProgress}
-                isDiscoveryComplete={isDiscoveryComplete}
-                hasVinCache={hasVinCache}
-                onClearCache={onClearCache}
-                onVehicleUpdate={onVehicleUpdate}
-              />
-            </Suspense>
-          </ErrorBoundary>
-        );
-      case "dashboard":
-        return (
-          <ErrorBoundary>
-            <Suspense fallback={<LoadingFallback />}>
-              <Dashboard pidData={vehicle.pidData} />
-            </Suspense>
-          </ErrorBoundary>
-        );
-      case "liveData":
-        return (
-          <ErrorBoundary>
-            <Suspense fallback={<LoadingFallback />}>
-              <LiveData
-                pidData={vehicle.pidData}
-                isPolling={vehicle.isPolling}
-                onStartPolling={(ms: number) => {
-                  if (connection.status === "connected") {
-                    vehicle.startRealPolling(ms, connection.vehicle?.make || "");
-                  } else {
-                    vehicle.startDemoPolling(ms);
-                  }
-                }}
-                onPausePolling={vehicle.pausePolling}
-                onChangeRefreshRate={vehicle.changeRefreshRate}
-              />
-            </Suspense>
-          </ErrorBoundary>
-        );
-      case "dtc":
-        return (
-          <ErrorBoundary>
-            <Suspense fallback={<LoadingFallback />}>
-              <DTC
-                dtcs={vehicle.dtcs}
-                dtcHistory={vehicle.dtcHistory}
-                vehicle={connection.vehicle}
-                onReadAll={handleReadAll}
-                onClearAll={handleClearAll}
-                isReading={isReading}
-                isClearing={isClearing}
-                mode06Results={vehicle.mode06Results}
-                isLoadingMode06={vehicle.isLoadingMode06}
-                onLoadMode06={vehicle.loadMode06Results}
-                freezeFrame={vehicle.freezeFrame}
-                isLoadingFreezeFrame={vehicle.isLoadingFreezeFrame}
-                onLoadFreezeFrame={vehicle.loadFreezeFrame}
-              />
-            </Suspense>
-          </ErrorBoundary>
-        );
-      case "ecuInfo":
-        return (
-          <ErrorBoundary>
-            <Suspense fallback={<LoadingFallback />}>
-              <ECUInfo ecus={vehicle.ecus} isScanning={isEcuScanning} onScan={async () => {
-                setIsEcuScanning(true);
-                try {
-                  const ecus = await invoke<EcuInfo[]>("scan_ecus");
-                  vehicle.setEcus(ecus);
-                } catch (e) {
-                  devInfo("ui", "ECU scan error: " + String(e));
-                }
-                setIsEcuScanning(false);
-              }} />
-            </Suspense>
-          </ErrorBoundary>
-        );
-      case "monitors":
-        return (
-          <ErrorBoundary>
-            <Suspense fallback={<LoadingFallback />}>
-              <Monitors monitors={vehicle.monitors} onRefresh={vehicle.loadMonitors} />
-            </Suspense>
-          </ErrorBoundary>
-        );
-      case "history":
-        return (
-          <ErrorBoundary>
-            <Suspense fallback={<LoadingFallback />}>
-              <History />
-            </Suspense>
-          </ErrorBoundary>
-        );
-      case "advanced":
-        return (
-          <ErrorBoundary>
-            <Suspense fallback={<LoadingFallback />}>
-              <Advanced />
-            </Suspense>
-          </ErrorBoundary>
-        );
-      default:
-        return null;
+  const handleEcuScan = useCallback(async () => {
+    setIsEcuScanning(true);
+    try {
+      const ecus = await invoke<EcuInfo[]>("scan_ecus");
+      vehicle.setEcus(ecus);
+    } catch (e) {
+      devInfo("ui", "ECU scan error: " + String(e));
     }
-  })();
+    setIsEcuScanning(false);
+  }, [vehicle.setEcus]);
 
   return (
     <ErrorBoundary>
@@ -390,7 +256,24 @@ export default function App() {
         />
         <div className="flex-1 flex flex-col overflow-hidden">
           <UpdateBanner state={autoUpdate.state} onDownload={autoUpdate.downloadAndInstall} onDismiss={autoUpdate.dismiss} />
-          <main className="flex-1 overflow-y-auto">{renderedPage}</main>
+          <main className="flex-1 overflow-y-auto">
+            <PageRouter
+              activePage={activePage}
+              connection={connection}
+              vehicle={vehicle}
+              discoveryProgress={discoveryProgress}
+              isDiscoveryComplete={isDiscoveryComplete}
+              hasVinCache={hasVinCache}
+              onClearCache={onClearCache}
+              onVehicleUpdate={onVehicleUpdate}
+              onReadAll={handleReadAll}
+              onClearAll={handleClearAll}
+              isReading={isReading}
+              isClearing={isClearing}
+              isEcuScanning={isEcuScanning}
+              onEcuScan={handleEcuScan}
+            />
+          </main>
           <StatusBar status={connection.status} vehicle={connection.vehicle} isPolling={vehicle.isPolling} />
         </div>
         {toastMessage && <Toast message={toastMessage.message} type={toastMessage.type} onDismiss={dismissToast} />}
