@@ -1,5 +1,6 @@
 import { useState, useMemo, useRef, useEffect, useCallback } from "react";
 import { useTranslation } from "react-i18next";
+import { invoke } from "@tauri-apps/api/core";
 import { Activity, TrendingUp } from "lucide-react";
 import LiveChart from "@/components/charts/LiveChart";
 import { makeCSVFilename, saveCSVFile } from "@/lib/csv";
@@ -166,6 +167,7 @@ export default function LiveData({ pidData, isPolling, onStartPolling, onPausePo
       const filename = makeCSVFilename("bricarobd_snapshot");
       const path = await saveCSVFile(csv, filename);
       showToast(`${t("liveData.exportSuccess")} : ${path}`);
+      invoke("open_exports_folder").catch(() => {});
     } catch (e) {
       showToast(`${t("common.error")}: ${e}`, "error");
     }

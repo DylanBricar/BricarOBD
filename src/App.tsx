@@ -47,19 +47,30 @@ export default function App() {
   const connection = useConnectionStore();
   const vehicle = useVehicleData();
   const { mode: themeMode } = useThemeStore();
+  const vehicleActions = useMemo(() => ({
+    startDemoPolling: vehicle.startDemoPolling,
+    startRealPolling: vehicle.startRealPolling,
+    stopPolling: vehicle.stopPolling,
+    setDtcs: vehicle.setDtcs,
+    setMonitors: vehicle.setMonitors,
+    setEcus: vehicle.setEcus,
+    setVehicleOps: vehicle.setVehicleOps,
+    setVehicleWriteOps: vehicle.setVehicleWriteOps,
+  }), [
+    vehicle.startDemoPolling,
+    vehicle.startRealPolling,
+    vehicle.stopPolling,
+    vehicle.setDtcs,
+    vehicle.setMonitors,
+    vehicle.setEcus,
+    vehicle.setVehicleOps,
+    vehicle.setVehicleWriteOps,
+  ]);
+
   const { discoveryProgress, isDiscoveryComplete, hasVinCache, setHasVinCache, setIsDiscoveryComplete } = useConnectionEffects(
     connection.status,
     connection.vehicle,
-    {
-      startDemoPolling: vehicle.startDemoPolling,
-      startRealPolling: vehicle.startRealPolling,
-      stopPolling: vehicle.stopPolling,
-      setDtcs: vehicle.setDtcs,
-      setMonitors: vehicle.setMonitors,
-      setEcus: vehicle.setEcus,
-      setVehicleOps: vehicle.setVehicleOps,
-      setVehicleWriteOps: vehicle.setVehicleWriteOps,
-    },
+    vehicleActions,
     i18n.language,
     showToast,
     t,

@@ -38,6 +38,22 @@ pub async fn discover_vehicle_params(manufacturer: String, vin: String) -> serde
             return serde_json::json!({ "standardPids": demo_pids.len(), "manufacturerDids": 0, "fromCache": false });
         }
 
+        // === Wait for OBD bus to be free (e.g. ECU scan / DTC scan in progress) ===
+        {
+            let start = std::time::Instant::now();
+            let max_wait = std::time::Duration::from_secs(90);
+            while super::connection_helpers::is_obd_busy() {
+                if start.elapsed() > max_wait {
+                    dev_log::log_warn("dashboard", "Discovery: OBD busy timeout after 90s, proceeding anyway");
+                    break;
+                }
+                std::thread::sleep(std::time::Duration::from_millis(200));
+            }
+            if start.elapsed() > std::time::Duration::from_millis(500) {
+                dev_log::log_info("dashboard", &format!("Discovery waited {:.1}s for OBD bus", start.elapsed().as_secs_f64()));
+            }
+        }
+
         // === Load cached failure lists (if available) ===
         let cached = if !vin.is_empty() { vin_cache::load_cache(&vin) } else { None };
         let mut failed_pids: Vec<u8> = cached.as_ref().map(|c| c.failed_pids.clone()).unwrap_or_default();

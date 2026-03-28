@@ -144,10 +144,15 @@ export function useVehicleData() {
     // Reset PID failure blacklist on new connection
     invoke("reset_pid_blacklist").catch(() => {});
 
-    // Load ECUs and monitors from backend (skip on VIN update to avoid 60s rescan)
+    // Load ECUs then monitors from backend (skip on VIN update to avoid 60s rescan)
+    // Monitors must wait for ECU scan to finish — scan changes ELM327 headers which breaks 0101
     if (!skipEcuScan) {
-      invoke<EcuInfo[]>("scan_ecus").then(e => { setEcus(e); }).catch(() => {});
-      invoke<MonitorStatus[]>("get_monitors").then(m => { setMonitors(m); }).catch(() => {});
+      invoke<EcuInfo[]>("scan_ecus")
+        .then(e => { setEcus(e); })
+        .catch(() => {})
+        .finally(() => {
+          invoke<MonitorStatus[]>("get_monitors").then(m => { setMonitors(m); }).catch(() => {});
+        });
     }
 
     // Use shared poll function

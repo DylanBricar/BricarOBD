@@ -22,10 +22,10 @@ fn get_user_lang() -> String {
 #[command]
 pub async fn scan_ecus() -> Vec<EcuInfo> {
     tokio::task::spawn_blocking(move || {
-        let _guard = match OBDBusyGuard::try_acquire() {
+        let _guard = match OBDBusyGuard::acquire_with_wait(15) {
             Ok(g) => g,
             Err(e) => {
-                dev_log::log_warn("ecu", &format!("ECU scan blocked: {}", e));
+                dev_log::log_warn("ecu", &format!("ECU scan blocked after wait: {}", e));
                 return Vec::new();
             }
         };
@@ -161,7 +161,19 @@ pub async fn get_monitors() -> Vec<MonitorStatus> {
             return DemoConnection::get_monitors();
         }
 
+        // Wait for any ongoing OBD operation (e.g. ECU scan) to finish before querying
+        let _guard = match OBDBusyGuard::acquire_with_wait(15) {
+            Ok(g) => Some(g),
+            Err(_) => {
+                dev_log::log_warn("ecu", "get_monitors: OBD busy after 15s wait, trying anyway");
+                None
+            }
+        };
+
         dev_log::log_info("ecu", "Real mode: reading Mode 01 PID 01 for monitor statuses");
+
+        // Ensure headers are reset to broadcast before querying monitors
+        let _ = with_real_connection(|conn| conn.reset_headers());
 
         // Try up to 2 times — first attempt may fail if ECU is asleep
         let response = match with_real_connection(|conn| conn.query_pid(0x01, 0x01)) {

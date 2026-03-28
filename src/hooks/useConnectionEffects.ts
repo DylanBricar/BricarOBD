@@ -58,13 +58,26 @@ export function useConnectionEffects(
 
       vehicleActions.startRealPolling(1000, make, true);
 
+      // Sequence: DTCs first, then ECU scan + monitors (backend waits via acquire_with_wait)
       invoke<DtcCode[]>("read_all_dtcs", { lang: language })
         .then(codes => {
           if (cancelled) return;
           devInfo("ui", "DTCs loaded: " + codes.length);
           vehicleActions.setDtcs(codes);
         })
-        .catch(() => {});
+        .catch(() => {})
+        .finally(() => {
+          if (cancelled) return;
+          // Start ECU scan after DTCs release the OBD lock, then monitors after scan finishes
+          // Monitors must wait — scan changes ELM327 headers which breaks 0101 broadcast
+          invoke<EcuInfo[]>("scan_ecus")
+            .then(ecus => { if (!cancelled) vehicleActions.setEcus(ecus); })
+            .catch(() => {})
+            .finally(() => {
+              if (cancelled) return;
+              invoke<MonitorStatus[]>("get_monitors").then(m => { if (!cancelled) vehicleActions.setMonitors(m); }).catch(() => {});
+            });
+        });
 
       // Simulate progressive loading while waiting for discovery
       let simulatedProgress = 5;
@@ -100,9 +113,6 @@ export function useConnectionEffects(
         }
       };
       pollDiscoveryProgress();
-
-      invoke<EcuInfo[]>("scan_ecus").then(ecus => { if (!cancelled) vehicleActions.setEcus(ecus); }).catch(() => {});
-      invoke<MonitorStatus[]>("get_monitors").then(m => { if (!cancelled) vehicleActions.setMonitors(m); }).catch(() => {});
 
       const vehicleMake = vehicle?.make || "";
       invoke<VehicleOperation[]>("get_vehicle_operations", { vehicle: vehicleMake, limit: 500 })
