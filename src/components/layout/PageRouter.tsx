@@ -66,7 +66,7 @@ interface PageRouterProps {
   isDiscoveryComplete: boolean;
   hasVinCache: boolean;
   onClearCache: () => Promise<void>;
-  onVehicleUpdate: (info: any) => void;
+  onVehicleUpdate: (info: VehicleInfo) => void;
   onReadAll: () => void;
   onClearAll: () => void;
   isReading: boolean;
@@ -82,13 +82,14 @@ export default function PageRouter({
   onReadAll, onClearAll, isReading, isClearing,
   isEcuScanning, onEcuScan,
 }: PageRouterProps) {
+  const { startRealPolling, startDemoPolling } = vehicle;
   const handleStartPolling = useCallback((ms: number) => {
     if (connection.status === "connected") {
-      vehicle.startRealPolling(ms, connection.vehicle?.make || "");
+      startRealPolling(ms, connection.vehicle?.make || "");
     } else {
-      vehicle.startDemoPolling(ms);
+      startDemoPolling(ms);
     }
-  }, [connection.status, connection.vehicle?.make, vehicle.startRealPolling, vehicle.startDemoPolling]);
+  }, [connection.status, connection.vehicle?.make, startRealPolling, startDemoPolling]);
 
   switch (activePage) {
     case "connection":

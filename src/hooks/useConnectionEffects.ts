@@ -158,7 +158,7 @@ export function useConnectionEffects(
       cancelled = true;
       handleClearDiscoveryTimeout();
     };
-  }, [status, vehicle?.make, vehicleActions, showToast, handleClearDiscoveryTimeout]);
+  }, [status, vehicle?.make, vehicle?.vin, vehicleActions, showToast, handleClearDiscoveryTimeout]);
 
   return {
     discoveryProgress,

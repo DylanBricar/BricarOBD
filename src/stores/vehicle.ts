@@ -92,7 +92,7 @@ export function useVehicleData() {
         .map((d) => ({ ...d, seenAt: now }));
       const updated = [...prev, ...newEntries].slice(-500);
       try {
-        const light = updated.map(({ repairTips, ...rest }) => rest);
+        const light = updated.map(({ repairTips: _repairTips, ...rest }) => rest);
         localStorage.setItem("bricarobd_dtc_history", JSON.stringify(light));
       } catch {}
       return updated;
@@ -151,7 +151,7 @@ export function useVehicleData() {
 
     pollFn(); // First poll immediately
     intervalRef.current = window.setInterval(pollFn, intervalMs);
-  }, [setDtcsWithHistory, demoDtcs, t]);
+  }, [setDtcsWithHistory, demoDtcs, demoEcus, t]);
 
   const startRealPolling = useCallback((intervalMs: number = 1000, manufacturer: string = "", skipEcuScan: boolean = false) => {
     devInfo("ui", "Real polling @ " + intervalMs + " ms for " + manufacturer);

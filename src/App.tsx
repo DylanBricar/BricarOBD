@@ -6,7 +6,7 @@ import ErrorBoundary from "@/components/ErrorBoundary";
 import Sidebar from "@/components/layout/Sidebar";
 import StatusBar from "@/components/layout/StatusBar";
 import PageRouter from "@/components/layout/PageRouter";
-import { useConnectionStore } from "@/stores/connection";
+import { useConnectionStore, type VehicleInfo } from "@/stores/connection";
 import DevConsole from "@/components/DevConsole";
 import { useVehicleData } from "@/stores/vehicle";
 import type { DtcCode, EcuInfo } from "@/stores/vehicle";
@@ -29,6 +29,14 @@ export default function App() {
   const { toast: toastMessage, showToast, dismissToast } = useToast();
   const connection = useConnectionStore();
   const vehicle = useVehicleData();
+  const {
+    scanPorts,
+    setBaudRate,
+    updateVehicle,
+    status: connectionStatus,
+    vehicle: connectionVehicle,
+  } = connection;
+  const { setDbStats, setEcus } = vehicle;
   const { mode: themeMode } = useThemeStore();
   const autoUpdate = useAutoUpdate();
   const vehicleActions = useMemo(() => ({
@@ -78,8 +86,8 @@ export default function App() {
   // App mount
   useEffect(() => {
     devInfo("ui", "App mounted");
-    connection.scanPorts();
-  }, []);
+    scanPorts();
+  }, [scanPorts]);
 
   // Load DB stats on mount
   useEffect(() => {
@@ -88,11 +96,11 @@ export default function App() {
       .then(stats => {
         if (cancelled) return;
         devInfo("ui", "DB loaded: " + JSON.stringify(stats));
-        vehicle.setDbStats(stats);
+        setDbStats(stats);
       })
       .catch(() => {});
     return () => { cancelled = true; };
-  }, []);
+  }, [setDbStats]);
 
   // Load settings on mount
   useEffect(() => {
@@ -104,7 +112,7 @@ export default function App() {
           i18n.changeLanguage(settings.language);
         }
         if (settings.defaultBaudRate) {
-          connection.setBaudRate(settings.defaultBaudRate);
+          setBaudRate(settings.defaultBaudRate);
         }
         if (settings.theme && ["system", "dark", "light"].includes(settings.theme)) {
           setThemeMode(settings.theme as ThemeMode);
@@ -112,7 +120,7 @@ export default function App() {
       })
       .catch(() => {});
     return () => { cancelled = true; };
-  }, []);
+  }, [i18n, setBaudRate]);
 
   // Sync language with Rust backend
   useEffect(() => {
@@ -211,12 +219,12 @@ export default function App() {
     }
   }, [connection.vehicle?.vin, setHasVinCache]);
 
-  const onVehicleUpdate = useCallback((info: any) => {
-    connection.updateVehicle(info);
-    if (connection.status === "connected") {
+  const onVehicleUpdate = useCallback((info: VehicleInfo) => {
+    updateVehicle(info);
+    if (connectionStatus === "connected") {
       setIsDiscoveryComplete(false);
     }
-  }, [connection, setIsDiscoveryComplete]);
+  }, [connectionStatus, setIsDiscoveryComplete, updateVehicle]);
 
   const handleToggleDevConsole = useCallback(async () => {
     try {
@@ -239,19 +247,19 @@ export default function App() {
   const handleEcuScan = useCallback(async () => {
     setIsEcuScanning(true);
     try {
-      if (connection.status === "demo") {
-        vehicle.setEcus(buildDemoEcus(t));
+      if (connectionStatus === "demo") {
+        setEcus(buildDemoEcus(t));
       } else {
         const ecus = await invoke<EcuInfo[]>("scan_ecus", {
-          manufacturer: connection.vehicle?.make || "",
+          manufacturer: connectionVehicle?.make || "",
         });
-        vehicle.setEcus(ecus);
+        setEcus(ecus);
       }
     } catch (e) {
       devInfo("ui", "ECU scan error: " + String(e));
     }
     setIsEcuScanning(false);
-  }, [vehicle.setEcus, connection.status, t]);
+  }, [connectionStatus, connectionVehicle?.make, setEcus, t]);
 
   return (
     <ErrorBoundary>

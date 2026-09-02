@@ -135,7 +135,7 @@ export default function Connection({
         return updated;
       });
     }
-  }, [vehicle?.vin, vehicle?.make, status]);
+  }, [vehicle, status]);
 
   const removeFromHistory = useCallback((vin: string) => {
     setVinHistory((prev) => {
@@ -148,7 +148,7 @@ export default function Connection({
   const handleVinHistorySelect = useCallback(async (vin: string) => {
     setManualVin(vin);
     try {
-      const info = await invoke<any>("set_manual_vin", { vin });
+      const info = await invoke<VehicleInfo>("set_manual_vin", { vin });
       onVehicleUpdate?.(info);
       showToast(`${t("connection.vin")}: ${info.make || vin} ${info.year || ""}`);
     } catch (e) {

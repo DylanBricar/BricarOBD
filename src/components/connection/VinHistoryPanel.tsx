@@ -34,7 +34,7 @@ export default function VinHistoryPanel({
     try {
       await invoke("clear_vin_cache", { vin });
       onCacheCleared?.();
-    } catch (_) {
+    } catch {
       // Non-critical
     }
   };

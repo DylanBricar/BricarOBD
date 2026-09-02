@@ -107,7 +107,7 @@ export function useAndroidBridge(
   const handleDisconnectUsb = useCallback(() => {
     try {
       getAndroidUsb()?.stopBridge();
-    } catch (_) { /* bridge may not be running */ }
+    } catch { /* bridge may not be running */ }
     onDisconnect();
   }, [onDisconnect]);
 
@@ -167,7 +167,7 @@ export function useAndroidBridge(
   const handleDisconnectBle = useCallback(() => {
     try {
       getAndroidBle()?.stopBridge();
-    } catch (_) { /* bridge may not be running */ }
+    } catch { /* bridge may not be running */ }
     onDisconnect();
   }, [onDisconnect]);
 

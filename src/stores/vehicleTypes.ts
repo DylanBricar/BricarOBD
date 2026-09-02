@@ -58,9 +58,9 @@ export interface FreezeFrameData {
 }
 
 export interface VehicleOperation {
-  [key: string]: any;
+  [key: string]: unknown;
 }
 
 export interface WriteOperation {
-  [key: string]: any;
+  [key: string]: unknown;
 }

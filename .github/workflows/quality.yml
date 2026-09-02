@@ -62,9 +62,10 @@ jobs:
           pnpm build
           pnpm audit
 
-      - name: Rust formatting and tests
+      - name: Rust formatting, lint, and tests
         run: |
           cargo fmt --manifest-path src-tauri/Cargo.toml -- --check
+          cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets --all-features --locked -- -D warnings
           cargo test --manifest-path src-tauri/Cargo.toml --all-features --locked
 
       - name: Rust dependency audit

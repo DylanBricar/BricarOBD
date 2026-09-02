@@ -43,8 +43,8 @@ const handleSystemThemeChange = () => {
 systemThemeQuery.addEventListener("change", handleSystemThemeChange);
 
 // HMR cleanup: remove stale listener on module re-evaluation
-if ((import.meta as any).hot) {
-  (import.meta as any).hot.dispose(() => {
+if (import.meta.hot) {
+  import.meta.hot.dispose(() => {
     systemThemeQuery.removeEventListener("change", handleSystemThemeChange);
   });
 }

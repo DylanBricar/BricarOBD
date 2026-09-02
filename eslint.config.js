@@ -18,10 +18,21 @@ export default tseslint.config(
       // used by this Tauri application. The core Rules of Hooks remain enabled.
       "react-hooks/set-state-in-effect": "off",
       "react-hooks/preserve-manual-memoization": "off",
+      // React Compiler is not enabled; TanStack Virtual deliberately returns
+      // functions that the compiler cannot memoize safely.
+      "react-hooks/incompatible-library": "off",
       "react-refresh/only-export-components": ["warn", { allowConstantExport: true }],
       "no-empty": ["error", { allowEmptyCatch: true }],
       "@typescript-eslint/no-unused-vars": ["warn", { argsIgnorePattern: "^_" }],
       "@typescript-eslint/no-explicit-any": "warn",
+    },
+  },
+  {
+    files: ["**/*.test.{ts,tsx}"],
+    rules: {
+      // Test doubles for overloaded browser/Tauri APIs intentionally use loose
+      // boundaries; production source remains subject to no-explicit-any.
+      "@typescript-eslint/no-explicit-any": "off",
     },
   }
 );
