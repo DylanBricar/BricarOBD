@@ -118,21 +118,22 @@ pub async fn read_did(ecu_address: String, did: String) -> Result<String, String
     }
 
     tokio::task::spawn_blocking(move || {
+        let _guard = OBDBusyGuard::acquire_with_wait(10)?;
         let cmd = format!("22{}", did.replace(" ", ""));
         dev_log::log_info("ecu", &format!("Reading DID {} from ECU {}", did, ecu_address));
         let addr = ecu_address.replace("0x", "");
 
-        // Set ECU header
-        let _ = with_real_connection(|conn| conn.set_ecu_header(&addr));
-
-        // Send TesterPresent to wake up ECU before DID read
-        let _ = with_real_connection(|conn| { conn.tester_present(); Ok(()) });
-
-        // Read DID with extended timeout (DIDs can be slow on some ECUs)
-        let result = with_real_connection(|conn| conn.send_command_timeout(&cmd, 5000));
-
-        // Reset headers
-        let _ = with_real_connection(|conn| conn.reset_headers());
+        let result = with_real_connection(|conn| {
+            conn.set_ecu_header(&addr)?;
+            conn.tester_present();
+            let result = conn.send_command_timeout(&cmd, 5000);
+            let reset_result = conn.reset_headers();
+            match (result, reset_result) {
+                (Ok(response), Ok(())) => Ok(response),
+                (Err(error), _) => Err(error),
+                (Ok(_), Err(error)) => Err(error),
+            }
+        });
 
         match result {
             Ok(r) => {
@@ -162,11 +163,11 @@ pub async fn get_monitors() -> Vec<MonitorStatus> {
         }
 
         // Wait for any ongoing OBD operation (e.g. ECU scan) to finish before querying
-        let _guard = match OBDBusyGuard::acquire_with_wait(15) {
-            Ok(g) => Some(g),
-            Err(_) => {
-                dev_log::log_warn("ecu", "get_monitors: OBD busy after 15s wait, trying anyway");
-                None
+        let _guard = match OBDBusyGuard::acquire_with_wait(10) {
+            Ok(g) => g,
+            Err(error) => {
+                dev_log::log_warn("ecu", &format!("get_monitors postponed: {error}"));
+                return Vec::new();
             }
         };
 
@@ -241,63 +242,38 @@ pub async fn get_monitors() -> Vec<MonitorStatus> {
 /// All operations run under a single CONNECTION lock to prevent interleaved commands.
 fn execute_uds_command(addr: &str, hex_cmd: &str) -> Result<String, String> {
     with_real_connection(|conn| {
-        let _ = conn.set_ecu_header(addr);
+        conn.set_ecu_header(addr)?;
         conn.tester_present();
         let result = conn.send_command_timeout(hex_cmd, 8000);
         dev_log::log_rx(hex_cmd, result.as_deref().unwrap_or("(error)"));
-        let _ = conn.reset_headers();
-        result
+        let reset_result = conn.reset_headers();
+        match (result, reset_result) {
+            (Ok(response), Ok(())) => Ok(response),
+            (Err(error), _) => Err(error),
+            (Ok(_), Err(error)) => Err(error),
+        }
     })
 }
 
 /// Send raw UDS command or named operation (Advanced mode — uses elevated safety)
 #[command]
-pub async fn send_raw_command(ecu_address: String, command: String, confirmed: Option<bool>) -> Result<String, String> {
-    if let Some((addr, hex_cmd)) = advanced_ops::resolve_operation_command(&command) {
-        dev_log::log_info("ecu", &format!("Operation resolved: {} → {}", command, hex_cmd));
-        let risk = SafetyGuard::check_command_advanced(hex_cmd);
-        dev_log::log_debug("ecu", &format!("Safety check result: {:?}", risk));
-        if risk == RiskLevel::Blocked {
-            dev_log::log_warn("ecu", "Operation blocked by safety guard");
-            return Err(super::connection::err_msg("BLOQUÉ — commande bloquée par la sécurité", "BLOCKED — command blocked by safety system"));
-        }
-        if risk == RiskLevel::Dangerous {
-            dev_log::log_warn("ecu", "Operation blocked: dangerous command");
-            return Err(super::connection::err_msg("DANGEREUX — commande trop risquée", "DANGEROUS — command too risky"));
-        }
-        if risk == RiskLevel::Caution && confirmed != Some(true) {
-            dev_log::log_info("ecu", "Command requires confirmation");
-            return Err("CONFIRM_REQUIRED".to_string());
-        }
-
-        if is_demo() {
-            dev_log::log_debug("ecu", &format!("Demo mode: simulating {} → {}", addr, hex_cmd));
-            return Ok(format!("[DEMO] OK — {} → {}", addr, hex_cmd));
-        }
-
-        dev_log::log_tx(hex_cmd);
-        let addr = addr.to_string();
-        let hex_cmd = hex_cmd.to_string();
-        return tokio::task::spawn_blocking(move || {
-            let _guard = super::connection::OBDBusyGuard::try_acquire()?;
-            execute_uds_command(&addr, &hex_cmd)
-        }).await.map_err(|e| format!("Task error: {}", e))?;
+pub async fn send_raw_command(ecu_address: String, command: String, _confirmed: Option<bool>) -> Result<String, String> {
+    if advanced_ops::is_named_operation(&command) {
+        return Err(super::connection::err_msg(
+            "Opération désactivée : aucun profil véhicule/ECU vérifié n'est disponible",
+            "Operation disabled: no verified vehicle/ECU profile is available",
+        ));
     }
 
-    SafetyGuard::validate_hex(&command)?;
-    let risk = SafetyGuard::check_command_advanced(&command);
+    let command = SafetyGuard::normalize_hex(&command)?;
+    let risk = SafetyGuard::check_command(&command);
     dev_log::log_debug("ecu", &format!("Safety check for raw hex: {:?}", risk));
-    if risk == RiskLevel::Blocked {
-        dev_log::log_warn("ecu", "Raw command blocked by safety guard");
-        return Err(super::connection::err_msg("BLOQUÉ — commande bloquée par la sécurité", "BLOCKED — command blocked by safety system"));
-    }
-    if risk == RiskLevel::Dangerous {
-        dev_log::log_warn("ecu", "Raw command blocked: dangerous");
-        return Err(super::connection::err_msg("DANGEREUX — commande trop risquée", "DANGEROUS — command too risky"));
-    }
-    if risk == RiskLevel::Caution && confirmed != Some(true) {
-        dev_log::log_info("ecu", "Command requires confirmation");
-        return Err("CONFIRM_REQUIRED".to_string());
+    if risk != RiskLevel::Safe {
+        dev_log::log_warn("ecu", "Raw command blocked: only read-only services are allowed");
+        return Err(super::connection::err_msg(
+            "Commande refusée : seules les lectures sont autorisées",
+            "Command refused: only read-only services are allowed",
+        ));
     }
 
     if is_demo() {
@@ -338,6 +314,25 @@ pub fn get_manufacturer_dids(manufacturer: String) -> Vec<(String, String)> {
 pub fn get_all_manufacturer_dids() -> std::collections::HashMap<String, Vec<(String, String)>> {
     dev_log::log_debug("ecu", "get_all_manufacturer_dids");
     ecu_profiles::get_all_manufacturer_dids()
+}
+
+#[cfg(test)]
+mod readiness_tests {
+    use super::*;
+
+    #[test]
+    fn spark_readiness_uses_sae_bit_names() {
+        let monitors = decode_monitor_statuses(&[0, 0x00, 0x62, 0x00]);
+        let keys: Vec<&str> = monitors.iter().filter(|monitor| monitor.available).map(|monitor| monitor.name_key.as_str()).collect();
+        assert_eq!(keys, vec!["monitors.heatedCatalyst", "monitors.oxygenSensor", "monitors.oxygenSensorHeater"]);
+    }
+
+    #[test]
+    fn compression_readiness_uses_diesel_monitor_set() {
+        let monitors = decode_monitor_statuses(&[0, 0x08, 0xCA, 0x00]);
+        let keys: Vec<&str> = monitors.iter().filter(|monitor| monitor.available).map(|monitor| monitor.name_key.as_str()).collect();
+        assert_eq!(keys, vec!["monitors.noxScr", "monitors.boostPressure", "monitors.pmFilter", "monitors.egrVvt"]);
+    }
 }
 
 #[command]
