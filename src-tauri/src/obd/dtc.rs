@@ -44,45 +44,46 @@ pub fn decode_dtc_bytes(b1: u8, b2: u8) -> String {
 pub fn parse_dtc_response(response: &str, status: DtcStatus, source: &str, lang: &str) -> Vec<DtcCode> {
     let mut dtcs = Vec::new();
 
-    // Response format: "43 01 23 04 56 00 00" or CAN format with count byte
-    let bytes: Vec<u8> = response
-        .split_whitespace()
-        .filter_map(|s| u8::from_str_radix(s, 16).ok())
-        .collect();
-
-    if bytes.len() < 2 {
-        return dtcs;
-    }
-
-    // Skip first byte (mode + 0x40)
-    let after_header = &bytes[1..];
-
-    // Detect and skip CAN count byte if present
-    // For CAN: count byte at position 0, then DTC pairs
-    // Validation: potential_count > 0 && potential_count * 2 + 1 == after_header.len()
-    let data = if !after_header.is_empty() {
-        let potential_count = after_header[0] as usize;
-        if potential_count > 0 && potential_count <= 127
-            && after_header.len() >= 3
-            && potential_count * 2 + 1 == after_header.len()
-        {
-            // Valid CAN format with count byte
-            &after_header[1..]
-        } else {
-            // Standard OBD format (no count byte)
-            after_header
-        }
-    } else {
-        after_header
+    let response_sid = match status {
+        DtcStatus::Active => 0x43,
+        DtcStatus::Pending => 0x47,
+        DtcStatus::Permanent => 0x4A,
     };
 
-    for chunk in data.chunks(2) {
-        if chunk.len() == 2 && (chunk[0] != 0 || chunk[1] != 0) {
+    // Parse every ELM line independently so CAN headers, PCI lengths and a
+    // second ECU response can never become fake DTC bytes.
+    for line in response.lines() {
+        let bytes: Vec<u8> = line
+            .split_whitespace()
+            .filter_map(|token| u8::from_str_radix(token, 16).ok())
+            .collect();
+        let Some(marker) = bytes.iter().position(|byte| *byte == response_sid) else {
+            continue;
+        };
+        let after_sid = &bytes[marker + 1..];
+        let data = if let Some(&count) = after_sid.first() {
+            let count = count as usize;
+            if count > 0 && count <= 127 && count * 2 + 1 == after_sid.len() {
+                &after_sid[1..]
+            } else {
+                after_sid
+            }
+        } else {
+            continue;
+        };
+        let ecu_context = bytes
+            .first()
+            .filter(|_| marker >= 2)
+            .map(|header| format!("0x{header:02X}"));
+
+        for chunk in data.chunks_exact(2) {
+            if chunk[0] == 0 && chunk[1] == 0 {
+                continue;
+            }
             let code = decode_dtc_bytes(chunk[0], chunk[1]);
             let description = get_dtc_description(&code, lang);
             let repair_tips = get_dtc_repair_tips(&code, lang);
             let (causes, quick_check, difficulty) = get_dtc_repair_data(&code, lang);
-
             dtcs.push(DtcCode {
                 code,
                 description,
@@ -92,7 +93,7 @@ pub fn parse_dtc_response(response: &str, status: DtcStatus, source: &str, lang:
                 causes,
                 quick_check,
                 difficulty,
-                ecu_context: None,
+                ecu_context: ecu_context.clone(),
             });
         }
     }

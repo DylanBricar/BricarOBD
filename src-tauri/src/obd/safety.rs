@@ -35,6 +35,8 @@ const CAUTION_SERVICES: &[u8] = &[
 pub struct SafetyGuard;
 
 impl SafetyGuard {
+    const MAX_COMMAND_LENGTH: usize = 1024;
+
     /// Extract service ID from a hex command string (handles both spaced and unspaced formats)
     /// "2E F1 90" → 0x2E, "2EF190" → 0x2E, "22 F1 90" → 0x22
     fn parse_service_id(command: &str) -> Option<u8> {
@@ -165,6 +167,13 @@ impl SafetyGuard {
 
     /// Validate hex command string — supports both "2E F1 90" and "2EF190" formats
     pub fn validate_hex(command: &str) -> Result<(), String> {
+        if command.len() > Self::MAX_COMMAND_LENGTH {
+            return Err(format!("Command exceeds {} characters", Self::MAX_COMMAND_LENGTH));
+        }
+        if command.chars().any(|character| character.is_control()) {
+            return Err("Control characters are not allowed".to_string());
+        }
+
         let trimmed = command.trim();
         if trimmed.is_empty() {
             return Err("Empty command".to_string());
@@ -172,8 +181,11 @@ impl SafetyGuard {
 
         // Check if spaced format
         if trimmed.contains(' ') {
-            for part in trimmed.split_whitespace() {
-                if part.len() > 2 {
+            for part in trimmed.split(' ') {
+                if part.is_empty() {
+                    continue;
+                }
+                if part.len() != 2 {
                     return Err(format!("Invalid hex byte: '{}'", part));
                 }
                 u8::from_str_radix(part, 16)

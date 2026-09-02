@@ -37,21 +37,19 @@ pub async fn discover_vehicle_params(manufacturer: String, vin: String) -> serde
             return serde_json::json!({ "standardPids": demo_pids.len(), "manufacturerDids": 0, "fromCache": false });
         }
 
-        // === Wait for OBD bus to be free (e.g. ECU scan / DTC scan in progress) ===
-        {
-            let start = std::time::Instant::now();
-            let max_wait = std::time::Duration::from_secs(90);
-            while super::connection_helpers::is_obd_busy() {
-                if start.elapsed() > max_wait {
-                    dev_log::log_warn("dashboard", "Discovery: OBD busy timeout after 90s, proceeding anyway");
-                    break;
-                }
-                std::thread::sleep(std::time::Duration::from_millis(200));
+        let _guard = match super::connection_helpers::OBDBusyGuard::acquire_with_wait(10) {
+            Ok(guard) => guard,
+            Err(error) => {
+                dev_log::log_warn("dashboard", &format!("Discovery postponed: {error}"));
+                return serde_json::json!({
+                    "standardPids": 0,
+                    "manufacturerDids": 0,
+                    "fromCache": false,
+                    "complete": false,
+                    "error": error,
+                });
             }
-            if start.elapsed() > std::time::Duration::from_millis(500) {
-                dev_log::log_info("dashboard", &format!("Discovery waited {:.1}s for OBD bus", start.elapsed().as_secs_f64()));
-            }
-        }
+        };
 
         // === Load cached failure lists (if available) ===
         let cached = if !vin.is_empty() { vin_cache::load_cache(&vin) } else { None };
@@ -71,7 +69,11 @@ pub async fn discover_vehicle_params(manufacturer: String, vin: String) -> serde
         // === Phase 1: Discover standard OBD-II PIDs via bitmap ===
         update_progress(0, 100, "scanning_pids");
         let supported_pids: Vec<u8> = with_real_connection(|conn| {
-            Ok(conn.supported_pids.clone())
+            let mut pids = conn.supported_pids.clone();
+            pids.extend_from_slice(&conn.supported_pids_ext);
+            pids.sort_unstable();
+            pids.dedup();
+            Ok(pids)
         }).unwrap_or_default();
 
         let standard_pids = if supported_pids.is_empty() {
@@ -112,10 +114,19 @@ pub async fn discover_vehicle_params(manufacturer: String, vin: String) -> serde
         let mut discovered_dids: Vec<(String, String)> = Vec::new();
 
         if !manufacturer.is_empty() {
-            let all_dids = crate::obd::ecu_profiles::get_dids_for_manufacturer(&manufacturer);
+            let mut all_dids = crate::obd::ecu_profiles::get_did_definitions_for_manufacturer(&manufacturer);
+            all_dids.sort_by(|left, right| {
+                crate::obd::ecu_profiles::did_discovery_priority(&left.name)
+                    .cmp(&crate::obd::ecu_profiles::did_discovery_priority(&right.name))
+                    .then_with(|| left.id.cmp(&right.id))
+            });
             // Filter out known-failed DIDs, keep new + previously-successful candidates
             let candidates: Vec<_> = all_dids.iter()
-                .filter(|(hex, _)| !failed_dids.contains(hex))
+                .filter(|did| !failed_dids.contains(&format!("{:04X}", did.id)))
+                .filter_map(|did| {
+                    crate::obd::ecu_profiles::get_did_request_header(&manufacturer, &did.name)
+                        .map(|header| (did, header))
+                })
                 .collect();
             let skipped = all_dids.len() - candidates.len();
 
@@ -124,11 +135,13 @@ pub async fn discover_vehicle_params(manufacturer: String, vin: String) -> serde
                 candidates.len(), skipped
             ));
 
-            let mut consecutive_failures = 0;
+            let discovery_start = std::time::Instant::now();
+            const DISCOVERY_BUDGET: std::time::Duration = std::time::Duration::from_secs(30);
             let mut last_keepalive = std::time::Instant::now();
-            for (did_hex, did_name) in &candidates {
-                if consecutive_failures >= 15 {
-                    dev_log::log_warn("dashboard", "15 consecutive DID failures — stopping discovery");
+            let mut current_header = None;
+            for (did, header) in &candidates {
+                if discovery_start.elapsed() >= DISCOVERY_BUDGET {
+                    dev_log::log_info("dashboard", "DID discovery budget reached; remaining parameters will be retried later");
                     break;
                 }
 
@@ -137,26 +150,23 @@ pub async fn discover_vehicle_params(manufacturer: String, vin: String) -> serde
                     last_keepalive = std::time::Instant::now();
                 }
 
-                let did_id = match u16::from_str_radix(did_hex, 16).or_else(|_| u16::from_str_radix(did_hex, 10)) {
-                    Ok(id) if id >= 0x100 => id,
-                    _ => continue,
-                };
-
-                let cmd = format!("22{:04X}", did_id);
-                match with_real_connection(|conn| conn.send_command_timeout(&cmd, 2000)) {
-                    Ok(response) => {
-                        if response.contains("62") && !response.contains("7F") && !response.contains("NO DATA") {
-                            discovered_dids.push((did_hex.to_string(), did_name.to_string()));
-                            consecutive_failures = 0;
-                        } else {
-                            failed_dids.push(did_hex.to_string());
-                            consecutive_failures += 1;
-                        }
+                let result = with_real_connection(|conn| {
+                    if current_header != Some(*header) {
+                        conn.set_ecu_header(header)?;
+                        current_header = Some(*header);
                     }
-                    Err(_) => {
-                        failed_dids.push(did_hex.to_string());
-                        consecutive_failures += 1;
+                    conn.query_did(did.id)
+                });
+                let did_hex = format!("{:04X}", did.id);
+                match result {
+                    Ok(_) => discovered_dids.push((did_hex, did.name.clone())),
+                    Err(error) if error.contains("not supported") || error.contains("negative response") => {
+                        failed_dids.push(did_hex);
                     }
+                    Err(error) => dev_log::log_debug(
+                        "dashboard",
+                        &format!("Transient discovery failure for DID {did_hex}: {error}"),
+                    ),
                 }
 
                 std::thread::sleep(std::time::Duration::from_millis(30));
@@ -198,7 +208,8 @@ pub async fn discover_vehicle_params(manufacturer: String, vin: String) -> serde
         serde_json::json!({
             "standardPids": standard_pids.len(),
             "manufacturerDids": did_count,
-            "fromCache": has_cache
+            "fromCache": has_cache,
+            "complete": true
         })
     }).await.unwrap_or_else(|e| {
         dev_log::log_error("dashboard", &format!("discover_vehicle_params task failed: {}", e));

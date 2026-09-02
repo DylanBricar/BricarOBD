@@ -17,11 +17,28 @@ static PID_HISTORY: Mutex<Option<HashMap<u16, VecDeque<f64>>>> = Mutex::new(None
 
 // Track which PIDs consistently fail — skip them after N failures to speed up polling
 static PID_FAIL_COUNT: Mutex<Option<HashMap<u16, u32>>> = Mutex::new(None);
-const MAX_PID_FAILURES: u32 = 3; // Skip PID after 3 consecutive failures
+static PID_POLL_CURSOR: Mutex<usize> = Mutex::new(0);
+static DID_POLL_CURSOR: Mutex<usize> = Mutex::new(0);
+const STANDARD_PIDS_PER_CYCLE: usize = 12;
+const MANUFACTURER_DIDS_PER_CYCLE: usize = 6;
 
 // Cache for DID info from SQLite DB — populated once per session, avoids per-poll DB queries
 // Key: DID hex string (e.g. "2282"), Value: (name_en, name_fr, ecu_name)
 static DID_INFO_CACHE: Mutex<Option<HashMap<String, (String, String, String)>>> = Mutex::new(None);
+
+fn rotating_window<T: Clone>(items: &[T], cursor: &Mutex<usize>, budget: usize) -> Vec<T> {
+    if items.is_empty() || budget == 0 {
+        return Vec::new();
+    }
+    let count = budget.min(items.len());
+    let mut cursor = cursor.lock().unwrap_or_else(|error| error.into_inner());
+    let start = *cursor % items.len();
+    let result = (0..count)
+        .map(|offset| items[(start + offset) % items.len()].clone())
+        .collect();
+    *cursor = (start + count) % items.len();
+    result
+}
 
 /// Step 1: Lock PID_FAIL_COUNT briefly, clone snapshot, return
 fn snapshot_fail_counts() -> HashMap<u16, u32> {
@@ -53,11 +70,7 @@ fn query_all_pids(
                 continue;
             }
 
-            let pid_fails = fail_snapshot.get(&def.pid).copied().unwrap_or(0);
-            if pid_fails >= MAX_PID_FAILURES {
-                skip_count += 1;
-                continue;
-            }
+            let _previous_failures = fail_snapshot.get(&def.pid).copied().unwrap_or(0);
 
             if batch_timeouts >= 5 {
                 let _ = conn.attempt_recovery();
@@ -174,11 +187,18 @@ fn get_pid_data_inner() -> Vec<PidValue> {
         return demo.as_mut().map(|d| { d.refresh_lang(); d.get_pid_data() }).unwrap_or_default();
     }
 
-    // Check if OBD is busy with another operation
-    if super::connection::is_obd_busy() {
-        dev_log::log_debug("dashboard", "OBD is busy, skipping PID poll");
-        return Vec::new();
-    }
+    let _guard = match super::connection::OBDBusyGuard::try_acquire() {
+        Ok(guard) => guard,
+        Err(_) => {
+            dev_log::log_debug("dashboard", "OBD is busy, skipping PID poll");
+            return Vec::new();
+        }
+    };
+
+    get_pid_data_real_inner()
+}
+
+fn get_pid_data_real_inner() -> Vec<PidValue> {
 
     dev_log::log_debug("dashboard", "Real mode: querying live PID data");
 
@@ -198,13 +218,25 @@ fn get_pid_data_inner() -> Vec<PidValue> {
     };
     let supported_pids = if supported_pids.is_empty() {
         // Fallback: use connection bitmap
-        with_real_connection(|conn| Ok(conn.supported_pids.clone())).unwrap_or_default()
+        with_real_connection(|conn| {
+            let mut pids = conn.supported_pids.clone();
+            pids.extend_from_slice(&conn.supported_pids_ext);
+            pids.sort_unstable();
+            pids.dedup();
+            Ok(pids)
+        }).unwrap_or_default()
     } else {
         supported_pids
     };
 
+    let candidates: Vec<_> = definitions
+        .iter()
+        .filter(|definition| supported_pids.is_empty() || supported_pids.contains(&(definition.pid as u8)))
+        .cloned()
+        .collect();
+    let poll_definitions = rotating_window(&candidates, &PID_POLL_CURSOR, STANDARD_PIDS_PER_CYCLE);
     let (raw_results, fail_updates, fail_count, skip_count) =
-        query_all_pids(&definitions, &fail_snapshot, &supported_pids);
+        query_all_pids(&poll_definitions, &fail_snapshot, &supported_pids);
 
     update_fail_counts(&fail_updates);
 
@@ -241,13 +273,19 @@ pub async fn get_pid_data_extended(manufacturer: String) -> Vec<PidValue> {
 }
 
 fn get_pid_data_extended_inner(manufacturer: String) -> Vec<PidValue> {
-    // Start with standard OBD-II PIDs
-    let mut results = get_pid_data_inner();
-
     if is_demo() || manufacturer.is_empty() {
         dev_log::log_debug("dashboard", "Extended polling skipped: demo mode or empty manufacturer");
-        return results;
+        return get_pid_data_inner();
     }
+
+    let _guard = match super::connection::OBDBusyGuard::try_acquire() {
+        Ok(guard) => guard,
+        Err(_) => {
+            dev_log::log_debug("dashboard", "OBD is busy, skipping extended PID poll");
+            return Vec::new();
+        }
+    };
+    let mut results = get_pid_data_real_inner();
 
     dev_log::log_info("dashboard", &format!("Extended polling for manufacturer: {}", manufacturer));
 
@@ -256,7 +294,7 @@ fn get_pid_data_extended_inner(manufacturer: String) -> Vec<PidValue> {
         let guard = DISCOVERED_DIDS.lock().unwrap_or_else(|e| e.into_inner());
         match guard.as_ref() {
             Some(d) => d.clone(),
-            None => crate::obd::ecu_profiles::get_dids_for_manufacturer(&manufacturer),
+            None => Vec::new(),
         }
     };
     dev_log::log_debug("dashboard", &format!("Polling {} DIDs for {}", dids.len(), manufacturer));
@@ -277,20 +315,25 @@ fn get_pid_data_extended_inner(manufacturer: String) -> Vec<PidValue> {
     let mut did_results: Vec<(u16, String, Vec<u8>)> = Vec::new();
     let mut fail_updates: Vec<(u16, bool)> = Vec::new();
 
-    // Pre-parse DID IDs to avoid parsing inside the lock
-    let parsed_dids: Vec<(u16, &str)> = dids.iter()
+    // Poll a bounded rotating window so a large catalog cannot monopolize the bus.
+    let did_window = rotating_window(&dids, &DID_POLL_CURSOR, MANUFACTURER_DIDS_PER_CYCLE);
+    let parsed_dids: Vec<(u16, &str, &str)> = did_window.iter()
         .filter_map(|(did_hex, did_name)| {
-            let did_id = u16::from_str_radix(did_hex, 16).or_else(|_| u16::from_str_radix(did_hex, 10)).ok()?;
-            if did_id < 0x100 { return None; }
-            let did_fails = fail_snapshot.get(&did_id).copied().unwrap_or(0);
-            if did_fails >= MAX_PID_FAILURES { return None; }
-            Some((did_id, did_name.as_str()))
+            let did_id = u16::from_str_radix(did_hex, 16).ok()?;
+            let _previous_failures = fail_snapshot.get(&did_id).copied().unwrap_or(0);
+            let header = crate::obd::ecu_profiles::get_did_request_header(&manufacturer, did_name)?;
+            Some((did_id, did_name.as_str(), header))
         })
         .collect();
 
     // Acquire CONNECTION mutex ONCE for entire DID batch
     let _ = with_real_connection(|conn| {
-        for &(did_id, did_name) in &parsed_dids {
+        let mut current_header = None;
+        for &(did_id, did_name, header) in &parsed_dids {
+            if current_header != Some(header) {
+                conn.set_ecu_header(header)?;
+                current_header = Some(header);
+            }
             match conn.query_did(did_id) {
                 Ok(bytes) => {
                     fail_updates.push((did_id, true));
@@ -321,16 +364,18 @@ fn get_pid_data_extended_inner(manufacturer: String) -> Vec<PidValue> {
     let lang = super::connection::get_lang();
     {
         let mut cache_guard = DID_INFO_CACHE.lock().unwrap_or_else(|e| e.into_inner());
-        if cache_guard.is_none() {
-            let mut cache = HashMap::new();
-            for &(did_id, _) in &parsed_dids {
-                let did_hex = format!("{:04X}", did_id);
+        let cache = cache_guard.get_or_insert_with(HashMap::new);
+        let initial_size = cache.len();
+        for &(did_id, _, _) in &parsed_dids {
+            let did_hex = format!("{:04X}", did_id);
+            if !cache.contains_key(&did_hex) {
                 if let Some(info) = super::database::get_did_info_sync(&did_hex, &manufacturer) {
                     cache.insert(did_hex, info);
                 }
             }
-            dev_log::log_info("dashboard", &format!("DID info cache populated: {} entries from DB", cache.len()));
-            *cache_guard = Some(cache);
+        }
+        if cache.len() != initial_size {
+            dev_log::log_info("dashboard", &format!("DID info cache contains {} entries from DB", cache.len()));
         }
     }
 
@@ -433,6 +478,9 @@ pub fn clear_pid_history() {
         let mut demo_guard = DEMO.lock().unwrap_or_else(|e| e.into_inner());
         *demo_guard = None;
     }
+
+    *PID_POLL_CURSOR.lock().unwrap_or_else(|error| error.into_inner()) = 0;
+    *DID_POLL_CURSOR.lock().unwrap_or_else(|error| error.into_inner()) = 0;
 
     dev_log::log_info("connection", "PID history and discovery data cleared");
 }

@@ -37,8 +37,6 @@ pub fn get_ecu_probes() -> Vec<EcuProbe> {
         EcuProbe { tx_addr: "714", name_fr: "Direction", name_en: "Steering", dids: &[("22F190", "F190"), ("22F191", "F191")] },
         EcuProbe { tx_addr: "710", name_fr: "Module confort", name_en: "Comfort Module", dids: &[("22F190", "F190")] },
         EcuProbe { tx_addr: "740", name_fr: "Électronique porte (conducteur)", name_en: "Door Electronics (Driver)", dids: &[("22F190", "F190")] },
-        // BMW/Toyota/Honda
-        EcuProbe { tx_addr: "7E8", name_fr: "Moteur (réponse)", name_en: "Engine (Response)", dids: &[("22F190", "F190")] },
         EcuProbe { tx_addr: "7DF", name_fr: "Broadcast", name_en: "Broadcast", dids: &[] }, // Broadcast probe
     ]
 }
@@ -50,12 +48,23 @@ pub fn ecu_name(lang: &str, fr: &str, en: &str) -> String {
 
 /// Check if a response indicates the ECU is alive (not NO DATA, not empty, not error)
 pub fn is_valid_ecu_response(response: &str) -> bool {
-    !response.is_empty()
-        && !response.contains("NO DATA")
-        && !response.contains("ERROR")
-        && !response.contains("UNABLE")
-        && !response.contains("?")
-        && !response.trim().is_empty()
+    if response.is_empty()
+        || response.contains("NO DATA")
+        || response.contains("ERROR")
+        || response.contains("UNABLE")
+        || response.contains('?')
+    {
+        return false;
+    }
+
+    response.lines().any(|line| {
+        let bytes: Vec<u8> = line
+            .split_whitespace()
+            .filter_map(|token| u8::from_str_radix(token, 16).ok())
+            .collect();
+        !bytes.contains(&0x7F)
+            && bytes.iter().any(|service| matches!(service, 0x7E | 0x62))
+    })
 }
 
 /// Probe whether an ECU is alive using 3-method discovery (header must already be set)
@@ -68,15 +77,7 @@ pub fn probe_ecu_alive(probe: &EcuProbe) -> bool {
         }
     }
 
-    // === Method 2: StartDiagnosticSession (10 01) — wakes up sleeping ECUs ===
-    if let Ok(response) = with_real_connection(|conn| conn.send_command_timeout("1001", 3000)) {
-        if is_valid_ecu_response(&response) {
-            dev_log::log_debug("ecu", &format!("ECU at {} responded to DiagSession", probe.tx_addr));
-            return true;
-        }
-    }
-
-    // === Method 3: ReadDataByIdentifier F190 (VIN) — slower but universal ===
+    // === Method 2: ReadDataByIdentifier F190 (VIN) — slower but read-only ===
     if let Ok(response) = with_real_connection(|conn| conn.send_command_timeout("22F190", 3000)) {
         if is_valid_ecu_response(&response) {
             dev_log::log_debug("ecu", &format!("ECU at {} responded to ReadDID F190", probe.tx_addr));
