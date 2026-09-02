@@ -87,10 +87,11 @@ impl Database {
         if CACHED_INITIALIZED.load(Ordering::Relaxed) {
             return CACHED_OPS_COUNT.load(Ordering::Relaxed);
         }
-        let count: u64 = self
+        let count: i64 = self
             .catalog
             .query_row("SELECT COUNT(*) FROM operations", [], |r| r.get(0))
             .unwrap_or(0);
+        let count = u64::try_from(count).unwrap_or(0);
         CACHED_OPS_COUNT.store(count, Ordering::Relaxed);
         CACHED_INITIALIZED.store(true, Ordering::Relaxed);
         count
@@ -99,7 +100,7 @@ impl Database {
     /// Get database stats (operations count is cached; profiles/ecus are small tables)
     pub fn get_stats(&self) -> (u64, u64, u64) {
         let ops = self.operations_count();
-        let profiles: u64 = self
+        let profiles: i64 = self
             .catalog
             .query_row(
                 "SELECT COUNT(DISTINCT profile_name) FROM vehicle_profiles",
@@ -107,11 +108,15 @@ impl Database {
                 |r| r.get(0),
             )
             .unwrap_or(0);
-        let ecus: u64 = self
+        let ecus: i64 = self
             .catalog
             .query_row("SELECT COUNT(*) FROM ecu_catalog", [], |r| r.get(0))
             .unwrap_or(0);
-        (ops, profiles, ecus)
+        (
+            ops,
+            u64::try_from(profiles).unwrap_or(0),
+            u64::try_from(ecus).unwrap_or(0),
+        )
     }
 
     /// Search operations by keyword (name, ECU, DID).
