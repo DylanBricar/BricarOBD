@@ -195,7 +195,7 @@ impl SafetyGuard {
             }
         } else {
             // Unspaced format: validate all chars are hex and length is even
-            if trimmed.len() % 2 != 0 {
+            if !trimmed.len().is_multiple_of(2) {
                 return Err(format!("Odd-length hex string: '{}'", trimmed));
             }
             for i in (0..trimmed.len()).step_by(2) {

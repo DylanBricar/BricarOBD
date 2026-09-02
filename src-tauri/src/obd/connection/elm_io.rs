@@ -137,7 +137,7 @@ impl Elm327Connection {
     fn clean_response(raw: &str) -> String {
         let mut result = String::with_capacity(raw.len());
         let mut first = true;
-        for line in raw.split(|c| c == '\r' || c == '\n') {
+        for line in raw.split(['\r', '\n']) {
             let l = line.trim();
             if l.is_empty()
                 || l.starts_with("SEARCHING")

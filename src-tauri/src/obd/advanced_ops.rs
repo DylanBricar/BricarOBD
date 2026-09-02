@@ -263,7 +263,7 @@ mod tests {
             .flat_map(|g| g.manufacturers.iter().cloned())
             .collect();
         // Should contain some well-known manufacturers
-        let known = vec!["BMW", "Mercedes", "Volkswagen", "Audi", "Toyota"];
+        let known = ["BMW", "Mercedes", "Volkswagen", "Audi", "Toyota"];
         let has_known = all_manufacturers
             .iter()
             .any(|m| known.iter().any(|k| m.contains(k)));
@@ -314,18 +314,6 @@ mod tests {
     #[test]
     fn test_resolve_operation_command_returns_hex_strings() {
         assert!(resolve_operation_command("reset_service").is_none());
-    }
-
-    #[test]
-    fn test_localized_text_structure() {
-        let categories = get_categories();
-        for cat in categories {
-            // Each LocalizedText should have both EN and FR
-            let _ = cat.name;
-            let _ = cat.desc;
-            // If deserialized successfully, both fields exist
-            assert!(true);
-        }
     }
 
     #[test]

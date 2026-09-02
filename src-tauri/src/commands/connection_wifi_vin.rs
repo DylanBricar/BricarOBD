@@ -79,7 +79,7 @@ pub async fn connect_wifi(host: String, port: u16) -> Result<VehicleInfo, String
     let mut guard = super::connection::CONNECTION
         .lock()
         .unwrap_or_else(|e| e.into_inner());
-    *guard = super::connection::ConnectionMode::Real(conn);
+    *guard = super::connection::ConnectionMode::Real(Box::new(conn));
     Ok(info)
 }
 
@@ -102,21 +102,18 @@ pub async fn scan_wifi() -> Vec<serde_json::Value> {
                         "connection",
                         &format!("Probing WiFi {}:{}", host, port),
                     );
-                    match transport::WiFiTransport::new(&host, port, 1500) {
-                        Ok(mut t) => {
-                            crate::obd::dev_log::log_info(
-                                "connection",
-                                &format!("WiFi adapter found at {}:{}", host, port),
-                            );
-                            t.close();
-                            let mut results = found.lock().unwrap_or_else(|e| e.into_inner());
-                            results.push(serde_json::json!({
-                                "host": host,
-                                "port": port,
-                                "name": format!("WiFi ELM327 ({}:{})", host, port),
-                            }));
-                        }
-                        Err(_) => {}
+                    if let Ok(mut t) = transport::WiFiTransport::new(&host, port, 1500) {
+                        crate::obd::dev_log::log_info(
+                            "connection",
+                            &format!("WiFi adapter found at {}:{}", host, port),
+                        );
+                        t.close();
+                        let mut results = found.lock().unwrap_or_else(|e| e.into_inner());
+                        results.push(serde_json::json!({
+                            "host": host,
+                            "port": port,
+                            "name": format!("WiFi ELM327 ({}:{})", host, port),
+                        }));
                     }
                 });
                 handles.push(handle);

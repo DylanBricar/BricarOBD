@@ -15,7 +15,7 @@ fn text_mode09_payload(bytes: &[u8]) -> Option<String> {
 }
 
 fn cvn_mode09_payload(bytes: &[u8]) -> Option<String> {
-    let value = if bytes.len() >= 5 && (bytes.len() - 1) % 4 == 0 && bytes[0] <= 0x20 {
+    let value = if bytes.len() >= 5 && (bytes.len() - 1).is_multiple_of(4) && bytes[0] <= 0x20 {
         &bytes[1..]
     } else {
         bytes
@@ -73,13 +73,11 @@ pub async fn get_vehicle_info_extended() -> Result<crate::models::VehicleInfoExt
         Ok(result)
     })
     .await
-    .unwrap_or_else(|_| {
-        Ok(crate::models::VehicleInfoExtended {
-            calid: None,
-            cvn: None,
-            ecu_name: None,
-        })
-    })
+    .unwrap_or(Ok(crate::models::VehicleInfoExtended {
+        calid: None,
+        cvn: None,
+        ecu_name: None,
+    }))
 }
 
 #[cfg(test)]

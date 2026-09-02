@@ -24,7 +24,7 @@ pub(crate) fn parse_vin_singleline(response: &str) -> Vec<u8> {
         // If 20+ tokens and part[2] looks like a small counter byte (01-05), skip it
         let data_start = if all_parts.len() >= 20 {
             if let Ok(counter) = u8::from_str_radix(all_parts[2], 16) {
-                if counter >= 1 && counter <= 5 {
+                if (1..=5).contains(&counter) {
                     3
                 } else {
                     2
@@ -243,14 +243,14 @@ mod tests {
     fn test_parse_vin_multiframe_empty() {
         let response = "";
         let bytes = parse_vin_multiframe(response);
-        assert_eq!(bytes.len(), 0);
+        assert!(bytes.is_empty());
     }
 
     #[test]
     fn test_parse_vin_multiframe_no_49_02_header() {
         let response = "48 02 01 56 46 33\n48 02 02 4C 43 42";
         let bytes = parse_vin_multiframe(response);
-        assert_eq!(bytes.len(), 0);
+        assert!(bytes.is_empty());
     }
 
     #[test]
@@ -273,77 +273,77 @@ mod tests {
     fn test_parse_vin_singleline_empty() {
         let response = "";
         let bytes = parse_vin_singleline(response);
-        assert_eq!(bytes.len(), 0);
+        assert!(bytes.is_empty());
     }
 
     #[test]
     fn test_parse_vin_singleline_no_49_02() {
         let response = "49 01 56 46 33 4C 43 42";
         let bytes = parse_vin_singleline(response);
-        assert_eq!(bytes.len(), 0);
+        assert!(bytes.is_empty());
     }
 
     #[test]
     fn test_parse_vin_singleline_exactly_49_02() {
         let response = "49 02";
         let bytes = parse_vin_singleline(response);
-        assert_eq!(bytes.len(), 0);
+        assert!(bytes.is_empty());
     }
 
     #[test]
     fn test_parse_vin_nospace() {
         let response = "4902564633344C434248355A364A533030303030303030";
         let bytes = parse_vin_nospace(response);
-        assert!(bytes.len() > 0);
+        assert!(!bytes.is_empty());
     }
 
     #[test]
     fn test_parse_vin_nospace_with_newlines() {
         let response = "4902564633\n344C43424\n8355A364A5330303030303030";
         let bytes = parse_vin_nospace(response);
-        assert!(bytes.len() > 0);
+        assert!(!bytes.is_empty());
     }
 
     #[test]
     fn test_parse_vin_nospace_no_4902() {
         let response = "4903564633344C434248355A364A533030303030303030";
         let bytes = parse_vin_nospace(response);
-        assert_eq!(bytes.len(), 0);
+        assert!(bytes.is_empty());
     }
 
     #[test]
     fn test_parse_vin_nospace_empty() {
         let response = "";
         let bytes = parse_vin_nospace(response);
-        assert_eq!(bytes.len(), 0);
+        assert!(bytes.is_empty());
     }
 
     #[test]
     fn test_parse_vin_can_header() {
         let response = "7E8 10 14 49 02 01 56 46 33\n7E9 21 4C 43 42 48 5A 36 4A";
         let bytes = parse_vin_can_header(response);
-        assert!(bytes.len() > 0);
+        assert!(!bytes.is_empty());
     }
 
     #[test]
     fn test_parse_vin_can_header_no_49_02() {
         let response = "7E8 10 14 48 02 01 56 46 33";
         let bytes = parse_vin_can_header(response);
-        assert_eq!(bytes.len(), 0);
+        assert!(bytes.is_empty());
     }
 
     #[test]
     fn test_parse_vin_can_header_empty() {
         let response = "";
         let bytes = parse_vin_can_header(response);
-        assert_eq!(bytes.len(), 0);
+        assert!(bytes.is_empty());
     }
 
     #[test]
     fn test_parse_vin_can_header_49_without_02_next() {
         let response = "7E8 10 14 49 01 01 56 46 33";
         let bytes = parse_vin_can_header(response);
-        assert_eq!(bytes.len(), 0);
+        assert!(bytes.is_empty());
     }
 
     #[test]
@@ -413,14 +413,14 @@ mod tests {
     fn test_parse_vin_raw_fallback_empty() {
         let response = "";
         let bytes = parse_vin_raw_fallback(response);
-        assert_eq!(bytes.len(), 0);
+        assert!(bytes.is_empty());
     }
 
     #[test]
     fn test_parse_vin_raw_fallback_invalid_hex() {
         let response = "ZZ GG HH";
         let bytes = parse_vin_raw_fallback(response);
-        assert_eq!(bytes.len(), 0);
+        assert!(bytes.is_empty());
     }
 
     #[test]

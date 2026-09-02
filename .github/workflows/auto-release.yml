@@ -22,6 +22,7 @@ jobs:
     outputs:
       new_tag: ${{ steps.bump.outputs.new_tag }}
       new_version: ${{ steps.bump.outputs.new_version }}
+      release_id: ${{ steps.release.outputs.release_id }}
 
     steps:
       - name: Checkout
@@ -69,6 +70,19 @@ jobs:
           git push
           git tag "${{ steps.bump.outputs.new_tag }}"
           git push origin "${{ steps.bump.outputs.new_tag }}"
+
+      - name: Create release once
+        id: release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NEW_TAG: ${{ steps.bump.outputs.new_tag }}
+        run: |
+          gh release create "$NEW_TAG" \
+            --verify-tag \
+            --title "BricarOBD $NEW_TAG" \
+            --notes "Automated multi-platform release for BricarOBD $NEW_TAG."
+          RELEASE_ID=$(gh api "repos/${GITHUB_REPOSITORY}/releases/tags/${NEW_TAG}" --jq .id)
+          echo "release_id=$RELEASE_ID" >> "$GITHUB_OUTPUT"
 
   # ═══════════════════════════════════════════
   # Desktop builds (macOS, Windows, Linux)
@@ -162,30 +176,15 @@ jobs:
         run: pnpm exec tsc --noEmit
 
       - name: Build Tauri app
-        uses: tauri-apps/tauri-action@84b9d35b5fc46c1e45415bdb6144030364f7ebc5 # v0.6.2
+        uses: tauri-apps/tauri-action@1deb371b0cd8bd54025b384f1cd735e725c4060f # v1.0.0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
+          releaseId: ${{ needs.bump-and-tag.outputs.release_id }}
           tagName: ${{ needs.bump-and-tag.outputs.new_tag }}
-          releaseName: 'BricarOBD ${{ needs.bump-and-tag.outputs.new_tag }}'
-          releaseBody: |
-            ## BricarOBD ${{ needs.bump-and-tag.outputs.new_tag }}
-
-            ### Professional OBD-II Diagnostic Tool
-
-            **Platforms:** macOS (Apple Silicon + Intel) · Windows · Linux · Android · iOS
-
-            **What's included:**
-            - 3.17M operations database (PSA, VAG, BMW, Mercedes, Renault, Toyota, Honda, etc.)
-            - 8,807 DTC codes + 415 repair tips
-            - 70 OBD-II PIDs + 391 manufacturer DIDs
-            - 9 protocols · 4 init strategies · WiFi + USB adapters
-            - SafetyGuard (12 blocked services, default-deny)
-            - Bilingual FR/EN · Demo mode · Dev console · CSV export
-          releaseDraft: false
-          prerelease: false
+          retryAttempts: 5
           args: --target ${{ matrix.target }}
 
   # ═══════════════════════════════════════════

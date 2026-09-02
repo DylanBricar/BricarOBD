@@ -21,10 +21,14 @@ static PID_POLL_CURSOR: Mutex<usize> = Mutex::new(0);
 static DID_POLL_CURSOR: Mutex<usize> = Mutex::new(0);
 const STANDARD_PIDS_PER_CYCLE: usize = 12;
 const MANUFACTURER_DIDS_PER_CYCLE: usize = 6;
+type DidInfo = (String, String, String);
+type DidInfoCache = HashMap<String, DidInfo>;
+type RawPidResult = (u16, String, String, Vec<u8>);
+type PidQuerySummary = (Vec<RawPidResult>, Vec<(u16, bool)>, usize, usize);
 
 // Cache for DID info from SQLite DB — populated once per session, avoids per-poll DB queries
 // Key: DID hex string (e.g. "2282"), Value: (name_en, name_fr, ecu_name)
-static DID_INFO_CACHE: Mutex<Option<HashMap<String, (String, String, String)>>> = Mutex::new(None);
+static DID_INFO_CACHE: Mutex<Option<DidInfoCache>> = Mutex::new(None);
 
 fn rotating_window<T: Clone>(items: &[T], cursor: &Mutex<usize>, budget: usize) -> Vec<T> {
     if items.is_empty() || budget == 0 {
@@ -51,12 +55,7 @@ fn query_all_pids(
     definitions: &[crate::models::PidDefinition],
     fail_snapshot: &HashMap<u16, u32>,
     supported_pids: &[u8],
-) -> (
-    Vec<(u16, String, String, Vec<u8>)>,
-    Vec<(u16, bool)>,
-    usize,
-    usize,
-) {
+) -> PidQuerySummary {
     let has_pid_bitmap = !supported_pids.is_empty();
     let mut raw_results: Vec<(u16, String, String, Vec<u8>)> = Vec::new();
     let mut fail_updates: Vec<(u16, bool)> = Vec::new();
@@ -142,7 +141,7 @@ fn decode_and_record_history(
 
     for (pid, name, unit, bytes) in raw_results {
         if let Some(value) = pid::decode_pid(*pid, bytes) {
-            let hist = history.entry(*pid).or_insert_with(VecDeque::new);
+            let hist = history.entry(*pid).or_default();
             hist.push_back(value);
             if hist.len() > 120 {
                 hist.pop_front();
@@ -186,7 +185,7 @@ fn decode_and_record_history(
 /// Get current PID data — real or demo
 #[command]
 pub async fn get_pid_data() -> Vec<PidValue> {
-    match tokio::task::spawn_blocking(|| get_pid_data_inner()).await {
+    match tokio::task::spawn_blocking(get_pid_data_inner).await {
         Ok(data) => data,
         Err(e) => {
             dev_log::log_error("dashboard", &format!("get_pid_data task failed: {}", e));
@@ -467,9 +466,9 @@ fn get_pid_data_extended_inner(manufacturer: String) -> Vec<PidValue> {
 
             // Keep undocumented manufacturer data raw until an authoritative
             // per-DID formula is available.
-            let (value, unit) = decode_did_value(&response_bytes, &display_name);
+            let (value, unit) = decode_did_value(response_bytes, &display_name);
 
-            let hist = history.entry(*did_id).or_insert_with(VecDeque::new);
+            let hist = history.entry(*did_id).or_default();
             hist.push_back(value);
             if hist.len() > 120 {
                 hist.pop_front();

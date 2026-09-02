@@ -58,6 +58,12 @@ pub struct Elm327Connection {
     pub(super) consecutive_errors: u32, // Track errors for adaptive recovery
 }
 
+impl Default for Elm327Connection {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Elm327Connection {
     pub fn new() -> Self {
         Self {
@@ -367,10 +373,8 @@ impl Elm327Connection {
         {
             return Err(format!("Invalid ECU address: {}", address));
         }
-        if !self.headers_on {
-            if !self.set_headers(true) {
-                return Err("Failed to enable ELM headers".to_string());
-            }
+        if !self.headers_on && !self.set_headers(true) {
+            return Err("Failed to enable ELM headers".to_string());
         }
         self.send_command(&format!("ATSH{}", address))?;
         Ok(())

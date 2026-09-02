@@ -166,7 +166,7 @@ mod tests {
         let settings = AppSettings::default();
         assert_eq!(settings.language, "fr");
         assert_eq!(settings.default_baud_rate, 38400);
-        assert_eq!(settings.auto_connect, false);
+        assert!(!settings.auto_connect);
         assert_eq!(settings.theme, "dark");
     }
 
@@ -377,7 +377,7 @@ mod tests {
         let deserialized: AppSettings = serde_json::from_str(&json).unwrap();
         assert_eq!(deserialized.language, "en");
         assert_eq!(deserialized.default_baud_rate, 57600);
-        assert_eq!(deserialized.auto_connect, true);
+        assert!(deserialized.auto_connect);
         assert_eq!(deserialized.theme, "light");
     }
 }

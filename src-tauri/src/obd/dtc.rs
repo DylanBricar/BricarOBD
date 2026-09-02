@@ -78,7 +78,7 @@ pub fn parse_dtc_response(
             .filter(|_| marker >= 2)
             .map(|header| format!("0x{header:02X}"));
 
-        for chunk in data.chunks_exact(2) {
+        for chunk in data.as_chunks::<2>().0 {
             if chunk[0] == 0 && chunk[1] == 0 {
                 continue;
             }
@@ -280,7 +280,7 @@ mod tests {
         let response = "43 00 00 00 00";
         let dtcs = parse_dtc_response(response, DtcStatus::Active, "mode03", "en");
 
-        assert_eq!(dtcs.len(), 0);
+        assert!(dtcs.is_empty());
     }
 
     #[test]
@@ -289,7 +289,7 @@ mod tests {
         let response = "43";
         let dtcs = parse_dtc_response(response, DtcStatus::Active, "mode03", "en");
 
-        assert_eq!(dtcs.len(), 0);
+        assert!(dtcs.is_empty());
     }
 
     #[test]
@@ -297,7 +297,7 @@ mod tests {
         let response = "";
         let dtcs = parse_dtc_response(response, DtcStatus::Active, "mode03", "en");
 
-        assert_eq!(dtcs.len(), 0);
+        assert!(dtcs.is_empty());
     }
 
     #[test]
@@ -354,6 +354,6 @@ mod tests {
         let dtcs = parse_dtc_response(response, DtcStatus::Active, "mode03", "en");
 
         // Should filter out invalid hex and return empty
-        assert_eq!(dtcs.len(), 0);
+        assert!(dtcs.is_empty());
     }
 }

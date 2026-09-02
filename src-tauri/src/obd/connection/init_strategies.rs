@@ -3,12 +3,14 @@ use crate::obd::dev_log;
 use std::time::Duration;
 use tracing::{info, warn};
 
+type InitStrategy = fn(&mut Elm327Connection) -> Result<(), String>;
+
 impl Elm327Connection {
     // ==================== INIT STRATEGIES ====================
 
     /// Multi-strategy initialization — tries 4 approaches, then bails
     pub(super) fn init_with_resilience(&mut self) -> Result<(), String> {
-        let strategies: Vec<(&str, fn(&mut Self) -> Result<(), String>)> = vec![
+        let strategies: [(&str, InitStrategy); 4] = [
             ("standard", Self::try_standard_init),
             ("clone-compatible", Self::try_clone_init),
             ("aggressive", Self::try_aggressive_init),

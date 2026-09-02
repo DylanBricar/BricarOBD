@@ -372,7 +372,7 @@ mod tests {
     fn test_parse_mode06_bitmap_empty() {
         let response = "";
         let bitmap = parse_mode06_bitmap(response);
-        assert_eq!(bitmap.len(), 0);
+        assert!(bitmap.is_empty());
     }
 
     #[test]
@@ -396,14 +396,14 @@ mod tests {
     fn test_parse_mode06_bitmap_all_bits_set() {
         let response = "46 00 FF FF FF FF";
         let bitmap = parse_mode06_bitmap(response);
-        assert!(bitmap.len() > 0);
+        assert!(!bitmap.is_empty());
     }
 
     #[test]
     fn test_parse_mode06_bitmap_no_46_prefix() {
         let response = "45 00 80 00 00 00";
         let bitmap = parse_mode06_bitmap(response);
-        assert_eq!(bitmap.len(), 0);
+        assert!(bitmap.is_empty());
     }
 
     #[test]
@@ -425,7 +425,7 @@ mod tests {
     fn test_parse_mode06_results_empty() {
         let response = "";
         let results = parse_mode06_results(response, "en");
-        assert_eq!(results.len(), 0);
+        assert!(results.is_empty());
     }
 
     #[test]
@@ -504,14 +504,14 @@ mod tests {
     fn test_parse_mode06_results_insufficient_data() {
         let response = "46 01 00";
         let results = parse_mode06_results(response, "en");
-        assert_eq!(results.len(), 0);
+        assert!(results.is_empty());
     }
 
     #[test]
     fn test_parse_mode06_results_no_46_marker() {
         let response = "45 01 00 00 50 00 40 00 60";
         let results = parse_mode06_results(response, "en");
-        assert_eq!(results.len(), 0);
+        assert!(results.is_empty());
     }
 
     #[test]

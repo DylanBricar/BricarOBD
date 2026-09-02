@@ -219,24 +219,19 @@ pub async fn clear_dtcs(confirmed: Option<bool>) -> Result<String, String> {
 
         // ====== Strategy 3: Mode 04 with extended diagnostic session ======
         // Only on CAN/KWP — extended sessions don't exist on J1850/ISO 9141
-        if !cleared {
-            if is_uds_capable_protocol() {
-                dev_log::log_info(
-                    "dtc",
-                    "Strategy 3: Mode 04 with extended diagnostic session",
-                );
-                match clear_mode04_extended_session() {
-                    Ok(()) => {
-                        cleared = true;
-                    }
-                    Err(e) => {
-                        dev_log::log_warn(
-                            "dtc",
-                            &format!("Mode 04 extended session failed: {}", e),
-                        );
-                        if !has_conditions_error(&last_error) {
-                            last_error = e;
-                        }
+        if !cleared && is_uds_capable_protocol() {
+            dev_log::log_info(
+                "dtc",
+                "Strategy 3: Mode 04 with extended diagnostic session",
+            );
+            match clear_mode04_extended_session() {
+                Ok(()) => {
+                    cleared = true;
+                }
+                Err(e) => {
+                    dev_log::log_warn("dtc", &format!("Mode 04 extended session failed: {}", e));
+                    if !has_conditions_error(&last_error) {
+                        last_error = e;
                     }
                 }
             }

@@ -15,7 +15,7 @@ pub use super::connection_wifi_vin::{
 pub enum ConnectionMode {
     Disconnected,
     Demo,
-    Real(crate::obd::Elm327Connection),
+    Real(Box<crate::obd::Elm327Connection>),
 }
 
 pub static CONNECTION: Mutex<ConnectionMode> = Mutex::new(ConnectionMode::Disconnected);
@@ -157,9 +157,11 @@ pub async fn connect_obd(port: String, baud_rate: u32) -> Result<VehicleInfo, St
                 }
             }
         }
-        let diagnostic = if last_error.contains("Permission denied") || last_error.contains("Access denied") {
-            last_error.clone()
-        } else if last_error.contains("not found") || last_error.contains("No such file") {
+        let diagnostic = if last_error.contains("Permission denied")
+            || last_error.contains("Access denied")
+            || last_error.contains("not found")
+            || last_error.contains("No such file")
+        {
             last_error.clone()
         } else if last_error.contains("All 4 connection strategies failed") {
             format!("{} — The adapter was detected but could not communicate with the vehicle ECU. Check that the ignition is ON and the adapter is firmly plugged into the OBD-II port.", last_error)
@@ -174,7 +176,7 @@ pub async fn connect_obd(port: String, baud_rate: u32) -> Result<VehicleInfo, St
 
     let (conn, info) = result?;
     let mut guard = CONNECTION.lock().unwrap_or_else(|e| e.into_inner());
-    *guard = ConnectionMode::Real(conn);
+    *guard = ConnectionMode::Real(Box::new(conn));
     Ok(info)
 }
 

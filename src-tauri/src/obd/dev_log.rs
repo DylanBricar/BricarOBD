@@ -127,11 +127,7 @@ pub fn get_all_logs() -> Vec<LogEntry> {
 pub fn get_logs_since(since_index: usize) -> Vec<LogEntry> {
     let guard = get_buffer();
     let evicted = EVICTED_COUNT.load(Relaxed) as usize;
-    let adjusted_index = if since_index > evicted {
-        since_index - evicted
-    } else {
-        0
-    };
+    let adjusted_index = since_index.saturating_sub(evicted);
     guard
         .as_ref()
         .map(|b| b.iter().skip(adjusted_index).cloned().collect())
@@ -338,6 +334,6 @@ mod tests {
         log_info("src1", "msg1");
         log_info("src2", "msg2");
         let logs = get_logs_since(100);
-        assert_eq!(logs.len(), 0);
+        assert!(logs.is_empty());
     }
 }

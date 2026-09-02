@@ -27,7 +27,7 @@ impl Elm327Connection {
                 .chars()
                 .filter(|character| character.is_ascii_hexdigit())
                 .collect();
-            if hex.len() < 2 || hex.len() % 2 != 0 {
+            if hex.len() < 2 || !hex.len().is_multiple_of(2) {
                 continue;
             }
             bytes.extend(
@@ -38,7 +38,7 @@ impl Elm327Connection {
         }
 
         // Compact CAN responses may arrive as `7E8101462...` without spaces.
-        if tokens.len() == 1 && tokens[0].len() >= 5 && tokens[0].len() % 2 == 1 {
+        if tokens.len() == 1 && tokens[0].len() >= 5 && !tokens[0].len().is_multiple_of(2) {
             let compact = tokens[0];
             if compact[..3]
                 .chars()

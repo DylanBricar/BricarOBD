@@ -286,9 +286,10 @@ mod tests {
         cache.created_at = 0;
 
         if let Ok(()) = save_cache(&cache) {
-            if let Some(_) = load_cache(&vin) {
-                assert!(false, "TTL validation should reject old cache");
-            }
+            assert!(
+                load_cache(&vin).is_none(),
+                "TTL validation should reject old cache"
+            );
             let _ = clear_cache(&vin);
         }
     }

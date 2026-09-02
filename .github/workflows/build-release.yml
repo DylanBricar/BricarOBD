@@ -17,11 +17,32 @@ jobs:
   quality:
     uses: ./.github/workflows/quality.yml
 
+  prepare-release:
+    needs: [quality]
+    runs-on: ubuntu-latest
+    outputs:
+      release_id: ${{ steps.release.outputs.release_id }}
+    steps:
+      - name: Create or find release
+        id: release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
+        run: |
+          if ! gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            gh release create "$RELEASE_TAG" \
+              --verify-tag \
+              --title "BricarOBD $RELEASE_TAG" \
+              --notes "Multi-platform release for BricarOBD $RELEASE_TAG."
+          fi
+          RELEASE_ID=$(gh api "repos/${GITHUB_REPOSITORY}/releases/tags/${RELEASE_TAG}" --jq .id)
+          echo "release_id=$RELEASE_ID" >> "$GITHUB_OUTPUT"
+
   # ═══════════════════════════════════════════
   # Desktop builds (macOS, Windows, Linux)
   # ═══════════════════════════════════════════
   build-desktop:
-    needs: [quality]
+    needs: [prepare-release]
     strategy:
       fail-fast: false
       matrix:
@@ -109,39 +130,15 @@ jobs:
         run: pnpm exec tsc --noEmit
 
       - name: Build Tauri app
-        uses: tauri-apps/tauri-action@84b9d35b5fc46c1e45415bdb6144030364f7ebc5 # v0.6.2
+        uses: tauri-apps/tauri-action@1deb371b0cd8bd54025b384f1cd735e725c4060f # v1.0.0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
+          releaseId: ${{ needs.prepare-release.outputs.release_id }}
           tagName: ${{ inputs.tag || github.ref_name }}
-          releaseName: 'BricarOBD ${{ inputs.tag || github.ref_name }}'
-          releaseBody: |
-            ## BricarOBD ${{ inputs.tag || github.ref_name }}
-
-            ### Professional OBD-II Diagnostic Tool
-
-            **Platforms:** macOS (Apple Silicon + Intel) · Windows · Linux · Android · iOS
-
-            **What's included:**
-            - 3.17M operations database (PSA, VAG, BMW, Mercedes, Renault, Toyota, Honda, etc.)
-            - 8,807 DTC codes + 415 repair tips
-            - 70 OBD-II PIDs + 391 manufacturer DIDs
-            - 9 protocols · 4 init strategies · WiFi + USB adapters
-            - SafetyGuard (12 blocked services, default-deny)
-            - Bilingual FR/EN · Demo mode · Dev console · CSV export
-
-            **Desktop install:**
-            - **macOS**: Download `.dmg`, drag to Applications
-            - **Windows**: Download `.msi` or `.exe`
-            - **Linux**: Download `.deb` or `.AppImage`
-
-            **Mobile:**
-            - **Android**: Download `.apk`, enable "Install from unknown sources"
-            - **iOS**: Install via TestFlight (link in description)
-          releaseDraft: false
-          prerelease: false
+          retryAttempts: 5
           args: --target ${{ matrix.target }}
 
   # ═══════════════════════════════════════════

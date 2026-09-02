@@ -20,10 +20,7 @@ impl Elm327Connection {
         std::thread::sleep(Duration::from_millis(300));
 
         // Send 0100 with generous timeout — auto-detect can take 5-10s
-        let response = match self.send_command_timeout("0100", 10000) {
-            Ok(r) => r,
-            Err(_) => String::new(),
-        };
+        let response = self.send_command_timeout("0100", 10000).unwrap_or_default();
 
         if self.check_valid_pid_response(&response, "41 00") {
             let proto = self.send_command("ATDPN").unwrap_or_default();

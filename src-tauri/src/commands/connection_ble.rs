@@ -93,6 +93,6 @@ pub async fn connect_ble(device_name: String) -> Result<VehicleInfo, String> {
     let mut guard = super::connection::CONNECTION
         .lock()
         .unwrap_or_else(|e| e.into_inner());
-    *guard = super::connection::ConnectionMode::Real(conn);
+    *guard = super::connection::ConnectionMode::Real(Box::new(conn));
     Ok(info)
 }

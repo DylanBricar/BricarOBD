@@ -21,6 +21,12 @@ pub struct DemoConnection {
     lang: String,
 }
 
+impl Default for DemoConnection {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl DemoConnection {
     pub fn new() -> Self {
         Self {
@@ -183,7 +189,7 @@ impl DemoConnection {
         pids_data
             .into_iter()
             .map(|(pid, name, value, unit, min, max)| {
-                let history = self.history.entry(pid).or_insert_with(VecDeque::new);
+                let history = self.history.entry(pid).or_default();
                 history.push_back(value);
                 if history.len() > 120 {
                     history.pop_front();
@@ -729,7 +735,7 @@ mod tests {
         let frame = DemoConnection::get_freeze_frame("en");
         assert!(frame.is_some());
         let frame = frame.unwrap();
-        assert!(frame.pids.len() > 0);
+        assert!(!frame.pids.is_empty());
         for pid in frame.pids {
             assert!(pid.pid > 0);
             assert!(!pid.name.is_empty());
