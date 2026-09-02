@@ -4,7 +4,7 @@ use super::Elm327Connection;
 impl Elm327Connection {
     // ==================== SUPPORTED PID DISCOVERY ====================
 
-    /// Discover all supported PID ranges: 0100, 0120, 0140, 0160
+    /// Discover all supported PID ranges through the OBD-II 0xE0 block.
     pub(super) fn discover_supported_pids(&mut self) {
         dev_log::log_debug("obd", "Discovering supported PID ranges...");
 
@@ -31,10 +31,14 @@ impl Elm327Connection {
             }
         }
 
-        // Check if PID 0x60 is supported (means 0x61-0x80 range available)
-        if self.supported_pids.contains(&0x60) {
-            if let Ok(response) = self.send_command("0160") {
-                let pids = Self::parse_pid_bitmap(&response, "41 60", 0x60);
+        for base in [0x60u8, 0x80, 0xA0, 0xC0, 0xE0] {
+            let continuation_supported = self.supported_pids.contains(&base)
+                || self.supported_pids_ext.contains(&base);
+            if !continuation_supported {
+                break;
+            }
+            if let Ok(response) = self.send_command(&format!("01{base:02X}")) {
+                let pids = Self::parse_pid_bitmap(&response, &format!("41 {base:02X}"), base);
                 self.supported_pids_ext.extend(pids);
             }
         }
@@ -64,10 +68,16 @@ impl Elm327Connection {
 
         // Try with spaces first — iterate ALL matching lines for multi-ECU responses
         let mut found_any = false;
-        for line in response.lines().filter(|l| l.contains(prefix)) {
-            let bytes: Vec<u8> = line
-                .split_whitespace()
-                .skip(2)  // Skip "41 XX"
+        let prefix_tokens: Vec<&str> = prefix.split_whitespace().collect();
+        for line in response.lines().filter(|line| line.contains(prefix)) {
+            let tokens: Vec<&str> = line.split_whitespace().collect();
+            let Some(position) = tokens.windows(prefix_tokens.len()).position(|window| {
+                window.iter().zip(&prefix_tokens).all(|(left, right)| left.eq_ignore_ascii_case(right))
+            }) else {
+                continue;
+            };
+            let bytes: Vec<u8> = tokens[position + prefix_tokens.len()..]
+                .iter()
                 .take(4)
                 .filter_map(|s| u8::from_str_radix(s, 16).ok())
                 .collect();
@@ -101,7 +111,9 @@ impl Elm327Connection {
         for (byte_idx, &byte) in bytes.iter().enumerate() {
             for bit in 0..8 {
                 if byte & (0x80 >> bit) != 0 {
-                    pids.push(base + (byte_idx * 8 + bit + 1) as u8);
+                    if let Some(pid) = base.checked_add((byte_idx * 8 + bit + 1) as u8) {
+                        pids.push(pid);
+                    }
                 }
             }
         }

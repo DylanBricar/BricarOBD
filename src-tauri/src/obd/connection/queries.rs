@@ -4,6 +4,39 @@ use crate::obd::dev_log;
 use super::Elm327Connection;
 
 impl Elm327Connection {
+    fn parse_pid_response(response: &str, mode: u8, pid: u8) -> Option<Vec<u8>> {
+        let response_service = mode + 0x40;
+        for line in response.lines() {
+            let bytes: Vec<u8> = line
+                .split_whitespace()
+                .filter_map(|token| u8::from_str_radix(token, 16).ok())
+                .collect();
+            if let Some(position) = bytes
+                .windows(2)
+                .position(|window| window == [response_service, pid])
+            {
+                let data = bytes[position + 2..].to_vec();
+                if !data.is_empty() {
+                    return Some(data);
+                }
+            }
+        }
+
+        let prefix = format!("{response_service:02X}{pid:02X}");
+        let compact: String = response
+            .chars()
+            .filter(|character| character.is_ascii_hexdigit())
+            .collect();
+        let start = compact.find(&prefix)? + prefix.len();
+        let remaining = &compact[start..];
+        let usable_length = remaining.len().min(8) & !1;
+        let data: Vec<u8> = (0..usable_length)
+            .step_by(2)
+            .filter_map(|index| u8::from_str_radix(&remaining[index..index + 2], 16).ok())
+            .collect();
+        (!data.is_empty()).then_some(data)
+    }
+
     // ==================== PID QUERY WITH RESILIENCE ====================
 
     /// Send OBD-II PID request with retry logic and error recovery
@@ -49,61 +82,16 @@ impl Elm327Connection {
                 return Err(format!("PID {:02X} negative response: {}", pid, response));
             }
 
-            // Parse hex response: "41 0C 1A F8" (with spaces)
+            // Parse the first complete positive response without consuming CAN
+            // header/PCI bytes or data from another ECU line.
             let matching_lines: Vec<&str> = response.lines().filter(|l| l.contains(&expected_prefix)).collect();
             if matching_lines.len() > 1 {
                 dev_log::log_debug("obd", &format!(
                     "PID {:02X}: {} ECUs responded (using first)", pid, matching_lines.len()
                 ));
             }
-            if let Some(data_str) = matching_lines.first() {
-                let bytes: Vec<u8> = data_str
-                    .split_whitespace()
-                    .skip(2)
-                    .filter_map(|s| u8::from_str_radix(s, 16).ok())
-                    .collect();
-                if !bytes.is_empty() {
-                    return Ok(bytes);
-                }
-            }
-
-            // Try without spaces (some adapters strip spaces)
-            let no_space_prefix = format!("{:02X}{:02X}", mode + 0x40, pid);
-            let hex_str = response.replace(" ", "").replace("\n", "");
-            if let Some(start) = hex_str.find(&no_space_prefix) {
-                let data_start = start + no_space_prefix.len();
-                if data_start < hex_str.len() {
-                    // Limit to 4 data bytes (8 hex chars) to avoid consuming data from other ECUs
-                    let data_end = std::cmp::min(data_start + 8, hex_str.len());
-                    let data_hex = &hex_str[data_start..data_end];
-                    let bytes: Vec<u8> = (0..data_hex.len())
-                        .step_by(2)
-                        .filter_map(|i| {
-                            if i + 2 <= data_hex.len() {
-                                u8::from_str_radix(&data_hex[i..i+2], 16).ok()
-                            } else {
-                                None
-                            }
-                        })
-                        .collect();
-                    if !bytes.is_empty() {
-                        return Ok(bytes);
-                    }
-                }
-            }
-
-            // Multi-line response: some vehicles return data on a different line
-            for line in response.lines() {
-                let trimmed = line.trim();
-                if trimmed.len() >= 4 {
-                    let bytes: Vec<u8> = trimmed
-                        .split_whitespace()
-                        .filter_map(|s| u8::from_str_radix(s, 16).ok())
-                        .collect();
-                    if bytes.len() >= 3 && bytes[0] == mode + 0x40 && bytes[1] == pid {
-                        return Ok(bytes[2..].to_vec());
-                    }
-                }
+            if let Some(bytes) = Self::parse_pid_response(&response, mode, pid) {
+                return Ok(bytes);
             }
 
             if attempt < 2 {

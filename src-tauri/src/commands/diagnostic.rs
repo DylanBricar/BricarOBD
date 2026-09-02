@@ -70,6 +70,22 @@ fn parse_mode06_results(response: &str, lang: &str) -> Vec<Mode06Result> {
     results
 }
 
+fn parse_freeze_frame_payload(response: &str, pid: u8, frame: u8) -> Option<Vec<u8>> {
+    for line in response.lines() {
+        let bytes: Vec<u8> = line
+            .split_whitespace()
+            .filter_map(|token| u8::from_str_radix(token, 16).ok())
+            .collect();
+        if let Some(position) = bytes.windows(3).position(|window| window == [0x42, pid, frame]) {
+            let data = bytes[position + 3..].to_vec();
+            if !data.is_empty() {
+                return Some(data);
+            }
+        }
+    }
+    None
+}
+
 /// Get Mode 06 On-Board Monitoring Test Results
 #[command]
 pub async fn get_mode06_results(lang: Option<String>) -> Vec<Mode06Result> {
@@ -197,19 +213,10 @@ pub async fn get_freeze_frame(lang: Option<String>) -> Vec<FreezeFrameData> {
             }
 
             // Parse DTC from "42 02 XX XX" response
-            let dtc_bytes: Vec<u8> = dtc_response.split_whitespace()
-                .filter_map(|s| u8::from_str_radix(s, 16).ok())
-                .collect();
-
-            let dtc_code = if let Some(pos) = dtc_bytes.windows(2).position(|w| w[0] == 0x42 && w[1] == 0x02) {
-                if pos + 4 <= dtc_bytes.len() {
-                    dtc::decode_dtc_bytes(dtc_bytes[pos + 2], dtc_bytes[pos + 3])
-                } else {
-                    "Unknown".to_string()
-                }
-            } else {
-                "Unknown".to_string()
-            };
+            let dtc_code = parse_freeze_frame_payload(&dtc_response, 0x02, frame_num)
+                .filter(|bytes| bytes.len() >= 2)
+                .map(|bytes| dtc::decode_dtc_bytes(bytes[0], bytes[1]))
+                .unwrap_or_else(|| "Unknown".to_string());
 
             dev_log::log_info("diagnostic", &format!("Frame {}: triggered by DTC {}", frame_num, dtc_code));
 
@@ -231,16 +238,7 @@ pub async fn get_freeze_frame(lang: Option<String>) -> Vec<FreezeFrameData> {
                             continue;
                         }
 
-                        let tokens: Vec<&str> = response.split_whitespace().collect();
-                        let prefix_42 = format!("{:02X}", 0x42);
-                        let prefix_pid = format!("{:02X}", pid_u8);
-
-                        if let Some(pos) = tokens.windows(2).position(|w| w[0].eq_ignore_ascii_case(&prefix_42) && w[1].eq_ignore_ascii_case(&prefix_pid)) {
-                            let data_bytes: Vec<u8> = tokens[pos+2..]
-                                .iter()
-                                .filter_map(|s| u8::from_str_radix(s, 16).ok())
-                                .collect();
-
+                        if let Some(data_bytes) = parse_freeze_frame_payload(&response, pid_u8, frame_num) {
                             if let Some(value) = pid::decode_pid(def.pid, &data_bytes) {
                                 pids.push(PidValue {
                                     pid: def.pid,

@@ -11,13 +11,11 @@ use std::sync::{Arc, Mutex};
 #[cfg(feature = "mobile")]
 use std::collections::VecDeque;
 #[cfg(feature = "mobile")]
-use std::io::Read;
-#[cfg(feature = "mobile")]
 use std::time::Duration;
 #[cfg(feature = "mobile")]
 use std::thread;
 #[cfg(feature = "mobile")]
-use btleplug::api::{Central, Peripheral, Characteristic, WriteType, CharPropFlags};
+use btleplug::api::{Central, Manager as _, Peripheral, Characteristic, WriteType};
 #[cfg(feature = "mobile")]
 use btleplug::platform::Manager;
 #[cfg(feature = "mobile")]
@@ -159,7 +157,7 @@ impl BleTransport {
                         let drain_count = drain_count.min(buf.len());
                         buf.drain(..drain_count);
                     }
-                    buf.extend_from_slice(&notification.value);
+                    buf.extend(notification.value.iter().copied());
                 }
             }
         });
@@ -187,7 +185,8 @@ impl OBDTransport for BleTransport {
         loop {
             {
                 let mut buffer = self.rx_buffer.lock().unwrap_or_else(|e| e.into_inner());
-                let count = buffer.drain(..buffer.len().min(buf.len())).zip(buf.iter_mut()).fold(0, |acc, (src, dst)| {
+                let read_len = buffer.len().min(buf.len());
+                let count = buffer.drain(..read_len).zip(buf.iter_mut()).fold(0, |acc, (src, dst)| {
                     *dst = src;
                     acc + 1
                 });
