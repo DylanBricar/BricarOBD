@@ -276,8 +276,7 @@ mod tests {
 
     #[test]
     fn test_from_serde_json_error() {
-        let json_err = serde_json::from_str::<serde_json::Value>("invalid json")
-            .unwrap_err();
+        let json_err = serde_json::from_str::<serde_json::Value>("invalid json").unwrap_err();
         let obd_err: ObdError = json_err.into();
         match obd_err {
             ObdError::InvalidFormat(_) => (),

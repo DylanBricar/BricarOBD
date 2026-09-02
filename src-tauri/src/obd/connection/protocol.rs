@@ -1,7 +1,7 @@
+use super::Elm327Connection;
+use crate::obd::dev_log;
 use std::time::Duration;
 use tracing::{debug, info, warn};
-use crate::obd::dev_log;
-use super::Elm327Connection;
 
 impl Elm327Connection {
     // ==================== PROTOCOL DETECTION ====================
@@ -10,7 +10,10 @@ impl Elm327Connection {
     pub(super) fn detect_protocol(&mut self) -> Result<(), String> {
         // First: wake up the ECU with TesterPresent (works even if protocol is wrong)
         // This ensures the ECU is not in sleep mode
-        dev_log::log_debug("obd", "Sending wake-up TesterPresent before protocol detection");
+        dev_log::log_debug(
+            "obd",
+            "Sending wake-up TesterPresent before protocol detection",
+        );
 
         // Try auto-detect with ATSP0
         let _ = self.send_command("ATSP0");
@@ -24,10 +27,21 @@ impl Elm327Connection {
 
         if self.check_valid_pid_response(&response, "41 00") {
             let proto = self.send_command("ATDPN").unwrap_or_default();
-            self.protocol_num = proto.trim().chars().last().map(|c| c.to_string()).unwrap_or_default();
+            self.protocol_num = proto
+                .trim()
+                .chars()
+                .last()
+                .map(|c| c.to_string())
+                .unwrap_or_default();
             self.protocol = Self::decode_protocol(&proto);
             self.parse_supported_pids_from_response(&response);
-            dev_log::log_info("obd", &format!("Auto-detect found protocol: {} ({})", self.protocol, self.protocol_num));
+            dev_log::log_info(
+                "obd",
+                &format!(
+                    "Auto-detect found protocol: {} ({})",
+                    self.protocol, self.protocol_num
+                ),
+            );
             return Ok(());
         }
 
@@ -40,20 +54,26 @@ impl Elm327Connection {
     fn cycle_protocols(&mut self) -> Result<(), String> {
         // Order: most common first (CAN 500k, CAN 250k, KWP fast, KWP slow, ISO, J1850)
         let protocols = [
-            ("6", 6000,  "ISO 15765-4 CAN 11-bit 500k"),  // Most post-2008 vehicles
-            ("8", 6000,  "ISO 15765-4 CAN 11-bit 250k"),
-            ("7", 6000,  "ISO 15765-4 CAN 29-bit 500k"),
-            ("9", 6000,  "ISO 15765-4 CAN 29-bit 250k"),
-            ("5", 8000,  "ISO 14230-4 KWP fast init"),
-            ("4", 14000, "ISO 14230-4 KWP 5-baud init"),  // Needs 10s+ for slow init
-            ("3", 12000, "ISO 9141-2"),                    // Slow init
-            ("1", 6000,  "SAE J1850 PWM"),
-            ("2", 6000,  "SAE J1850 VPW"),
-            ("A", 6000,  "SAE J1939 CAN 29-bit 250k"),    // Trucks/heavy vehicles
+            ("6", 6000, "ISO 15765-4 CAN 11-bit 500k"), // Most post-2008 vehicles
+            ("8", 6000, "ISO 15765-4 CAN 11-bit 250k"),
+            ("7", 6000, "ISO 15765-4 CAN 29-bit 500k"),
+            ("9", 6000, "ISO 15765-4 CAN 29-bit 250k"),
+            ("5", 8000, "ISO 14230-4 KWP fast init"),
+            ("4", 14000, "ISO 14230-4 KWP 5-baud init"), // Needs 10s+ for slow init
+            ("3", 12000, "ISO 9141-2"),                  // Slow init
+            ("1", 6000, "SAE J1850 PWM"),
+            ("2", 6000, "SAE J1850 VPW"),
+            ("A", 6000, "SAE J1939 CAN 29-bit 250k"), // Trucks/heavy vehicles
         ];
 
         for (proto_num, timeout_ms, proto_name) in protocols {
-            dev_log::log_debug("obd", &format!("Trying protocol ATSP{} ({}) — timeout {}ms", proto_num, proto_name, timeout_ms));
+            dev_log::log_debug(
+                "obd",
+                &format!(
+                    "Trying protocol ATSP{} ({}) — timeout {}ms",
+                    proto_num, proto_name, timeout_ms
+                ),
+            );
 
             let _ = self.send_command(&format!("ATSP{}", proto_num));
             std::thread::sleep(Duration::from_millis(300));
@@ -86,7 +106,10 @@ impl Elm327Connection {
                 self.parse_supported_pids_from_response(&response);
                 // Restore normal timeout
                 let _ = self.send_command("ATST 64");
-                dev_log::log_info("obd", &format!("Found working protocol: {} (ATSP{})", proto_name, proto_num));
+                dev_log::log_info(
+                    "obd",
+                    &format!("Found working protocol: {} (ATSP{})", proto_name, proto_num),
+                );
                 info!("Found working protocol: {} (ATSP{})", proto_name, proto_num);
                 return Ok(());
             }
@@ -94,7 +117,13 @@ impl Elm327Connection {
             // Check for partial success — ECU responded but with an error (communication exists)
             if response.contains("41") || response.contains("7F") || response.contains("7E") {
                 warn!("Protocol {} got partial response: {}", proto_num, response);
-                dev_log::log_warn("obd", &format!("Protocol {} partial response — using it: {}", proto_num, response));
+                dev_log::log_warn(
+                    "obd",
+                    &format!(
+                        "Protocol {} partial response — using it: {}",
+                        proto_num, response
+                    ),
+                );
                 self.protocol_num = proto_num.to_string();
                 self.protocol = proto_name.to_string();
                 let _ = self.send_command("ATST 64");
@@ -108,7 +137,10 @@ impl Elm327Connection {
         }
 
         // Last resort: try with headers ON — some vehicles only respond when headers are enabled
-        dev_log::log_warn("obd", "All protocols failed with headers off, trying with headers on...");
+        dev_log::log_warn(
+            "obd",
+            "All protocols failed with headers off, trying with headers on...",
+        );
         self.set_headers(true);
 
         for (proto_num, timeout_ms, proto_name) in &protocols[..6] {
@@ -120,7 +152,13 @@ impl Elm327Connection {
                     self.protocol_num = proto_num.to_string();
                     self.protocol = proto_name.to_string();
                     self.set_headers(false);
-                    dev_log::log_info("obd", &format!("Found protocol with headers: {} (ATSP{})", proto_name, proto_num));
+                    dev_log::log_info(
+                        "obd",
+                        &format!(
+                            "Found protocol with headers: {} (ATSP{})",
+                            proto_name, proto_num
+                        ),
+                    );
                     return Ok(());
                 }
             }

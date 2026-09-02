@@ -37,9 +37,12 @@ export function useConnectionEffects(
   const discoveryPollRef = useRef<number | null>(null);
   const progressIntervalRef = useRef<number | null>(null);
   const tRef = useRef(t);
-  tRef.current = t;
   const langRef = useRef(language);
-  langRef.current = language;
+
+  useEffect(() => {
+    tRef.current = t;
+    langRef.current = language;
+  }, [t, language]);
 
   const handleClearDiscoveryTimeout = useCallback(() => {
     if (discoveryPollRef.current) clearTimeout(discoveryPollRef.current);
@@ -61,29 +64,7 @@ export function useConnectionEffects(
       setIsDiscoveryComplete(false);
       const make = vehicle?.make || "";
       devInfo("ui", "Starting vehicle discovery for " + make);
-
-      vehicleActions.startRealPolling(1000, make, true);
-
-      // Sequence: DTCs first, then ECU scan + monitors (backend waits via acquire_with_wait)
-      invoke<DtcCode[]>("read_all_dtcs", { lang: langRef.current })
-        .then(codes => {
-          if (cancelled) return;
-          devInfo("ui", "DTCs loaded: " + codes.length);
-          vehicleActions.setDtcs(codes);
-        })
-        .catch(() => {})
-        .finally(() => {
-          if (cancelled) return;
-          // Start ECU scan after DTCs release the OBD lock, then monitors after scan finishes
-          // Monitors must wait — scan changes ELM327 headers which breaks 0101 broadcast
-          invoke<EcuInfo[]>("scan_ecus")
-            .then(ecus => { if (!cancelled) vehicleActions.setEcus(ecus); })
-            .catch(() => {})
-            .finally(() => {
-              if (cancelled) return;
-              invoke<MonitorStatus[]>("get_monitors").then(m => { if (!cancelled) vehicleActions.setMonitors(m); }).catch(() => {});
-            });
-        });
+      vehicleActions.stopPolling();
 
       // Simulate progressive loading while waiting for discovery
       let simulatedProgress = 5;
@@ -97,28 +78,62 @@ export function useConnectionEffects(
       }, 600);
       progressIntervalRef.current = progressInterval;
 
-      const pollDiscoveryProgress = async () => {
+      const bootstrapDiagnostics = async (includeBaseline: boolean): Promise<void> => {
         try {
-          const result = await invoke<{ standardPids: number; manufacturerDids: number; fromCache?: boolean }>("discover_vehicle_params", { manufacturer: make, vin: vehicle?.vin || "" });
+          if (includeBaseline) {
+            const codes = await invoke<DtcCode[]>("read_all_dtcs", { lang: langRef.current });
+            if (cancelled) return;
+            devInfo("ui", "DTCs loaded: " + codes.length);
+            vehicleActions.setDtcs(codes);
+
+            const ecus = await invoke<EcuInfo[]>("scan_ecus", { manufacturer: make });
+            if (cancelled) return;
+            vehicleActions.setEcus(ecus);
+
+            const monitors = await invoke<MonitorStatus[]>("get_monitors");
+            if (cancelled) return;
+            vehicleActions.setMonitors(monitors);
+          }
+
+          const result = await invoke<{
+            standardPids: number;
+            manufacturerDids: number;
+            fromCache?: boolean;
+            complete?: boolean;
+            error?: string;
+          }>("discover_vehicle_params", { manufacturer: make, vin: vehicle?.vin || "" });
           if (cancelled) return;
           devInfo("ui", `Discovery: ${result.standardPids} PIDs + ${result.manufacturerDids} DIDs`);
           clearInterval(progressInterval);
           progressIntervalRef.current = null;
-          setDiscoveryProgress(100);
-          setIsDiscoveryComplete(true);
-          setHasVinCache(true);
+          const complete = result.complete !== false;
+          setDiscoveryProgress(complete ? 100 : 90);
+          setIsDiscoveryComplete(complete);
+          setHasVinCache(Boolean(result.fromCache || complete));
           if (discoveryPollRef.current) clearTimeout(discoveryPollRef.current);
-          showToast(tRef.current("connection.analysisComplete"));
+          if (complete) {
+            showToast(tRef.current("connection.analysisComplete"));
+          } else {
+            devInfo("ui", "Discovery incomplete: " + (result.error || "unknown error"));
+            discoveryPollRef.current = window.setTimeout(() => {
+              if (!cancelled) void bootstrapDiagnostics(false);
+            }, 5_000);
+          }
+          vehicleActions.startRealPolling(1000, make, true);
         } catch (e) {
           if (cancelled) return;
           devInfo("ui", "Discovery failed: " + String(e));
           clearInterval(progressInterval);
           progressIntervalRef.current = null;
-          setDiscoveryProgress(100);
-          setIsDiscoveryComplete(true);
+          setDiscoveryProgress(90);
+          setIsDiscoveryComplete(false);
+          discoveryPollRef.current = window.setTimeout(() => {
+            if (!cancelled) void bootstrapDiagnostics(false);
+          }, 5_000);
+          vehicleActions.startRealPolling(1000, make, true);
         }
       };
-      pollDiscoveryProgress();
+      void bootstrapDiagnostics(true);
 
       const vehicleMake = vehicle?.make || "";
       invoke<VehicleOperation[]>("get_vehicle_operations", { vehicle: vehicleMake, limit: 500 })

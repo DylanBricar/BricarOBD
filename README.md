@@ -10,8 +10,8 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-2.0.0-06B6D4?style=flat-square" alt="Version" />
-  <img src="https://img.shields.io/badge/rust-1.80+-orange?style=flat-square" alt="Rust" />
+  <img src="https://img.shields.io/badge/version-2.0.15-06B6D4?style=flat-square" alt="Version" />
+  <img src="https://img.shields.io/badge/rust-1.98.0-orange?style=flat-square" alt="Rust" />
   <img src="https://img.shields.io/badge/tauri-2.x-blue?style=flat-square" alt="Tauri" />
   <img src="https://img.shields.io/badge/platforms-macOS%20%7C%20Windows%20%7C%20Linux%20%7C%20Android%20%7C%20iOS-green?style=flat-square" alt="Platforms" />
   <img src="https://img.shields.io/badge/i18n-FR%20%7C%20EN-purple?style=flat-square" alt="Languages" />
@@ -41,9 +41,9 @@
 
 ### Safety
 - **SafetyGuard** with 12 blocked UDS services (default-deny policy)
-- Write operations (2E, 2F, 30, 31) only available in Advanced mode
+- ECU write, actuator and regeneration operations remain disabled until an exact verified vehicle/ECU profile is available
 - Always blocked: ECUReset (0x11), SecurityAccess (0x27), Download/Upload (0x34-0x37)
-- AT command filtering (ATMA, ATBD, ATBI, ATPP, ATWS)
+- Raw console restricted to explicitly allowlisted read-only diagnostic services; raw AT commands are blocked
 - Path traversal protection on file exports
 
 ### Interface
@@ -58,7 +58,7 @@
 
 | Layer | Technology |
 |-------|-----------|
-| Frontend | React 18 + TypeScript + Vite 5 + Tailwind CSS 3 |
+| Frontend | React 19 + TypeScript 6 + Vite 8 + Tailwind CSS 4 |
 | Backend | Rust + Tauri 2.x |
 | Database | SQLite 503 MB (pre-built, 3.17M operations) |
 | Serial | serialport crate (USB), TCP (WiFi) |

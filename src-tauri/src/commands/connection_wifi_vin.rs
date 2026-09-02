@@ -1,63 +1,84 @@
-use tauri::command;
-use crate::models::{VehicleInfo};
-use crate::obd::transport::{self, OBDTransport};
-use super::vin_parser;
 use super::connection_helpers::is_private_ip;
+use super::vin_parser;
+use crate::models::VehicleInfo;
+use crate::obd::transport::{self, OBDTransport};
+use tauri::command;
 
 /// Connect via WiFi (ELM327 WiFi adapter) — now fully integrated with ELM327 protocol
 #[command]
 pub async fn connect_wifi(host: String, port: u16) -> Result<VehicleInfo, String> {
     {
-        let guard = super::connection::CONNECTION.lock().unwrap_or_else(|e| e.into_inner());
+        let guard = super::connection::CONNECTION
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         if !matches!(*guard, super::connection::ConnectionMode::Disconnected) {
-            return Err(super::connection::err_msg("Déjà connecté", "Already connected"));
+            return Err(super::connection::err_msg(
+                "Déjà connecté",
+                "Already connected",
+            ));
         }
     }
+    super::connection::clear_obd_cancel();
 
     // Validate host is a private/link-local IP to prevent connecting to arbitrary servers
     if !is_private_ip(&host) {
-        crate::obd::dev_log::log_warn("connection", &format!("WiFi connect denied: {} is not a private IP", host));
-        return Err(super::connection::err_msg("L'hôte WiFi doit être une adresse IP locale/privée", "WiFi host must be a local/private IP address"));
+        crate::obd::dev_log::log_warn(
+            "connection",
+            &format!("WiFi connect denied: {} is not a private IP", host),
+        );
+        return Err(super::connection::err_msg(
+            "L'hôte WiFi doit être une adresse IP locale/privée",
+            "WiFi host must be a local/private IP address",
+        ));
     }
 
     crate::obd::dev_log::log_info("connection", &format!("WiFi connect: {}:{}", host, port));
 
-    let result: Result<(crate::obd::Elm327Connection, VehicleInfo), String> = tokio::task::spawn_blocking(move || {
-        // Create WiFi transport with generous timeout (WiFi has latency)
-        let wifi = transport::WiFiTransport::new(&host, port, 8000)?;
-        crate::obd::dev_log::log_info("connection", "WiFi transport established, starting ELM327 init...");
+    let result: Result<(crate::obd::Elm327Connection, VehicleInfo), String> =
+        tokio::task::spawn_blocking(move || {
+            // Create WiFi transport with generous timeout (WiFi has latency)
+            let wifi = transport::WiFiTransport::new(&host, port, 8000)?;
+            crate::obd::dev_log::log_info(
+                "connection",
+                "WiFi transport established, starting ELM327 init...",
+            );
 
-        // Wire WiFi transport into the full ELM327 protocol layer
-        let mut conn = crate::obd::Elm327Connection::new();
-        conn.connect_transport(Box::new(wifi))?;
+            // Wire WiFi transport into the full ELM327 protocol layer
+            let mut conn = crate::obd::Elm327Connection::new();
+            conn.connect_transport(Box::new(wifi))?;
 
-        crate::obd::dev_log::log_info("connection", &format!("WiFi ELM327 connected: {}", conn.elm_version));
+            crate::obd::dev_log::log_info(
+                "connection",
+                &format!("WiFi ELM327 connected: {}", conn.elm_version),
+            );
 
-        // Read VIN
-        let vin_response = conn.send_command("0902").unwrap_or_default();
-        let vin = vin_parser::parse_vin_response(&vin_response);
-        let vin_info = crate::obd::vin::decode_vin(&vin);
-        conn.vin = vin_info.vin.clone();
+            // Read VIN
+            let vin_response = conn.send_command("0902").unwrap_or_default();
+            let vin = vin_parser::parse_vin_response(&vin_response);
+            let vin_info = crate::obd::vin::decode_vin(&vin);
+            conn.vin = vin_info.vin.clone();
 
-        let model = super::database::find_vehicle_model_sync(&vin_info.make);
-        let info = VehicleInfo {
-            vin: vin_info.vin,
-            make: vin_info.make,
-            model: model.unwrap_or_default(),
-            year: vin_info.year,
-            protocol: conn.protocol.clone(),
-            elm_version: conn.elm_version.clone(),
-        };
-        Ok((conn, info))
-    })
-    .await
-    .map_err(|e| {
-        crate::obd::dev_log::log_error("connection", &format!("WiFi task error: {}", e));
-        format!("Task error: {}", e)
-    })?;
+            let model = super::database::find_vehicle_model_sync(&vin_info.make);
+            let info = VehicleInfo {
+                vin: vin_info.vin,
+                make: vin_info.make,
+                model: model.unwrap_or_default(),
+                year: vin_info.year,
+                protocol: conn.protocol.clone(),
+                elm_version: conn.elm_version.clone(),
+            };
+            Ok((conn, info))
+        })
+        .await
+        .map_err(|e| {
+            crate::obd::dev_log::log_error("connection", &format!("WiFi task error: {}", e));
+            format!("Task error: {}", e)
+        })?;
 
     let (conn, info) = result?;
-    let mut guard = super::connection::CONNECTION.lock().unwrap_or_else(|e| e.into_inner());
+    let mut guard = super::connection::CONNECTION
+        .lock()
+        .unwrap_or_else(|e| e.into_inner());
     *guard = super::connection::ConnectionMode::Real(conn);
     Ok(info)
 }
@@ -66,7 +87,7 @@ pub async fn connect_wifi(host: String, port: u16) -> Result<VehicleInfo, String
 #[command]
 pub async fn scan_wifi() -> Vec<serde_json::Value> {
     tokio::task::spawn_blocking(|| {
-        use std::sync::{Mutex, Arc};
+        use std::sync::{Arc, Mutex};
         let endpoints = transport::default_wifi_endpoints();
         let found: Arc<Mutex<Vec<serde_json::Value>>> = Arc::new(Mutex::new(Vec::new()));
 
@@ -77,10 +98,16 @@ pub async fn scan_wifi() -> Vec<serde_json::Value> {
                 let host = host.clone();
                 let port = *port;
                 let handle = s.spawn(move || {
-                    crate::obd::dev_log::log_debug("connection", &format!("Probing WiFi {}:{}", host, port));
+                    crate::obd::dev_log::log_debug(
+                        "connection",
+                        &format!("Probing WiFi {}:{}", host, port),
+                    );
                     match transport::WiFiTransport::new(&host, port, 1500) {
                         Ok(mut t) => {
-                            crate::obd::dev_log::log_info("connection", &format!("WiFi adapter found at {}:{}", host, port));
+                            crate::obd::dev_log::log_info(
+                                "connection",
+                                &format!("WiFi adapter found at {}:{}", host, port),
+                            );
                             t.close();
                             let mut results = found.lock().unwrap_or_else(|e| e.into_inner());
                             results.push(serde_json::json!({
@@ -126,18 +153,28 @@ pub fn set_manual_vin(vin: String) -> Result<VehicleInfo, String> {
 
     // Preserve protocol/elm_version from current connection if available
     let (protocol, elm_version) = {
-        let guard = super::connection::CONNECTION.lock().unwrap_or_else(|e| e.into_inner());
+        let guard = super::connection::CONNECTION
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         match &*guard {
-            super::connection::ConnectionMode::Real(conn) => (conn.protocol.clone(), conn.elm_version.clone()),
-            super::connection::ConnectionMode::Demo => ("ISO 15765-4 CAN (Simulated)".to_string(), "Demo v1.0".to_string()),
+            super::connection::ConnectionMode::Real(conn) => {
+                (conn.protocol.clone(), conn.elm_version.clone())
+            }
+            super::connection::ConnectionMode::Demo => (
+                "ISO 15765-4 CAN (Simulated)".to_string(),
+                "Demo v1.0".to_string(),
+            ),
             super::connection::ConnectionMode::Disconnected => ("".to_string(), "".to_string()),
         }
     };
 
-    crate::obd::dev_log::log_info("connection", &format!(
-        "Manual VIN set: {}, Make: {}, Country: {}, Year: {}",
-        vin_info.vin, vin_info.make, vin_info.country, vin_info.year
-    ));
+    crate::obd::dev_log::log_info(
+        "connection",
+        &format!(
+            "Manual VIN set: {}, Make: {}, Country: {}, Year: {}",
+            vin_info.vin, vin_info.make, vin_info.country, vin_info.year
+        ),
+    );
 
     let model = super::database::find_vehicle_model_sync(&vin_info.make);
     Ok(VehicleInfo {

@@ -67,8 +67,12 @@ pub fn parse_did_key(value: &str) -> Result<u16, String> {
 /// Map VIN-decoded make names to DID group keys in the database
 fn manufacturer_to_did_key(manufacturer: &str) -> &'static str {
     match manufacturer.to_uppercase().as_str() {
-        "PEUGEOT" | "CITROËN" | "CITROEN" | "DS" | "DS AUTOMOBILES" | "OPEL" | "VAUXHALL" => "PSA_EXTENDED_DIDS",
-        "VOLKSWAGEN" | "VW" | "AUDI" | "ŠKODA" | "SKODA" | "SEAT" | "PORSCHE" => "VAG_EXTENDED_DIDS",
+        "PEUGEOT" | "CITROËN" | "CITROEN" | "DS" | "DS AUTOMOBILES" | "OPEL" | "VAUXHALL" => {
+            "PSA_EXTENDED_DIDS"
+        }
+        "VOLKSWAGEN" | "VW" | "AUDI" | "ŠKODA" | "SKODA" | "SEAT" | "PORSCHE" => {
+            "VAG_EXTENDED_DIDS"
+        }
         "RENAULT" | "DACIA" => "RENAULT_EXTENDED_DIDS",
         "BMW" | "BMW M" | "MINI" => "BMW_EXTENDED_DIDS",
         "MERCEDES-BENZ" | "MERCEDES" => "MERCEDES_EXTENDED_DIDS",
@@ -92,7 +96,10 @@ pub fn get_did_definitions_for_manufacturer(manufacturer: &str) -> Vec<DidDefini
         // Fallback: try string-contains search
         dids_map
             .iter()
-            .find(|(k, _)| k.to_uppercase().contains(&manufacturer.to_uppercase().replace(" ", "_")))
+            .find(|(k, _)| {
+                k.to_uppercase()
+                    .contains(&manufacturer.to_uppercase().replace(" ", "_"))
+            })
             .map(|(_, dids)| dids)
     } else {
         dids_map.get(key)
@@ -102,14 +109,21 @@ pub fn get_did_definitions_for_manufacturer(manufacturer: &str) -> Vec<DidDefini
         .into_iter()
         .flat_map(|dids| dids.iter())
         .filter_map(|(id, name)| match parse_did_key(id) {
-            Ok(id) => Some(DidDefinition { id, name: name.clone() }),
+            Ok(id) => Some(DidDefinition {
+                id,
+                name: name.clone(),
+            }),
             Err(error) => {
                 tracing::warn!("Skipping malformed catalog DID {id}: {error}");
                 None
             }
         })
         .collect();
-    definitions.sort_by(|left, right| left.id.cmp(&right.id).then_with(|| left.name.cmp(&right.name)));
+    definitions.sort_by(|left, right| {
+        left.id
+            .cmp(&right.id)
+            .then_with(|| left.name.cmp(&right.name))
+    });
     definitions.dedup_by(|left, right| left.id == right.id && left.name == right.name);
     definitions
 }
@@ -137,13 +151,40 @@ pub fn get_did_request_header(manufacturer: &str, name: &str) -> Option<&'static
     }
 
     const ENGINE_TERMS: &[&str] = &[
-        "inject", "misfire", "rail", "fuel", "engine", "rpm", "turbo", "boost",
-        "egr", "exhaust", "coolant", "oil", "torque", "air flow", "airflow",
-        "ecu serial", "ecu software", "vin",
+        "inject",
+        "misfire",
+        "rail",
+        "fuel",
+        "engine",
+        "rpm",
+        "turbo",
+        "boost",
+        "egr",
+        "exhaust",
+        "coolant",
+        "oil",
+        "torque",
+        "air flow",
+        "airflow",
+        "ecu serial",
+        "ecu software",
+        "vin",
     ];
     const BODY_TERMS: &[&str] = &[
-        "bsi", "parking", "door", "window", "wiper", "lighting", "alarm", "airbag",
-        "climate", "radio", "telematic", "instrument", "maintenance", "service",
+        "bsi",
+        "parking",
+        "door",
+        "window",
+        "wiper",
+        "lighting",
+        "alarm",
+        "airbag",
+        "climate",
+        "radio",
+        "telematic",
+        "instrument",
+        "maintenance",
+        "service",
     ];
 
     if ENGINE_TERMS.iter().any(|term| name.contains(term)) {
@@ -178,7 +219,11 @@ pub fn get_all_manufacturer_dids() -> HashMap<String, Vec<(String, String)>> {
     for (key, dids) in &ECU_DATABASE.dids {
         let mut dids_vec: Vec<(String, String)> = dids
             .iter()
-            .filter_map(|(id, desc)| parse_did_key(id).ok().map(|id| (format!("{id:04X}"), desc.clone())))
+            .filter_map(|(id, desc)| {
+                parse_did_key(id)
+                    .ok()
+                    .map(|id| (format!("{id:04X}"), desc.clone()))
+            })
             .collect();
         dids_vec.sort_by(|left, right| left.0.cmp(&right.0).then_with(|| left.1.cmp(&right.1)));
         result.insert(key.clone(), dids_vec);

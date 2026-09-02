@@ -1,14 +1,18 @@
-use tauri::command;
-use crate::obd::dev_log;
 use crate::commands::connection::{is_demo, with_real_connection};
 use crate::commands::OBDBusyGuard;
+use crate::obd::dev_log;
+use tauri::command;
 
 /// Check if current protocol supports UDS (CAN: 6,7,8,9,A,B,C — KWP: 4,5)
 fn is_uds_capable_protocol() -> bool {
     with_real_connection(|conn| {
         let proto = conn.protocol_num.as_str();
-        Ok(matches!(proto, "4" | "5" | "6" | "7" | "8" | "9" | "A" | "B" | "C"))
-    }).unwrap_or(false)
+        Ok(matches!(
+            proto,
+            "4" | "5" | "6" | "7" | "8" | "9" | "A" | "B" | "C"
+        ))
+    })
+    .unwrap_or(false)
 }
 
 /// Wait for ECU to finish processing when NRC 0x78 (ResponsePending) is received.
@@ -16,7 +20,10 @@ fn is_uds_capable_protocol() -> bool {
 /// The ELM327 handles 0x78 internally: it keeps waiting for the ECU's final response.
 /// We just need to re-read with a much longer timeout — do NOT re-send the command,
 /// as that would start a new request and confuse the ECU (NRC 0x21 busyRepeatRequest).
-fn wait_for_response_pending(conn: &mut crate::obd::connection::Elm327Connection, max_wait_ms: u64) -> Result<String, String> {
+fn wait_for_response_pending(
+    conn: &mut crate::obd::connection::Elm327Connection,
+    max_wait_ms: u64,
+) -> Result<String, String> {
     // The ELM327 is still waiting for the ECU's final response after the 0x78.
     // We just need to read with an extended timeout. Send empty CR to trigger read.
     // Some adapters need a nudge to flush their buffer.
@@ -29,7 +36,10 @@ fn wait_for_response_pending(conn: &mut crate::obd::connection::Elm327Connection
             // ELM327 already sent the response before our nudge — it's gone.
             // The original send_command already got the 0x78, so the real response
             // may have been consumed. Try the command one more time.
-            dev_log::log_debug("dtc", "ELM327 returned '?' — response may have been consumed, retrying");
+            dev_log::log_debug(
+                "dtc",
+                "ELM327 returned '?' — response may have been consumed, retrying",
+            );
             Err("ECU response lost during pending wait".to_string())
         }
         _ => Err("ECU timed out while processing clear request".to_string()),
@@ -127,7 +137,10 @@ pub async fn clear_dtcs(confirmed: Option<bool>) -> Result<String, String> {
     dev_log::log_info("dtc", &format!("Clear DTCs safety check: {:?}", risk));
     if risk == crate::models::RiskLevel::Blocked {
         dev_log::log_warn("dtc", "Clear DTCs blocked by safety guard");
-        return Err(crate::commands::connection::err_msg("BLOQUÉ — commande bloquée par la sécurité", "BLOCKED — command blocked by safety system"));
+        return Err(crate::commands::connection::err_msg(
+            "BLOQUÉ — commande bloquée par la sécurité",
+            "BLOCKED — command blocked by safety system",
+        ));
     }
 
     if risk == crate::models::RiskLevel::Caution && confirmed != Some(true) {
@@ -147,7 +160,7 @@ pub async fn clear_dtcs(confirmed: Option<bool>) -> Result<String, String> {
                 dev_log::log_warn("dtc", &format!("Clear DTCs blocked: {}", e));
                 return Err(crate::commands::connection::err_msg(
                     "Une opération OBD est déjà en cours",
-                    "An OBD operation is already in progress"
+                    "An OBD operation is already in progress",
                 ));
             }
         };
@@ -161,7 +174,9 @@ pub async fn clear_dtcs(confirmed: Option<bool>) -> Result<String, String> {
         // ====== Strategy 1: OBD-II Mode 04 broadcast ======
         dev_log::log_info("dtc", "Strategy 1: OBD-II Mode 04 (broadcast)");
         match clear_with_mode04() {
-            Ok(()) => { cleared = true; }
+            Ok(()) => {
+                cleared = true;
+            }
             Err(e) => {
                 dev_log::log_warn("dtc", &format!("Mode 04 broadcast failed: {}", e));
                 last_error = e;
@@ -180,10 +195,16 @@ pub async fn clear_dtcs(confirmed: Option<bool>) -> Result<String, String> {
                             cleared = true;
                         }
                         Err(e) if e.contains("NO_RESPONSE") || e.contains("not supported") => {
-                            dev_log::log_debug("dtc", &format!("UDS 0x14 at {}: skipped ({})", addr, e));
+                            dev_log::log_debug(
+                                "dtc",
+                                &format!("UDS 0x14 at {}: skipped ({})", addr, e),
+                            );
                         }
                         Err(e) => {
-                            dev_log::log_warn("dtc", &format!("UDS 0x14 at {} failed: {}", addr, e));
+                            dev_log::log_warn(
+                                "dtc",
+                                &format!("UDS 0x14 at {} failed: {}", addr, e),
+                            );
                             if !has_conditions_error(&last_error) {
                                 last_error = e;
                             }
@@ -200,12 +221,22 @@ pub async fn clear_dtcs(confirmed: Option<bool>) -> Result<String, String> {
         // Only on CAN/KWP — extended sessions don't exist on J1850/ISO 9141
         if !cleared {
             if is_uds_capable_protocol() {
-                dev_log::log_info("dtc", "Strategy 3: Mode 04 with extended diagnostic session");
+                dev_log::log_info(
+                    "dtc",
+                    "Strategy 3: Mode 04 with extended diagnostic session",
+                );
                 match clear_mode04_extended_session() {
-                    Ok(()) => { cleared = true; }
+                    Ok(()) => {
+                        cleared = true;
+                    }
                     Err(e) => {
-                        dev_log::log_warn("dtc", &format!("Mode 04 extended session failed: {}", e));
-                        if !has_conditions_error(&last_error) { last_error = e; }
+                        dev_log::log_warn(
+                            "dtc",
+                            &format!("Mode 04 extended session failed: {}", e),
+                        );
+                        if !has_conditions_error(&last_error) {
+                            last_error = e;
+                        }
                     }
                 }
             }
@@ -216,10 +247,14 @@ pub async fn clear_dtcs(confirmed: Option<bool>) -> Result<String, String> {
         if !cleared {
             dev_log::log_info("dtc", "Strategy 4: Mode 04 after adapter recovery");
             match clear_mode04_with_recovery() {
-                Ok(()) => { cleared = true; }
+                Ok(()) => {
+                    cleared = true;
+                }
                 Err(e) => {
                     dev_log::log_warn("dtc", &format!("Mode 04 recovery failed: {}", e));
-                    if !has_conditions_error(&last_error) { last_error = e; }
+                    if !has_conditions_error(&last_error) {
+                        last_error = e;
+                    }
                 }
             }
         }
@@ -231,11 +266,14 @@ pub async fn clear_dtcs(confirmed: Option<bool>) -> Result<String, String> {
         });
 
         if !cleared {
-            dev_log::log_error("dtc", &format!("All clear strategies failed. Last: {}", last_error));
+            dev_log::log_error(
+                "dtc",
+                &format!("All clear strategies failed. Last: {}", last_error),
+            );
             return Err(if last_error.is_empty() {
                 crate::commands::connection::err_msg(
                     "Aucun ECU n'a répondu. Vérifiez que le contact est mis et le moteur arrêté.",
-                    "No ECU responded. Ensure ignition is ON and engine is OFF."
+                    "No ECU responded. Ensure ignition is ON and engine is OFF.",
                 )
             } else {
                 last_error
@@ -247,12 +285,18 @@ pub async fn clear_dtcs(confirmed: Option<bool>) -> Result<String, String> {
         std::thread::sleep(std::time::Duration::from_millis(500));
         match with_real_connection(|conn| conn.send_command_timeout("03", 5000)) {
             Ok(response) => {
-                if response.contains("NO DATA") || response.contains("43 00") || response.trim().is_empty() {
+                if response.contains("NO DATA")
+                    || response.contains("43 00")
+                    || response.trim().is_empty()
+                {
                     dev_log::log_info("dtc", "Verification OK: no DTCs remaining");
                     tracing::info!("DTCs cleared and verified successfully");
                     Ok("OK".to_string())
                 } else if response.contains("43") {
-                    dev_log::log_warn("dtc", &format!("Some DTCs still present after clear: {}", response));
+                    dev_log::log_warn(
+                        "dtc",
+                        &format!("Some DTCs still present after clear: {}", response),
+                    );
                     Ok("PARTIAL".to_string())
                 } else {
                     dev_log::log_info("dtc", "Clear completed (verification inconclusive)");
@@ -260,11 +304,16 @@ pub async fn clear_dtcs(confirmed: Option<bool>) -> Result<String, String> {
                 }
             }
             Err(_) => {
-                dev_log::log_warn("dtc", "Post-clear verification failed, but clear was acknowledged");
+                dev_log::log_warn(
+                    "dtc",
+                    "Post-clear verification failed, but clear was acknowledged",
+                );
                 Ok("OK".to_string())
             }
         }
-    }).await.map_err(|e| format!("Task error: {}", e))?
+    })
+    .await
+    .map_err(|e| format!("Task error: {}", e))?
 }
 
 /// Strategy 1: Standard OBD-II Mode 04 broadcast clear
@@ -298,7 +347,11 @@ fn clear_uds_on_ecu(ecu_addr: &str) -> Result<(), String> {
 
         // Check if ECU is alive
         let tp_resp = conn.send_command_timeout("3E00", 2000);
-        if tp_resp.is_err() || tp_resp.as_ref().map_or(true, |r| r.contains("NO DATA") || r.contains("ERROR")) {
+        if tp_resp.is_err()
+            || tp_resp
+                .as_ref()
+                .map_or(true, |r| r.contains("NO DATA") || r.contains("ERROR"))
+        {
             return Err("NO_RESPONSE".to_string());
         }
 
@@ -309,10 +362,22 @@ fn clear_uds_on_ecu(ecu_addr: &str) -> Result<(), String> {
                 dev_log::log_debug("dtc", &format!("{}: Extended session opened", ecu_addr));
             }
             Ok(r) => {
-                dev_log::log_debug("dtc", &format!("{}: Extended session not confirmed ({}), trying clear anyway", ecu_addr, r));
+                dev_log::log_debug(
+                    "dtc",
+                    &format!(
+                        "{}: Extended session not confirmed ({}), trying clear anyway",
+                        ecu_addr, r
+                    ),
+                );
             }
             Err(e) => {
-                dev_log::log_debug("dtc", &format!("{}: Extended session failed ({}), trying clear anyway", ecu_addr, e));
+                dev_log::log_debug(
+                    "dtc",
+                    &format!(
+                        "{}: Extended session failed ({}), trying clear anyway",
+                        ecu_addr, e
+                    ),
+                );
             }
         }
 
@@ -321,7 +386,10 @@ fn clear_uds_on_ecu(ecu_addr: &str) -> Result<(), String> {
         match parse_clear_response(&response, &format!("UDS 0x14 ({})", ecu_addr)) {
             Ok(()) => Ok(()),
             Err(e) if e == "RESPONSE_PENDING" => {
-                dev_log::log_info("dtc", &format!("{}: ECU processing clear (NRC 0x78)...", ecu_addr));
+                dev_log::log_info(
+                    "dtc",
+                    &format!("{}: ECU processing clear (NRC 0x78)...", ecu_addr),
+                );
                 let final_resp = wait_for_response_pending(conn, 15000)?;
                 parse_clear_response(&final_resp, &format!("UDS 0x14 ({}) after wait", ecu_addr))
             }

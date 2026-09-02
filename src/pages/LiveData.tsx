@@ -54,38 +54,42 @@ export default function LiveData({ pidData, isPolling, onStartPolling, onPausePo
 
   // Reset selectedPids when data transitions from empty to populated (reconnect)
   // If user had a saved selection, restore it; otherwise select all
-  const prevSizeRef = useRef(0);
+  const previousPidIdsRef = useRef<Set<number>>(new Set());
   useEffect(() => {
-    if (pidData.size > 0 && prevSizeRef.current === 0) {
-      try {
-        const saved = localStorage.getItem("bricarobd_selected_pids");
-        if (saved) {
-          const savedSet = new Set(JSON.parse(saved) as number[]);
-          // Only restore if at least some saved PIDs are in the new data
-          const intersection = new Set([...savedSet].filter(p => pidData.has(p)));
-          if (intersection.size > 0) {
-            setSelectedPids(intersection);
-          } else {
-            setSelectedPids(new Set(pidData.keys()));
+    const currentIds = new Set(pidData.keys());
+    const previousIds = previousPidIdsRef.current;
+    setSelectedPids(previousSelection => {
+      if (currentIds.size > 0 && previousIds.size === 0) {
+        try {
+          const saved = localStorage.getItem("bricarobd_selected_pids");
+          if (saved !== null) {
+            const parsed = JSON.parse(saved) as number[];
+            if (parsed.length === 0) return new Set();
+            const intersection = new Set(parsed.filter(pid => currentIds.has(pid)));
+            return intersection.size > 0 ? intersection : new Set(currentIds);
           }
-        } else {
-          setSelectedPids(new Set(pidData.keys()));
-        }
-      } catch {
-        setSelectedPids(new Set(pidData.keys()));
+        } catch {}
+        return new Set(currentIds);
       }
-    }
-    prevSizeRef.current = pidData.size;
-  }, [pidData.size]);
+
+      const previouslySelectedAll = previousIds.size > 0
+        && [...previousIds].every(pid => previousSelection.has(pid));
+      if (previouslySelectedAll) {
+        return new Set(currentIds);
+      }
+      return new Set([...previousSelection].filter(pid => currentIds.has(pid)));
+    });
+    previousPidIdsRef.current = currentIds;
+  }, [pidData]);
 
   // Persist PID selection to localStorage
   useEffect(() => {
-    if (selectedPids.size > 0) {
+    if (pidData.size > 0) {
       try {
         localStorage.setItem("bricarobd_selected_pids", JSON.stringify([...selectedPids]));
       } catch {}
     }
-  }, [selectedPids]);
+  }, [selectedPids, pidData.size]);
 
   // Recording timer with cleanup
   useEffect(() => {
@@ -99,15 +103,17 @@ export default function LiveData({ pidData, isPolling, onStartPolling, onPausePo
 
   // Record snapshots when polling
   useEffect(() => {
-    if (!isRecording || pidData.size === 0) return;
+    if (!isRecording || pidData.size === 0 || selectedPids.size === 0) return;
     const snapshot: Record<number, number> = {};
-    pidData.forEach((pid) => { snapshot[pid.pid] = pid.value; });
+    pidData.forEach((pid) => {
+      if (selectedPids.has(pid.pid)) snapshot[pid.pid] = pid.value;
+    });
     recordBufferRef.current.push({ timestamp: new Date(), snapshot });
-    // Cap recording buffer at 36000 entries (~10h at 1/s) to prevent memory leak
-    if (recordBufferRef.current.length > 36000) {
-      recordBufferRef.current = recordBufferRef.current.slice(-36000);
+    const maxSnapshots = Math.min(36_000, Math.max(1, Math.floor(250_000 / selectedPids.size)));
+    if (recordBufferRef.current.length > maxSnapshots) {
+      recordBufferRef.current = recordBufferRef.current.slice(-maxSnapshots);
     }
-  }, [pidData, isRecording]);
+  }, [pidData, isRecording, selectedPids]);
 
   const handleTogglePolling = useCallback(() => {
     setIsActive((prev) => {
@@ -197,11 +203,10 @@ export default function LiveData({ pidData, isPolling, onStartPolling, onPausePo
   const filteredPids = useMemo(() => {
     // Only show PIDs if polling is active
     if (!isActive) return [];
-    let all = Array.from(pidData.values());
-    // Filter by selected PIDs (if any are selected)
-    if (selectedPids.size > 0) {
-      all = all.filter((p) => selectedPids.has(p.pid));
-    }
+    const latestTimestamp = Math.max(0, ...Array.from(pidData.values(), (pid) => pid.timestamp));
+    const staleBefore = latestTimestamp - 30_000;
+    let all = Array.from(pidData.values())
+      .filter((pid) => selectedPids.has(pid.pid) && pid.timestamp >= staleBefore);
     // Filter by search text
     if (search) {
       all = all.filter((p) => p.name.toLowerCase().includes(search.toLowerCase()));

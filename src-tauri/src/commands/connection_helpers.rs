@@ -1,6 +1,7 @@
 use std::sync::atomic::{AtomicBool, Ordering};
 
 static OBD_BUSY: AtomicBool = AtomicBool::new(false);
+static OBD_CANCELLED: AtomicBool = AtomicBool::new(false);
 
 /// Set OBD busy state
 pub fn set_obd_busy(busy: bool) {
@@ -12,13 +13,28 @@ pub fn is_obd_busy() -> bool {
     OBD_BUSY.load(Ordering::SeqCst)
 }
 
+pub fn request_obd_cancel() {
+    OBD_CANCELLED.store(true, Ordering::SeqCst);
+}
+
+pub fn clear_obd_cancel() {
+    OBD_CANCELLED.store(false, Ordering::SeqCst);
+}
+
+pub fn is_obd_cancelled() -> bool {
+    OBD_CANCELLED.load(Ordering::SeqCst)
+}
+
 /// Guard to manage OBD busy state with RAII semantics
 pub struct OBDBusyGuard;
 
 impl OBDBusyGuard {
     /// Try to acquire the OBD lock, fail immediately if already busy
     pub fn try_acquire() -> Result<Self, String> {
-        if OBD_BUSY.compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst).is_err() {
+        if OBD_BUSY
+            .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
+            .is_err()
+        {
             return Err("OBD is busy with another operation".to_string());
         }
         Ok(OBDBusyGuard)
@@ -31,13 +47,19 @@ impl OBDBusyGuard {
         let timeout = std::time::Duration::from_secs(timeout_secs.min(10));
 
         loop {
-            if OBD_BUSY.compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst).is_ok() {
+            if OBD_BUSY
+                .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
+                .is_ok()
+            {
                 crate::obd::dev_log::log_debug("connection", "OBD lock acquired");
                 return Ok(OBDBusyGuard);
             }
 
             if start.elapsed() > timeout {
-                crate::obd::dev_log::log_warn("connection", &format!("OBD lock timeout after {} seconds", timeout_secs));
+                crate::obd::dev_log::log_warn(
+                    "connection",
+                    &format!("OBD lock timeout after {} seconds", timeout_secs),
+                );
                 return Err(format!("OBD lock timeout after {} seconds", timeout_secs));
             }
 

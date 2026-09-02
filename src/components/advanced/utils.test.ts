@@ -164,11 +164,11 @@ describe("isCommandBlocked()", () => {
       expect(isCommandBlocked("AtMa")).toBe(true);
     });
 
-    it("allows other AT commands", () => {
-      expect(isCommandBlocked("ATZ")).toBe(false);
-      expect(isCommandBlocked("ATE0")).toBe(false);
-      expect(isCommandBlocked("ATL0")).toBe(false);
-      expect(isCommandBlocked("ATH1")).toBe(false);
+    it("blocks all AT commands in the hexadecimal reader", () => {
+      expect(isCommandBlocked("ATZ")).toBe(true);
+      expect(isCommandBlocked("ATE0")).toBe(true);
+      expect(isCommandBlocked("ATL0")).toBe(true);
+      expect(isCommandBlocked("ATH1")).toBe(true);
     });
   });
 
@@ -186,8 +186,8 @@ describe("isCommandBlocked()", () => {
       expect(isCommandBlocked("03")).toBe(false);
     });
 
-    it("allows Mode 04 (Clear DTCs)", () => {
-      expect(isCommandBlocked("04")).toBe(false);
+    it("blocks Mode 04 (Clear DTCs)", () => {
+      expect(isCommandBlocked("04")).toBe(true);
     });
 
     it("allows Mode 05 (Test Results)", () => {
@@ -202,8 +202,8 @@ describe("isCommandBlocked()", () => {
       expect(isCommandBlocked("07")).toBe(false);
     });
 
-    it("allows Mode 08 (Control)", () => {
-      expect(isCommandBlocked("08")).toBe(false);
+    it("blocks Mode 08 (Control)", () => {
+      expect(isCommandBlocked("08")).toBe(true);
     });
 
     it("allows Mode 09 (Vehicle Information)", () => {
@@ -223,8 +223,8 @@ describe("isCommandBlocked()", () => {
       expect(isCommandBlocked("3E 00")).toBe(false);
     });
 
-    it("allows other safe modes", () => {
-      expect(isCommandBlocked("10 01")).toBe(false);
+    it("allows UDS reads and blocks session control", () => {
+      expect(isCommandBlocked("10 01")).toBe(true);
       expect(isCommandBlocked("19 00")).toBe(false);
     });
   });
@@ -244,12 +244,12 @@ describe("isCommandBlocked()", () => {
     });
 
     it("distinguishes between similar service IDs", () => {
-      expect(isCommandBlocked("3C")).toBe(false);
+      expect(isCommandBlocked("3C")).toBe(true);
       expect(isCommandBlocked("3D")).toBe(true);
     });
 
     it("distinguishes between similar AT commands", () => {
-      expect(isCommandBlocked("ATW")).toBe(false);
+      expect(isCommandBlocked("ATW")).toBe(true);
       expect(isCommandBlocked("ATWS")).toBe(true);
     });
 
@@ -269,20 +269,20 @@ describe("isCommandBlocked()", () => {
       expect(isCommandBlocked("ATMA")).toBe(true);
     });
 
-    it("handles mode 2E (Write DID) - allowed for advanced", () => {
-      expect(isCommandBlocked("2E F1 90 01 02")).toBe(false);
+    it("blocks mode 2E (Write DID)", () => {
+      expect(isCommandBlocked("2E F1 90 01 02")).toBe(true);
     });
 
-    it("handles mode 2F (InputOutputControl) - allowed for advanced", () => {
-      expect(isCommandBlocked("2F F1 90")).toBe(false);
+    it("blocks mode 2F (InputOutputControl)", () => {
+      expect(isCommandBlocked("2F F1 90")).toBe(true);
     });
 
-    it("handles mode 30 (ReadExtendedDataRecord) - allowed for advanced", () => {
-      expect(isCommandBlocked("30 87")).toBe(false);
+    it("blocks mode 30 (InputOutputControl)", () => {
+      expect(isCommandBlocked("30 87")).toBe(true);
     });
 
-    it("handles mode 31 (ReadDDL) - allowed for advanced", () => {
-      expect(isCommandBlocked("31 F1 90")).toBe(false);
+    it("blocks mode 31 (RoutineControl)", () => {
+      expect(isCommandBlocked("31 F1 90")).toBe(true);
     });
   });
 });

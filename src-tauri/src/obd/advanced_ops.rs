@@ -74,17 +74,23 @@ pub fn get_manufacturer_groups() -> HashMap<String, ManufacturerGroup> {
         .collect()
 }
 
-/// Map operation IDs to real UDS hex commands
+pub fn is_named_operation(op_id: &str) -> bool {
+    matches!(
+        op_id,
+        "reset_service"
+            | "set_service_threshold"
+            | "write_config"
+            | "force_regen"
+            | "test_injectors"
+            | "test_relays"
+    )
+}
+
+/// Write and actuator templates remain disabled until they are bound to an
+/// exact vehicle/ECU profile with verified preconditions and postconditions.
 pub fn resolve_operation_command(op_id: &str) -> Option<(&str, &str)> {
-    match op_id {
-        "reset_service" => Some(("752", "2E 2282 00")),
-        "set_service_threshold" => Some(("752", "2E 2282")),
-        "write_config" => Some(("752", "2E 2100")),
-        "force_regen" => Some(("7E0", "31 01 0060")),
-        "test_injectors" => Some(("7E0", "30 01")),
-        "test_relays" => Some(("7E0", "30 02")),
-        _ => None,
-    }
+    let _ = op_id;
+    None
 }
 
 #[cfg(test)]
@@ -126,8 +132,16 @@ mod tests {
     fn test_get_categories_have_names() {
         let categories = get_categories();
         for cat in categories {
-            assert!(!cat.name.en.is_empty(), "Category {} missing English name", cat.id);
-            assert!(!cat.name.fr.is_empty(), "Category {} missing French name", cat.id);
+            assert!(
+                !cat.name.en.is_empty(),
+                "Category {} missing English name",
+                cat.id
+            );
+            assert!(
+                !cat.name.fr.is_empty(),
+                "Category {} missing French name",
+                cat.id
+            );
         }
     }
 
@@ -137,7 +151,11 @@ mod tests {
         for cat in categories {
             // Names should be different in different languages (at least for some)
             // Check that not ALL categories have identical EN/FR names
-            assert_ne!(cat.name.en, cat.name.fr, "Category {} has identical EN/FR names", cat.id);
+            assert_ne!(
+                cat.name.en, cat.name.fr,
+                "Category {} has identical EN/FR names",
+                cat.id
+            );
         }
     }
 
@@ -145,8 +163,16 @@ mod tests {
     fn test_get_categories_have_descriptions() {
         let categories = get_categories();
         for cat in categories {
-            assert!(!cat.desc.en.is_empty(), "Category {} missing English description", cat.id);
-            assert!(!cat.desc.fr.is_empty(), "Category {} missing French description", cat.id);
+            assert!(
+                !cat.desc.en.is_empty(),
+                "Category {} missing English description",
+                cat.id
+            );
+            assert!(
+                !cat.desc.fr.is_empty(),
+                "Category {} missing French description",
+                cat.id
+            );
         }
     }
 
@@ -154,7 +180,11 @@ mod tests {
     fn test_get_categories_have_risk() {
         let categories = get_categories();
         for cat in categories {
-            assert!(!cat.risk.is_empty(), "Category {} missing risk level", cat.id);
+            assert!(
+                !cat.risk.is_empty(),
+                "Category {} missing risk level",
+                cat.id
+            );
             // Risk should be one of known values
             assert!(
                 matches!(cat.risk.as_str(), "low" | "medium" | "high" | "critical"),
@@ -173,7 +203,10 @@ mod tests {
             risk_levels.insert(cat.risk.clone());
         }
         // Should have at least 2 different risk levels
-        assert!(risk_levels.len() >= 2, "Categories should have varied risk levels");
+        assert!(
+            risk_levels.len() >= 2,
+            "Categories should have varied risk levels"
+        );
     }
 
     #[test]
@@ -193,7 +226,11 @@ mod tests {
     fn test_get_manufacturer_groups_have_manufacturers() {
         let groups = get_manufacturer_groups();
         for (group_name, group) in &groups {
-            assert!(!group.manufacturers.is_empty(), "Group {} has no manufacturers", group_name);
+            assert!(
+                !group.manufacturers.is_empty(),
+                "Group {} has no manufacturers",
+                group_name
+            );
         }
     }
 
@@ -210,7 +247,10 @@ mod tests {
         let groups = get_manufacturer_groups();
         for (_, group) in groups {
             for manufacturer in &group.manufacturers {
-                assert!(!manufacturer.is_empty(), "Manufacturer name should not be empty");
+                assert!(
+                    !manufacturer.is_empty(),
+                    "Manufacturer name should not be empty"
+                );
             }
         }
     }
@@ -224,7 +264,8 @@ mod tests {
             .collect();
         // Should contain some well-known manufacturers
         let known = vec!["BMW", "Mercedes", "Volkswagen", "Audi", "Toyota"];
-        let has_known = all_manufacturers.iter()
+        let has_known = all_manufacturers
+            .iter()
             .any(|m| known.iter().any(|k| m.contains(k)));
         assert!(has_known, "No known manufacturers found in groups");
     }
@@ -233,21 +274,34 @@ mod tests {
     fn test_get_manufacturer_groups_no_empty_manufacturer_lists() {
         let groups = get_manufacturer_groups();
         for (group_name, group) in &groups {
-            assert!(!group.manufacturers.is_empty(), "Group {} is empty", group_name);
+            assert!(
+                !group.manufacturers.is_empty(),
+                "Group {} is empty",
+                group_name
+            );
             for manufacturer in &group.manufacturers {
-                assert!(!manufacturer.trim().is_empty(), "Group {} has empty/whitespace manufacturer", group_name);
+                assert!(
+                    !manufacturer.trim().is_empty(),
+                    "Group {} has empty/whitespace manufacturer",
+                    group_name
+                );
             }
         }
     }
 
     #[test]
     fn test_resolve_operation_command_valid_ids() {
-        assert_eq!(resolve_operation_command("reset_service"), Some(("752", "2E 2282 00")));
-        assert_eq!(resolve_operation_command("set_service_threshold"), Some(("752", "2E 2282")));
-        assert_eq!(resolve_operation_command("write_config"), Some(("752", "2E 2100")));
-        assert_eq!(resolve_operation_command("force_regen"), Some(("7E0", "31 01 0060")));
-        assert_eq!(resolve_operation_command("test_injectors"), Some(("7E0", "30 01")));
-        assert_eq!(resolve_operation_command("test_relays"), Some(("7E0", "30 02")));
+        for operation in [
+            "reset_service",
+            "set_service_threshold",
+            "write_config",
+            "force_regen",
+            "test_injectors",
+            "test_relays",
+        ] {
+            assert!(is_named_operation(operation));
+            assert_eq!(resolve_operation_command(operation), None);
+        }
     }
 
     #[test]
@@ -259,12 +313,7 @@ mod tests {
 
     #[test]
     fn test_resolve_operation_command_returns_hex_strings() {
-        if let Some((ecu_id, command)) = resolve_operation_command("reset_service") {
-            // ECU ID should look like hex
-            assert!(ecu_id.chars().all(|c| c.is_ascii_hexdigit()));
-            // Command should contain hex bytes
-            assert!(command.contains("2E") || command.contains("30") || command.contains("31"));
-        }
+        assert!(resolve_operation_command("reset_service").is_none());
     }
 
     #[test]

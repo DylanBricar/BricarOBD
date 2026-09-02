@@ -14,10 +14,14 @@ permissions:
   contents: write
 
 jobs:
+  quality:
+    uses: ./.github/workflows/quality.yml
+
   # ═══════════════════════════════════════════
   # Desktop builds (macOS, Windows, Linux)
   # ═══════════════════════════════════════════
   build-desktop:
+    needs: [quality]
     strategy:
       fail-fast: false
       matrix:
@@ -40,21 +44,14 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ inputs.tag || github.ref }}
 
       - name: Download database from release assets
         run: |
           mkdir -p src-tauri/data
-          curl -L -o src-tauri/data/bricarobd.db "https://github.com/${{ github.repository }}/releases/download/db-v1/bricarobd.db" || echo "DB download failed"
-        shell: bash
-
-      - name: Fallback — download DB via gh cli
-        if: hashFiles('src-tauri/data/bricarobd.db') == ''
-        run: gh release download db-v1 --pattern 'bricarobd.db' --dir src-tauri/data/ || echo "No DB release found"
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          curl --fail --show-error --location --retry 3 -o src-tauri/data/bricarobd.db "https://github.com/${{ github.repository }}/releases/download/db-v1/bricarobd.db"
         shell: bash
 
       - name: Verify database
@@ -66,6 +63,12 @@ jobs:
               echo "ERROR: Database too small ($SIZE bytes) — likely truncated download!"
               exit 1
             fi
+            EXPECTED_SHA="fccab50a9e422588d20c0e36737a3056b3b0dcca9ec6f8909a4900cfd34f9699"
+            ACTUAL_SHA=$(node -e "const fs=require('fs'),c=require('crypto');const h=c.createHash('sha256');h.update(fs.readFileSync('src-tauri/data/bricarobd.db'));process.stdout.write(h.digest('hex'))")
+            if [ "$ACTUAL_SHA" != "$EXPECTED_SHA" ]; then
+              echo "ERROR: Database SHA-256 mismatch: $ACTUAL_SHA"
+              exit 1
+            fi
           else
             echo "ERROR: Database not found!"
             exit 1
@@ -73,22 +76,23 @@ jobs:
         shell: bash
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
-          node-version: 20
+          node-version: 24.16.0
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6.0.9
         with:
-          version: 9
+          version: 11.25.0
 
-      - name: Install Rust stable
-        uses: dtolnay/rust-toolchain@stable
+      - name: Install Rust 1.98.0
+        uses: dtolnay/rust-toolchain@4360b52568e2003a75bf9bc1d59f33a8e3fc893c
         with:
+          toolchain: 1.98.0
           targets: ${{ matrix.target }}
 
       - name: Rust cache
-        uses: Swatinem/rust-cache@v2
+        uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
           workspaces: src-tauri
 
@@ -105,7 +109,7 @@ jobs:
         run: pnpm exec tsc --noEmit
 
       - name: Build Tauri app
-        uses: tauri-apps/tauri-action@v0.5.15
+        uses: tauri-apps/tauri-action@84b9d35b5fc46c1e45415bdb6144030364f7ebc5 # v0.6.2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
@@ -150,44 +154,52 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ inputs.tag || github.ref }}
 
       - name: Download database
         run: |
           mkdir -p src-tauri/data
-          curl -L -o src-tauri/data/bricarobd.db "https://github.com/${{ github.repository }}/releases/download/db-v1/bricarobd.db"
+          curl --fail --show-error --location --retry 3 -o src-tauri/data/bricarobd.db "https://github.com/${{ github.repository }}/releases/download/db-v1/bricarobd.db"
+
+      - name: Verify database checksum
+        shell: bash
+        run: |
+          EXPECTED_SHA="fccab50a9e422588d20c0e36737a3056b3b0dcca9ec6f8909a4900cfd34f9699"
+          ACTUAL_SHA=$(node -e "const fs=require('fs'),c=require('crypto');const h=c.createHash('sha256');h.update(fs.readFileSync('src-tauri/data/bricarobd.db'));process.stdout.write(h.digest('hex'))")
+          test "$ACTUAL_SHA" = "$EXPECTED_SHA"
 
       - name: Setup Java 17
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@dd06d9cba3e5552c54d9f8ea23572deb30010f7c # v6.0.0
         with:
           distribution: 'temurin'
           java-version: '17'
 
       - name: Setup Android SDK
-        uses: android-actions/setup-android@v3
+        uses: android-actions/setup-android@40fd30fb8d7440372e1316f5d1809ec01dcd3699 # v4.0.1
 
       - name: Install Android NDK
         run: sdkmanager "ndk;27.2.12479018"
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
-          node-version: 20
+          node-version: 24.16.0
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6.0.9
         with:
-          version: 9
+          version: 11.25.0
 
-      - name: Install Rust stable
-        uses: dtolnay/rust-toolchain@stable
+      - name: Install Rust 1.98.0
+        uses: dtolnay/rust-toolchain@4360b52568e2003a75bf9bc1d59f33a8e3fc893c
         with:
+          toolchain: 1.98.0
           targets: aarch64-linux-android,armv7-linux-androideabi,x86_64-linux-android,i686-linux-android
 
       - name: Rust cache
-        uses: Swatinem/rust-cache@v2
+        uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
           workspaces: src-tauri
 
@@ -212,7 +224,7 @@ jobs:
           KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
 
       - name: Upload APK to release
-        uses: softprops/action-gh-release@v2.2.1
+        uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3
         with:
           tag_name: ${{ inputs.tag || github.ref_name }}
           files: |
@@ -232,32 +244,40 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ inputs.tag || github.ref }}
 
       - name: Download database
         run: |
           mkdir -p src-tauri/data
-          curl -L -o src-tauri/data/bricarobd.db "https://github.com/${{ github.repository }}/releases/download/db-v1/bricarobd.db"
+          curl --fail --show-error --location --retry 3 -o src-tauri/data/bricarobd.db "https://github.com/${{ github.repository }}/releases/download/db-v1/bricarobd.db"
+
+      - name: Verify database checksum
+        shell: bash
+        run: |
+          EXPECTED_SHA="fccab50a9e422588d20c0e36737a3056b3b0dcca9ec6f8909a4900cfd34f9699"
+          ACTUAL_SHA=$(node -e "const fs=require('fs'),c=require('crypto');const h=c.createHash('sha256');h.update(fs.readFileSync('src-tauri/data/bricarobd.db'));process.stdout.write(h.digest('hex'))")
+          test "$ACTUAL_SHA" = "$EXPECTED_SHA"
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
-          node-version: 20
+          node-version: 24.16.0
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6.0.9
         with:
-          version: 9
+          version: 11.25.0
 
-      - name: Install Rust stable
-        uses: dtolnay/rust-toolchain@stable
+      - name: Install Rust 1.98.0
+        uses: dtolnay/rust-toolchain@4360b52568e2003a75bf9bc1d59f33a8e3fc893c
         with:
+          toolchain: 1.98.0
           targets: aarch64-apple-ios
 
       - name: Rust cache
-        uses: Swatinem/rust-cache@v2
+        uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
           workspaces: src-tauri
 
@@ -272,20 +292,20 @@ jobs:
           PROVISIONING_PROFILE: ${{ secrets.PROVISIONING_PROFILE }}
         run: |
           # Create temporary keychain
-          KEYCHAIN_PATH=$RUNNER_TEMP/app-signing.keychain-db
-          security create-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
-          security set-keychain-settings -lut 21600 $KEYCHAIN_PATH
-          security unlock-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
+          KEYCHAIN_PATH="$RUNNER_TEMP/app-signing.keychain-db"
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
 
           # Import certificate
-          echo -n "$APPLE_CERTIFICATE" | base64 --decode -o $RUNNER_TEMP/certificate.p12
-          security import $RUNNER_TEMP/certificate.p12 -P "$APPLE_CERTIFICATE_PASSWORD" -A -t cert -f pkcs12 -k $KEYCHAIN_PATH
-          security set-key-partition-list -S apple-tool:,apple: -k "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
-          security list-keychains -d user -s $KEYCHAIN_PATH
+          echo -n "$APPLE_CERTIFICATE" | base64 --decode -o "$RUNNER_TEMP/certificate.p12"
+          security import "$RUNNER_TEMP/certificate.p12" -P "$APPLE_CERTIFICATE_PASSWORD" -A -t cert -f pkcs12 -k "$KEYCHAIN_PATH"
+          security set-key-partition-list -S apple-tool:,apple: -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security list-keychains -d user -s "$KEYCHAIN_PATH"
 
           # Install provisioning profile
-          mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
-          echo -n "$PROVISIONING_PROFILE" | base64 --decode -o ~/Library/MobileDevice/Provisioning\ Profiles/profile.mobileprovision
+          mkdir -p "$HOME/Library/MobileDevice/Provisioning Profiles"
+          echo -n "$PROVISIONING_PROFILE" | base64 --decode -o "$HOME/Library/MobileDevice/Provisioning Profiles/profile.mobileprovision"
 
       - name: Install Tauri CLI
         run: cargo install tauri-cli --locked
@@ -299,7 +319,7 @@ jobs:
           APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
 
       - name: Upload IPA to release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3
         with:
           tag_name: ${{ inputs.tag || github.ref_name }}
           files: |

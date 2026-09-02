@@ -1,12 +1,13 @@
-use tauri::command;
-use crate::models::{Mode06Result, FreezeFrameData, PidValue};
-use crate::obd::{demo::DemoConnection, pid, dtc, dev_log};
 use crate::commands::connection::{is_demo, with_real_connection};
 use crate::commands::mode06_names::get_mode06_name;
+use crate::models::{FreezeFrameData, Mode06Result, PidValue};
+use crate::obd::{demo::DemoConnection, dev_log, dtc, pid};
+use tauri::command;
 
 /// Parse Mode 06 availability bitmap from "46 00 XX XX XX XX" response
 fn parse_mode06_bitmap(response: &str) -> Vec<u8> {
-    let bytes: Vec<u8> = response.split_whitespace()
+    let bytes: Vec<u8> = response
+        .split_whitespace()
         .filter_map(|s| u8::from_str_radix(s, 16).ok())
         .collect();
 
@@ -39,7 +40,8 @@ fn parse_mode06_results(response: &str, lang: &str) -> Vec<Mode06Result> {
     let mut results = Vec::new();
 
     for line in response.lines() {
-        let bytes: Vec<u8> = line.split_whitespace()
+        let bytes: Vec<u8> = line
+            .split_whitespace()
             .filter_map(|s| u8::from_str_radix(s, 16).ok())
             .collect();
 
@@ -50,7 +52,9 @@ fn parse_mode06_results(response: &str, lang: &str) -> Vec<Mode06Result> {
             None => continue,
         };
 
-        if pos + 8 >= bytes.len() { continue; }
+        if pos + 8 >= bytes.len() {
+            continue;
+        }
 
         let tid = bytes[pos + 1];
 
@@ -63,7 +67,14 @@ fn parse_mode06_results(response: &str, lang: &str) -> Vec<Mode06Result> {
         let passed = test_value >= min_limit && test_value <= max_limit;
 
         results.push(Mode06Result {
-            tid, mid, name, unit, test_value, min_limit, max_limit, passed,
+            tid,
+            mid,
+            name,
+            unit,
+            test_value,
+            min_limit,
+            max_limit,
+            passed,
         });
     }
 
@@ -76,7 +87,10 @@ fn parse_freeze_frame_payload(response: &str, pid: u8, frame: u8) -> Option<Vec<
             .split_whitespace()
             .filter_map(|token| u8::from_str_radix(token, 16).ok())
             .collect();
-        if let Some(position) = bytes.windows(3).position(|window| window == [0x42, pid, frame]) {
+        if let Some(position) = bytes
+            .windows(3)
+            .position(|window| window == [0x42, pid, frame])
+        {
             let data = bytes[position + 3..].to_vec();
             if !data.is_empty() {
                 return Some(data);
@@ -93,26 +107,32 @@ pub async fn get_mode06_results(lang: Option<String>) -> Vec<Mode06Result> {
         let lang = lang.as_deref().unwrap_or("en");
 
         if is_demo() {
-            dev_log::log_info("diagnostic", "Demo mode: returning simulated Mode 06 results");
+            dev_log::log_info(
+                "diagnostic",
+                "Demo mode: returning simulated Mode 06 results",
+            );
             return DemoConnection::get_mode06_results(lang);
         }
 
-        // Check if OBD is busy
-        if super::connection::is_obd_busy() {
-            dev_log::log_debug("diagnostic", "OBD is busy, skipping Mode 06 read");
-            return Vec::new();
-        }
+        let _guard = match super::connection::OBDBusyGuard::acquire_with_wait(10) {
+            Ok(guard) => guard,
+            Err(error) => {
+                dev_log::log_debug("diagnostic", &format!("Mode 06 postponed: {error}"));
+                return Vec::new();
+            }
+        };
 
         dev_log::log_info("diagnostic", "Real mode: reading Mode 06 test results");
 
         // Step 1: Query supported TIDs via "0600"
-        let bitmap_response = match with_real_connection(|conn| conn.send_command_timeout("0600", 5000)) {
-            Ok(r) => r,
-            Err(e) => {
-                dev_log::log_warn("diagnostic", &format!("Mode 06 bitmap query failed: {}", e));
-                return Vec::new();
-            }
-        };
+        let bitmap_response =
+            match with_real_connection(|conn| conn.send_command_timeout("0600", 5000)) {
+                Ok(r) => r,
+                Err(e) => {
+                    dev_log::log_warn("diagnostic", &format!("Mode 06 bitmap query failed: {}", e));
+                    return Vec::new();
+                }
+            };
 
         if bitmap_response.contains("NO DATA") || bitmap_response.is_empty() {
             dev_log::log_warn("diagnostic", "Mode 06 not supported by this vehicle");
@@ -120,7 +140,10 @@ pub async fn get_mode06_results(lang: Option<String>) -> Vec<Mode06Result> {
         }
 
         let supported_tids = parse_mode06_bitmap(&bitmap_response);
-        dev_log::log_info("diagnostic", &format!("Mode 06: {} supported TIDs found", supported_tids.len()));
+        dev_log::log_info(
+            "diagnostic",
+            &format!("Mode 06: {} supported TIDs found", supported_tids.len()),
+        );
 
         if supported_tids.is_empty() {
             return Vec::new();
@@ -130,6 +153,9 @@ pub async fn get_mode06_results(lang: Option<String>) -> Vec<Mode06Result> {
         let mut all_results = Vec::new();
 
         for tid in &supported_tids {
+            if super::connection::is_obd_cancelled() {
+                break;
+            }
             let cmd = format!("06{:02X}", tid);
             match with_real_connection(|conn| conn.send_command_timeout(&cmd, 5000)) {
                 Ok(response) => {
@@ -138,7 +164,10 @@ pub async fn get_mode06_results(lang: Option<String>) -> Vec<Mode06Result> {
                     }
                     let results = parse_mode06_results(&response, lang);
                     if !results.is_empty() {
-                        dev_log::log_debug("diagnostic", &format!("TID {:02X}: {} results", tid, results.len()));
+                        dev_log::log_debug(
+                            "diagnostic",
+                            &format!("TID {:02X}: {} results", tid, results.len()),
+                        );
                         all_results.extend(results);
                     }
                 }
@@ -152,9 +181,14 @@ pub async fn get_mode06_results(lang: Option<String>) -> Vec<Mode06Result> {
             std::thread::sleep(std::time::Duration::from_millis(50));
         }
 
-        dev_log::log_info("diagnostic", &format!("Mode 06 complete: {} test results", all_results.len()));
+        dev_log::log_info(
+            "diagnostic",
+            &format!("Mode 06 complete: {} test results", all_results.len()),
+        );
         all_results
-    }).await.unwrap_or_default()
+    })
+    .await
+    .unwrap_or_default()
 }
 
 /// Get Mode 02 Freeze Frame data — reads frames 0 through 3
@@ -168,18 +202,23 @@ pub async fn get_freeze_frame(lang: Option<String>) -> Vec<FreezeFrameData> {
             return DemoConnection::get_freeze_frame(lang).into_iter().collect();
         }
 
-        // Check if OBD is busy
-        if super::connection::is_obd_busy() {
-            dev_log::log_debug("diagnostic", "OBD is busy, skipping freeze frame read");
-            return Vec::new();
-        }
+        let _guard = match super::connection::OBDBusyGuard::acquire_with_wait(10) {
+            Ok(guard) => guard,
+            Err(error) => {
+                dev_log::log_debug("diagnostic", &format!("Freeze frame postponed: {error}"));
+                return Vec::new();
+            }
+        };
 
-        dev_log::log_info("diagnostic", "Real mode: reading Mode 02 freeze frames (0-3)");
+        dev_log::log_info(
+            "diagnostic",
+            "Real mode: reading Mode 02 freeze frames (0-3)",
+        );
 
         let definitions = pid::get_pid_definitions(lang);
         let key_pids: Vec<u16> = vec![
-            0x04, 0x05, 0x06, 0x07, 0x0B, 0x0C, 0x0D, 0x0E, 0x0F, 0x10,
-            0x11, 0x2F, 0x33, 0x42, 0x44, 0x46, 0x5C, 0x5E,
+            0x04, 0x05, 0x06, 0x07, 0x0B, 0x0C, 0x0D, 0x0E, 0x0F, 0x10, 0x11, 0x2F, 0x33, 0x42,
+            0x44, 0x46, 0x5C, 0x5E,
         ];
         let now = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
@@ -191,24 +230,41 @@ pub async fn get_freeze_frame(lang: Option<String>) -> Vec<FreezeFrameData> {
         const MAX_SCAN_DURATION: std::time::Duration = std::time::Duration::from_secs(30);
 
         for frame_num in 0u8..4 {
+            if super::connection::is_obd_cancelled() {
+                break;
+            }
             // Overall timeout guard — abort after 30s to prevent UI hang
             if scan_start.elapsed() > MAX_SCAN_DURATION {
-                dev_log::log_warn("diagnostic", &format!("Freeze frame scan timeout after {}s — returning {} frames", scan_start.elapsed().as_secs(), frames.len()));
+                dev_log::log_warn(
+                    "diagnostic",
+                    &format!(
+                        "Freeze frame scan timeout after {}s — returning {} frames",
+                        scan_start.elapsed().as_secs(),
+                        frames.len()
+                    ),
+                );
                 break;
             }
 
             // Step 1: Read the DTC that triggered this frame
             let dtc_cmd = format!("0202{:02X}", frame_num);
-            let dtc_response = match with_real_connection(|conn| conn.send_command_timeout(&dtc_cmd, 3000)) {
-                Ok(r) => r,
-                Err(e) => {
-                    dev_log::log_debug("diagnostic", &format!("Frame {} DTC query failed: {}", frame_num, e));
-                    continue;
-                }
-            };
+            let dtc_response =
+                match with_real_connection(|conn| conn.send_command_timeout(&dtc_cmd, 3000)) {
+                    Ok(r) => r,
+                    Err(e) => {
+                        dev_log::log_debug(
+                            "diagnostic",
+                            &format!("Frame {} DTC query failed: {}", frame_num, e),
+                        );
+                        continue;
+                    }
+                };
 
             if dtc_response.contains("NO DATA") || dtc_response.is_empty() {
-                dev_log::log_debug("diagnostic", &format!("No freeze frame stored for frame {}", frame_num));
+                dev_log::log_debug(
+                    "diagnostic",
+                    &format!("No freeze frame stored for frame {}", frame_num),
+                );
                 continue;
             }
 
@@ -218,13 +274,21 @@ pub async fn get_freeze_frame(lang: Option<String>) -> Vec<FreezeFrameData> {
                 .map(|bytes| dtc::decode_dtc_bytes(bytes[0], bytes[1]))
                 .unwrap_or_else(|| "Unknown".to_string());
 
-            dev_log::log_info("diagnostic", &format!("Frame {}: triggered by DTC {}", frame_num, dtc_code));
+            dev_log::log_info(
+                "diagnostic",
+                &format!("Frame {}: triggered by DTC {}", frame_num, dtc_code),
+            );
 
             // Step 2: Read key PIDs for this frame
             let mut pids = Vec::new();
 
             for def in &definitions {
-                if scan_start.elapsed() > MAX_SCAN_DURATION { break; }
+                if super::connection::is_obd_cancelled() {
+                    break;
+                }
+                if scan_start.elapsed() > MAX_SCAN_DURATION {
+                    break;
+                }
                 if !key_pids.contains(&def.pid) {
                     continue;
                 }
@@ -238,7 +302,9 @@ pub async fn get_freeze_frame(lang: Option<String>) -> Vec<FreezeFrameData> {
                             continue;
                         }
 
-                        if let Some(data_bytes) = parse_freeze_frame_payload(&response, pid_u8, frame_num) {
+                        if let Some(data_bytes) =
+                            parse_freeze_frame_payload(&response, pid_u8, frame_num)
+                        {
                             if let Some(value) = pid::decode_pid(def.pid, &data_bytes) {
                                 pids.push(PidValue {
                                     pid: def.pid,
@@ -258,7 +324,15 @@ pub async fn get_freeze_frame(lang: Option<String>) -> Vec<FreezeFrameData> {
             }
 
             if !pids.is_empty() || dtc_code != "Unknown" {
-                dev_log::log_info("diagnostic", &format!("Frame {}: {} PIDs read for DTC {}", frame_num, pids.len(), dtc_code));
+                dev_log::log_info(
+                    "diagnostic",
+                    &format!(
+                        "Frame {}: {} PIDs read for DTC {}",
+                        frame_num,
+                        pids.len(),
+                        dtc_code
+                    ),
+                );
                 frames.push(FreezeFrameData {
                     dtc_code,
                     frame_number: frame_num,
@@ -267,9 +341,14 @@ pub async fn get_freeze_frame(lang: Option<String>) -> Vec<FreezeFrameData> {
             }
         }
 
-        dev_log::log_info("diagnostic", &format!("Freeze frame scan complete: {} frames found", frames.len()));
+        dev_log::log_info(
+            "diagnostic",
+            &format!("Freeze frame scan complete: {} frames found", frames.len()),
+        );
         frames
-    }).await.unwrap_or_default()
+    })
+    .await
+    .unwrap_or_default()
 }
 
 #[cfg(test)]
@@ -286,10 +365,7 @@ mod tests {
 
     #[test]
     fn freeze_frame_payload_requires_requested_frame() {
-        assert_eq!(
-            parse_freeze_frame_payload("42 0C 01 1A F8", 0x0C, 0),
-            None,
-        );
+        assert_eq!(parse_freeze_frame_payload("42 0C 01 1A F8", 0x0C, 0), None,);
     }
 
     #[test]
@@ -472,5 +548,3 @@ mod tests {
         assert_eq!(results[0].tid, 0x01);
     }
 }
-
-

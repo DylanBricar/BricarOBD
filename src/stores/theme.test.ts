@@ -229,14 +229,14 @@ describe("useThemeStore()", () => {
 
       // Mock system preference change
       const mockMatchMedia = window.matchMedia as any;
-      const listeners: Function[] = [];
+      const listeners: Array<(event: MediaQueryListEvent) => void> = [];
       mockMatchMedia.mockImplementation((query: string) => ({
         matches: query === "(prefers-color-scheme: dark)",
         media: query,
         onchange: null,
         addListener: vi.fn(),
         removeListener: vi.fn(),
-        addEventListener: vi.fn((event: string, listener: Function) => {
+        addEventListener: vi.fn((event: string, listener: (event: MediaQueryListEvent) => void) => {
           if (event === "change") listeners.push(listener);
         }),
         removeEventListener: vi.fn(),

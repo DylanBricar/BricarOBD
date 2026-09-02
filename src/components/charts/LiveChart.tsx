@@ -45,7 +45,10 @@ export default function LiveChart({
   const gradientId = useId();
 
   const tooltipFormatter = useCallback(
-    (val: number) => [`${val.toFixed(1)} ${unit}`, label],
+    (value: number | string | readonly (number | string)[] | undefined) => {
+      const numericValue = typeof value === "number" ? value : Number(value ?? 0);
+      return [`${numericValue.toFixed(1)} ${unit}`, label] as [string, string];
+    },
     [unit, label]
   );
 

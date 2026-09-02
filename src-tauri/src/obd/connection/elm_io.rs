@@ -1,7 +1,7 @@
-use std::time::Duration;
+use super::{ChipType, Elm327Connection};
 use crate::obd::dev_log;
 use crate::obd::transport::TransportType;
-use super::{Elm327Connection, ChipType};
+use std::time::Duration;
 
 impl Elm327Connection {
     // ==================== SEND / RECEIVE ====================
@@ -13,7 +13,11 @@ impl Elm327Connection {
 
     /// Send command with custom timeout — core communication method
     /// Works over any OBDTransport (serial, WiFi, BLE)
-    pub(crate) fn send_command_timeout(&mut self, cmd: &str, timeout_ms: u64) -> Result<String, String> {
+    pub(crate) fn send_command_timeout(
+        &mut self,
+        cmd: &str,
+        timeout_ms: u64,
+    ) -> Result<String, String> {
         let transport = self.transport.as_mut().ok_or("Not connected")?;
 
         // Log TX
@@ -39,9 +43,13 @@ impl Elm327Connection {
 
         // Send command
         let cmd_bytes = format!("{}\r", cmd);
-        transport.write_bytes(cmd_bytes.as_bytes())
-            .map_err(|e| { dev_log::log_error("obd", &format!("Write error: {}", e)); e })?;
-        transport.flush().map_err(|e| format!("Flush error: {}", e))?;
+        transport.write_bytes(cmd_bytes.as_bytes()).map_err(|e| {
+            dev_log::log_error("obd", &format!("Write error: {}", e));
+            e
+        })?;
+        transport
+            .flush()
+            .map_err(|e| format!("Flush error: {}", e))?;
 
         self.last_command_time = std::time::Instant::now();
 
@@ -56,9 +64,9 @@ impl Elm327Connection {
         let effective_timeout = if transport.transport_type() == TransportType::WiFi {
             let is_at_command = cmd.starts_with("AT") || cmd.starts_with("at");
             if is_at_command {
-                timeout_ms.max(1500)  // AT commands: 1.5s floor
+                timeout_ms.max(1500) // AT commands: 1.5s floor
             } else {
-                timeout_ms.max(3000)  // OBD commands: 3s floor for CAN bus latency
+                timeout_ms.max(3000) // OBD commands: 3s floor for CAN bus latency
             }
         } else {
             timeout_ms
@@ -79,9 +87,19 @@ impl Elm327Connection {
                     }
                     // Prevent unbounded memory growth from misbehaving adapter
                     if response.len() > max_response_size {
-                        dev_log::log_error("obd", &format!("Response exceeded {}KB cap for: {}", max_response_size / 1024, cmd));
+                        dev_log::log_error(
+                            "obd",
+                            &format!(
+                                "Response exceeded {}KB cap for: {}",
+                                max_response_size / 1024,
+                                cmd
+                            ),
+                        );
                         self.consecutive_errors += 1;
-                        return Err(format!("Response too large (>{}KB)", max_response_size / 1024));
+                        return Err(format!(
+                            "Response too large (>{}KB)",
+                            max_response_size / 1024
+                        ));
                     }
                 }
                 Ok(_) => {
@@ -98,7 +116,11 @@ impl Elm327Connection {
         if !response.is_empty() {
             let clean = Self::clean_response(&response);
             // If we got a partial valid response, use it
-            if clean.contains("41") || clean.contains("62") || clean.contains("7E") || clean.contains("59") {
+            if clean.contains("41")
+                || clean.contains("62")
+                || clean.contains("7E")
+                || clean.contains("59")
+            {
                 dev_log::log_rx(cmd, &format!("(partial) {}", clean));
                 return Ok(clean);
             }

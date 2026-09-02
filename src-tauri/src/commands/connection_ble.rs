@@ -1,5 +1,5 @@
-use tauri::command;
 use crate::models::VehicleInfo;
+use tauri::command;
 
 /// Scan for BLE ELM327 devices
 #[command]
@@ -29,11 +29,17 @@ pub async fn scan_ble(timeout_ms: Option<u64>) -> Result<Vec<serde_json::Value>,
 #[command]
 pub async fn connect_ble(device_name: String) -> Result<VehicleInfo, String> {
     {
-        let guard = super::connection::CONNECTION.lock().unwrap_or_else(|e| e.into_inner());
+        let guard = super::connection::CONNECTION
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         if !matches!(*guard, super::connection::ConnectionMode::Disconnected) {
-            return Err(super::connection::err_msg("Déjà connecté", "Already connected"));
+            return Err(super::connection::err_msg(
+                "Déjà connecté",
+                "Already connected",
+            ));
         }
     }
+    super::connection::clear_obd_cancel();
 
     crate::obd::dev_log::log_info("connection", &format!("BLE connect: {}", device_name));
 

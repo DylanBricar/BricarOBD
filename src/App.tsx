@@ -62,9 +62,12 @@ export default function App() {
 
   // Refs for values read in effects but that shouldn't trigger re-runs
   const dtcsRef = useRef(vehicle.dtcs);
-  dtcsRef.current = vehicle.dtcs;
   const vehicleRef = useRef(connection.vehicle);
-  vehicleRef.current = connection.vehicle;
+
+  useEffect(() => {
+    dtcsRef.current = vehicle.dtcs;
+    vehicleRef.current = connection.vehicle;
+  }, [vehicle.dtcs, connection.vehicle]);
 
   const hasVin = !!connection.vehicle?.vin;
   const isDemo = connection.status === "demo";
@@ -239,7 +242,9 @@ export default function App() {
       if (connection.status === "demo") {
         vehicle.setEcus(buildDemoEcus(t));
       } else {
-        const ecus = await invoke<EcuInfo[]>("scan_ecus");
+        const ecus = await invoke<EcuInfo[]>("scan_ecus", {
+          manufacturer: connection.vehicle?.make || "",
+        });
         vehicle.setEcus(ecus);
       }
     } catch (e) {

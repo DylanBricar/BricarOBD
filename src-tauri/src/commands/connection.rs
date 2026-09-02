@@ -1,11 +1,16 @@
-use tauri::command;
 use crate::models::{ConnectionStatus, PortInfo, VehicleInfo};
 use crate::obd::Elm327Connection;
 use std::sync::Mutex;
+use tauri::command;
 
 // Re-export helpers so Tauri generate_handler! can find them at connection::*
-pub use super::connection_helpers::{OBDBusyGuard, set_obd_busy, is_obd_busy, is_private_ip};
-pub use super::connection_wifi_vin::{connect_wifi, scan_wifi, set_manual_vin, has_vin_cache, clear_vin_cache};
+pub use super::connection_helpers::{
+    clear_obd_cancel, is_obd_busy, is_obd_cancelled, is_private_ip, request_obd_cancel,
+    set_obd_busy, OBDBusyGuard,
+};
+pub use super::connection_wifi_vin::{
+    clear_vin_cache, connect_wifi, has_vin_cache, scan_wifi, set_manual_vin,
+};
 
 pub enum ConnectionMode {
     Disconnected,
@@ -19,12 +24,20 @@ static CURRENT_LANG: Mutex<String> = Mutex::new(String::new());
 /// Get the current language setting (default: "en")
 pub fn get_lang() -> String {
     let lang = CURRENT_LANG.lock().unwrap_or_else(|e| e.into_inner());
-    if lang.is_empty() { "en".to_string() } else { lang.clone() }
+    if lang.is_empty() {
+        "en".to_string()
+    } else {
+        lang.clone()
+    }
 }
 
 /// Create a bilingual error message
 pub fn err_msg(fr: &str, en: &str) -> String {
-    if get_lang() == "fr" { fr.to_string() } else { en.to_string() }
+    if get_lang() == "fr" {
+        fr.to_string()
+    } else {
+        en.to_string()
+    }
 }
 
 /// Set the current language from frontend
@@ -35,13 +48,18 @@ pub fn set_language(lang: String) {
 }
 
 pub fn is_demo() -> bool {
-    matches!(*CONNECTION.lock().unwrap_or_else(|e| e.into_inner()), ConnectionMode::Demo)
+    matches!(
+        *CONNECTION.lock().unwrap_or_else(|e| e.into_inner()),
+        ConnectionMode::Demo
+    )
 }
 
 pub fn is_connected() -> bool {
-    !matches!(*CONNECTION.lock().unwrap_or_else(|e| e.into_inner()), ConnectionMode::Disconnected)
+    !matches!(
+        *CONNECTION.lock().unwrap_or_else(|e| e.into_inner()),
+        ConnectionMode::Disconnected
+    )
 }
-
 
 /// Execute a closure with the real Elm327Connection. Returns Err if not in Real mode.
 pub fn with_real_connection<F, R>(f: F) -> Result<R, String>
@@ -51,7 +69,10 @@ where
     let mut guard = CONNECTION.lock().unwrap_or_else(|e| e.into_inner());
     match *guard {
         ConnectionMode::Real(ref mut conn) => f(conn),
-        ConnectionMode::Demo => Err(err_msg("Mode démo — pas de connexion réelle", "Demo mode — no real connection")),
+        ConnectionMode::Demo => Err(err_msg(
+            "Mode démo — pas de connexion réelle",
+            "Demo mode — no real connection",
+        )),
         ConnectionMode::Disconnected => Err(err_msg("Non connecté", "Not connected")),
     }
 }
@@ -60,7 +81,14 @@ where
 #[command]
 pub fn list_serial_ports() -> Vec<PortInfo> {
     let ports = Elm327Connection::list_ports();
-    crate::obd::dev_log::log_info("connection", &format!("Listed {} serial ports: {:?}", ports.len(), ports.iter().map(|p| &p.name).collect::<Vec<_>>()));
+    crate::obd::dev_log::log_info(
+        "connection",
+        &format!(
+            "Listed {} serial ports: {:?}",
+            ports.len(),
+            ports.iter().map(|p| &p.name).collect::<Vec<_>>()
+        ),
+    );
     ports
 }
 
@@ -74,6 +102,7 @@ pub async fn connect_obd(port: String, baud_rate: u32) -> Result<VehicleInfo, St
             return Err(err_msg("Déjà connecté", "Already connected"));
         }
     }
+    clear_obd_cancel();
 
     let result: Result<(Elm327Connection, VehicleInfo), String> = tokio::task::spawn_blocking(move || {
         // If baud_rate is 0, try common rates; otherwise use the specified one
@@ -152,6 +181,7 @@ pub async fn connect_obd(port: String, baud_rate: u32) -> Result<VehicleInfo, St
 /// Disconnect from OBD adapter
 #[command]
 pub async fn disconnect_obd() -> Result<(), String> {
+    request_obd_cancel();
     let prev = {
         let mut guard = CONNECTION.lock().unwrap_or_else(|e| e.into_inner());
         std::mem::replace(&mut *guard, ConnectionMode::Disconnected)
@@ -160,7 +190,9 @@ pub async fn disconnect_obd() -> Result<(), String> {
         tokio::task::spawn_blocking(move || {
             let mut c = conn;
             c.disconnect();
-        }).await.ok();
+        })
+        .await
+        .ok();
     }
     crate::obd::dev_log::log_info("connection", "Disconnected from OBD adapter");
 
@@ -173,6 +205,7 @@ pub async fn disconnect_obd() -> Result<(), String> {
 /// Connect in demo mode
 #[command]
 pub fn connect_demo() -> VehicleInfo {
+    clear_obd_cancel();
     let mut guard = CONNECTION.lock().unwrap_or_else(|e| e.into_inner());
     *guard = ConnectionMode::Demo;
     crate::obd::dev_log::log_info("connection", "Demo mode activated");
@@ -274,4 +307,3 @@ mod tests {
         set_language("en".to_string());
     }
 }
-

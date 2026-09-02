@@ -42,9 +42,6 @@
     "createUpdaterArtifacts": true
   },
   "plugins": {
-    "shell": {
-      "open": "^https://(www\\.google\\.com|www\\.youtube\\.com|youtube\\.com)"
-    },
     "updater": {
       "endpoints": [
         "https://github.com/DylanBricar/BricarOBD/releases/latest/download/latest.json"

@@ -80,14 +80,14 @@ describe("escapeCSV()", () => {
   });
 
   it("wraps strings starting with formula injection chars", () => {
-    expect(escapeCSV("=SUM(A1:A10)")).toBe('"=SUM(A1:A10)"');
-    expect(escapeCSV("+malicious")).toBe('"+malicious"');
-    expect(escapeCSV("-malicious")).toBe('"-malicious"');
-    expect(escapeCSV("@malicious")).toBe('"@malicious"');
+    expect(escapeCSV("=SUM(A1:A10)")).toBe('"\'=SUM(A1:A10)"');
+    expect(escapeCSV("+malicious")).toBe('"\'+malicious"');
+    expect(escapeCSV("-malicious")).toBe('"\'-malicious"');
+    expect(escapeCSV("@malicious")).toBe('"\'@malicious"');
   });
 
   it("wraps strings starting with tab character in quotes", () => {
-    expect(escapeCSV("\thello")).toBe('"\thello"');
+    expect(escapeCSV("\thello")).toBe('"\'\thello"');
   });
 
   it("handles numbers converted to string", () => {

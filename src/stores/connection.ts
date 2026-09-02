@@ -37,7 +37,7 @@ const defaultState: ConnectionState = {
 };
 
 let globalState = { ...defaultState };
-let listeners: Set<() => void> = new Set();
+const listeners: Set<() => void> = new Set();
 
 function notify() {
   listeners.forEach((l) => l());

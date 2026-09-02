@@ -1,15 +1,15 @@
-use std::time::Duration;
-use tracing::{error, info};
+use crate::models::PortInfo;
 use crate::obd::dev_log;
 use crate::obd::transport::OBDTransport;
-use crate::models::PortInfo;
+use std::time::Duration;
+use tracing::{error, info};
 
-mod init_strategies;
-mod protocol;
-mod pid_discovery;
 mod elm_io;
-mod queries;
 mod health;
+mod init_strategies;
+mod pid_discovery;
+mod protocol;
+mod queries;
 
 /// ELM327 connection configuration
 pub struct ConnectionConfig {
@@ -31,11 +31,11 @@ impl Default for ConnectionConfig {
 /// Detected chip type — affects timing and command compatibility
 #[derive(Debug, Clone, PartialEq)]
 pub enum ChipType {
-    GenuineElm327,   // Real ELM327 v1.4b/v1.5b
-    Stn1110,         // OBDLink / STN1110 (faster, more reliable)
-    Stn2120,         // STN2120 (BLE capable)
-    CloneV15,        // Chinese ELM327 v1.5 clone (common, limited)
-    CloneV21,        // Chinese ELM327 v2.1 clone (even more limited)
+    GenuineElm327, // Real ELM327 v1.4b/v1.5b
+    Stn1110,       // OBDLink / STN1110 (faster, more reliable)
+    Stn2120,       // STN2120 (BLE capable)
+    CloneV15,      // Chinese ELM327 v1.5 clone (common, limited)
+    CloneV21,      // Chinese ELM327 v2.1 clone (even more limited)
     Unknown,
 }
 
@@ -45,7 +45,7 @@ pub struct Elm327Connection {
     pub(super) transport: Option<Box<dyn OBDTransport>>,
     pub config: ConnectionConfig,
     pub protocol: String,
-    pub protocol_num: String,        // Raw protocol number (e.g. "6" for CAN 500k)
+    pub protocol_num: String, // Raw protocol number (e.g. "6" for CAN 500k)
     pub elm_version: String,
     pub chip_type: ChipType,
     pub is_clone: bool,
@@ -53,9 +53,9 @@ pub struct Elm327Connection {
     pub supported_pids_ext: Vec<u8>, // PIDs 0x61-0xC0 if available
     pub voltage: Option<f64>,        // Battery voltage from ATRV
     pub vin: String,                 // Vehicle Identification Number
-    pub(super) headers_on: bool,                // Track ATH state
+    pub(super) headers_on: bool,     // Track ATH state
     pub(super) last_command_time: std::time::Instant,
-    pub(super) consecutive_errors: u32,         // Track errors for adaptive recovery
+    pub(super) consecutive_errors: u32, // Track errors for adaptive recovery
 }
 
 impl Elm327Connection {
@@ -101,12 +101,13 @@ impl Elm327Connection {
                     })
                     .map(|p| PortInfo {
                         description: match &p.port_type {
-                            serialport::SerialPortType::UsbPort(usb) => {
-                                format!("{} {}",
-                                    usb.manufacturer.as_deref().unwrap_or(""),
-                                    usb.product.as_deref().unwrap_or("")
-                                ).trim().to_string()
-                            }
+                            serialport::SerialPortType::UsbPort(usb) => format!(
+                                "{} {}",
+                                usb.manufacturer.as_deref().unwrap_or(""),
+                                usb.product.as_deref().unwrap_or("")
+                            )
+                            .trim()
+                            .to_string(),
                             serialport::SerialPortType::BluetoothPort => "Bluetooth".to_string(),
                             _ => "Serial".to_string(),
                         },
@@ -114,7 +115,7 @@ impl Elm327Connection {
                     })
                     .collect();
                 filtered_ports
-            },
+            }
             Err(e) => {
                 error!("Failed to list serial ports: {}", e);
                 Vec::new()
@@ -132,15 +133,22 @@ impl Elm327Connection {
     #[cfg(feature = "desktop")]
     pub fn connect(&mut self, port: &str, baud_rate: u32) -> Result<(), String> {
         info!("Connecting to {} at {} baud", port, baud_rate);
-        dev_log::log_info("obd", &format!("Opening serial port {} @ {} baud", port, baud_rate));
+        dev_log::log_info(
+            "obd",
+            &format!("Opening serial port {} @ {} baud", port, baud_rate),
+        );
 
-        let serial_transport = crate::obd::transport::SerialTransport::new(port, baud_rate, self.config.timeout_ms)?;
+        let serial_transport =
+            crate::obd::transport::SerialTransport::new(port, baud_rate, self.config.timeout_ms)?;
         self.transport = Some(Box::new(serial_transport));
         self.config.port = port.to_string();
         self.config.baud_rate = baud_rate;
 
         // Try multiple init strategies
         if let Err(e) = self.init_with_resilience() {
+            if let Some(ref mut transport) = self.transport {
+                transport.close();
+            }
             self.transport = None;
             return Err(e);
         }
@@ -151,13 +159,23 @@ impl Elm327Connection {
         // Discover all supported PID ranges
         self.discover_supported_pids();
 
-        dev_log::log_info("obd", &format!(
-            "Connected: ELM={}, Chip={:?}, Protocol={} ({}), Clone={}, Voltage={:.1}V, PIDs={}",
-            self.elm_version, self.chip_type, self.protocol, self.protocol_num,
-            self.is_clone, self.voltage.unwrap_or(0.0), self.supported_pids.len()
-        ));
-        info!("Connected: ELM={}, Protocol={}, Clone={}",
-            self.elm_version, self.protocol, self.is_clone);
+        dev_log::log_info(
+            "obd",
+            &format!(
+                "Connected: ELM={}, Chip={:?}, Protocol={} ({}), Clone={}, Voltage={:.1}V, PIDs={}",
+                self.elm_version,
+                self.chip_type,
+                self.protocol,
+                self.protocol_num,
+                self.is_clone,
+                self.voltage.unwrap_or(0.0),
+                self.supported_pids.len()
+            ),
+        );
+        info!(
+            "Connected: ELM={}, Protocol={}, Clone={}",
+            self.elm_version, self.protocol, self.is_clone
+        );
         Ok(())
     }
 
@@ -171,12 +189,18 @@ impl Elm327Connection {
     pub fn connect_transport(&mut self, transport: Box<dyn OBDTransport>) -> Result<(), String> {
         let transport_type = transport.transport_type();
         info!("Connecting via {:?} transport", transport_type);
-        dev_log::log_info("obd", &format!("Connecting via {:?} transport", transport_type));
+        dev_log::log_info(
+            "obd",
+            &format!("Connecting via {:?} transport", transport_type),
+        );
 
         self.transport = Some(transport);
 
         // Try init
         if let Err(e) = self.init_with_resilience() {
+            if let Some(ref mut transport) = self.transport {
+                transport.close();
+            }
             self.transport = None;
             return Err(e);
         }
@@ -184,10 +208,17 @@ impl Elm327Connection {
         self.read_voltage();
         self.discover_supported_pids();
 
-        dev_log::log_info("obd", &format!(
-            "Connected via {:?}: ELM={}, Protocol={} ({}), PIDs={}",
-            transport_type, self.elm_version, self.protocol, self.protocol_num, self.supported_pids.len()
-        ));
+        dev_log::log_info(
+            "obd",
+            &format!(
+                "Connected via {:?}: ELM={}, Protocol={} ({}), PIDs={}",
+                transport_type,
+                self.elm_version,
+                self.protocol,
+                self.protocol_num,
+                self.supported_pids.len()
+            ),
+        );
         Ok(())
     }
 
@@ -197,10 +228,23 @@ impl Elm327Connection {
 
         if upper.contains("STN2120") || upper.contains("STN 2120") {
             self.chip_type = ChipType::Stn2120;
-            self.elm_version = response.lines().find(|l| l.contains("STN")).unwrap_or("STN2120").trim().to_string();
-        } else if upper.contains("STN1110") || upper.contains("STN 1110") || upper.contains("OBDLINK") {
+            self.elm_version = response
+                .lines()
+                .find(|l| l.contains("STN"))
+                .unwrap_or("STN2120")
+                .trim()
+                .to_string();
+        } else if upper.contains("STN1110")
+            || upper.contains("STN 1110")
+            || upper.contains("OBDLINK")
+        {
             self.chip_type = ChipType::Stn1110;
-            self.elm_version = response.lines().find(|l| l.contains("STN") || l.contains("OBD")).unwrap_or("STN1110").trim().to_string();
+            self.elm_version = response
+                .lines()
+                .find(|l| l.contains("STN") || l.contains("OBD"))
+                .unwrap_or("STN1110")
+                .trim()
+                .to_string();
         } else if upper.contains("ELM327 V1.5") || upper.contains("ELM327 V1.4") {
             // Could be genuine or clone — check response timing/quality
             if upper.contains("V1.5A") || upper.contains("V1.4B") || upper.contains("V1.5B") {
@@ -210,29 +254,47 @@ impl Elm327Connection {
                 self.chip_type = ChipType::CloneV15;
                 self.is_clone = true;
             }
-            self.elm_version = response.lines().find(|l| l.to_uppercase().contains("ELM")).unwrap_or("ELM327").trim().to_string();
+            self.elm_version = response
+                .lines()
+                .find(|l| l.to_uppercase().contains("ELM"))
+                .unwrap_or("ELM327")
+                .trim()
+                .to_string();
         } else if upper.contains("ELM327 V2.1") || upper.contains("ELM327 V2.2") {
             // v2.1/v2.2 are ALWAYS clones — real ELM327 never went past v2.0
             self.chip_type = ChipType::CloneV21;
             self.is_clone = true;
-            self.elm_version = response.lines().find(|l| l.to_uppercase().contains("ELM")).unwrap_or("ELM327 Clone").trim().to_string();
+            self.elm_version = response
+                .lines()
+                .find(|l| l.to_uppercase().contains("ELM"))
+                .unwrap_or("ELM327 Clone")
+                .trim()
+                .to_string();
         } else if upper.contains("ELM") || upper.contains("OBD") {
             self.chip_type = ChipType::Unknown;
-            self.elm_version = response.lines().find(|l| !l.is_empty()).unwrap_or("Unknown").trim().to_string();
+            self.elm_version = response
+                .lines()
+                .find(|l| !l.is_empty())
+                .unwrap_or("Unknown")
+                .trim()
+                .to_string();
         } else {
             self.chip_type = ChipType::Unknown;
             self.elm_version = "Unknown".to_string();
         }
 
-        dev_log::log_info("obd", &format!("Chip detected: {:?} — {}", self.chip_type, self.elm_version));
+        dev_log::log_info(
+            "obd",
+            &format!("Chip detected: {:?} — {}", self.chip_type, self.elm_version),
+        );
     }
 
     /// Configure adapter with optimal settings
     fn configure_adapter(&mut self) -> Result<(), String> {
-        self.send_command("ATE0")?;    // Echo off
-        self.send_command("ATL0")?;    // Linefeeds off
-        self.send_command("ATS1")?;    // Spaces on (easier parsing)
-        self.send_command("ATH0")?;    // Headers off (default)
+        self.send_command("ATE0")?; // Echo off
+        self.send_command("ATL0")?; // Linefeeds off
+        self.send_command("ATS1")?; // Spaces on (easier parsing)
+        self.send_command("ATH0")?; // Headers off (default)
         self.headers_on = false;
 
         // Adaptive timing — depends on chip type
@@ -243,7 +305,7 @@ impl Elm327Connection {
                 let _ = self.send_command("ATST 32"); // 50 × 4ms = 200ms (STN is fast)
             }
             ChipType::GenuineElm327 => {
-                let _ = self.send_command("ATAT1");   // Normal adaptive
+                let _ = self.send_command("ATAT1"); // Normal adaptive
                 let _ = self.send_command("ATST 64"); // 100 × 4ms = 400ms
             }
             ChipType::CloneV15 | ChipType::CloneV21 => {
@@ -299,11 +361,16 @@ impl Elm327Connection {
     /// Set CAN header for a specific ECU address (e.g. "7E0")
     pub fn set_ecu_header(&mut self, address: &str) -> Result<(), String> {
         // Validate address is strictly hex (3-8 chars) to prevent AT command injection via \r
-        if address.is_empty() || address.len() > 8 || !address.chars().all(|c| c.is_ascii_hexdigit()) {
+        if address.is_empty()
+            || address.len() > 8
+            || !address.chars().all(|c| c.is_ascii_hexdigit())
+        {
             return Err(format!("Invalid ECU address: {}", address));
         }
         if !self.headers_on {
-            self.set_headers(true);
+            if !self.set_headers(true) {
+                return Err("Failed to enable ELM headers".to_string());
+            }
         }
         self.send_command(&format!("ATSH{}", address))?;
         Ok(())
@@ -311,8 +378,12 @@ impl Elm327Connection {
 
     /// Reset headers to broadcast mode
     pub fn reset_headers(&mut self) -> Result<(), String> {
-        self.send_command("ATSH7DF")?;
-        self.set_headers(false);
+        if matches!(self.protocol_num.as_str(), "6" | "7" | "8" | "9") {
+            self.send_command("ATSH7DF")?;
+        }
+        if !self.set_headers(false) {
+            return Err("Failed to disable ELM headers".to_string());
+        }
         Ok(())
     }
 
@@ -320,7 +391,10 @@ impl Elm327Connection {
     fn read_voltage(&mut self) {
         if let Ok(response) = self.send_command("ATRV") {
             // Response like "12.6V" or "14.1V"
-            let cleaned: String = response.chars().filter(|c| c.is_ascii_digit() || *c == '.').collect();
+            let cleaned: String = response
+                .chars()
+                .filter(|c| c.is_ascii_digit() || *c == '.')
+                .collect();
             if let Ok(v) = cleaned.parse::<f64>() {
                 if (6.0..=20.0).contains(&v) {
                     self.voltage = Some(v);

@@ -1,7 +1,7 @@
+use super::{ChipType, Elm327Connection};
+use crate::obd::dev_log;
 use std::time::Duration;
 use tracing::{info, warn};
-use crate::obd::dev_log;
-use super::{Elm327Connection, ChipType};
 
 impl Elm327Connection {
     // ==================== INIT STRATEGIES ====================
@@ -65,7 +65,7 @@ impl Elm327Connection {
         self.configure_adapter()?;
         // Verify adapter responds — some clones appear to init but are actually unresponsive
         match self.send_command_timeout("ATRV", 2000) {
-            Ok(r) if r.contains('.') || r.contains("OK") => {},
+            Ok(r) if r.contains('.') || r.contains("OK") => {}
             _ => return Err("Clone adapter did not respond to validation (ATRV)".to_string()),
         }
         self.configure_can_flow_control()?;
@@ -96,8 +96,8 @@ impl Elm327Connection {
         }
 
         // Use aggressive adaptive timing + max timeout
-        let _ = self.send_command("ATAT2");   // 2× adaptive timing
-        let _ = self.send_command("ATST FF");  // Max timeout (255 × 4ms = 1.02s)
+        let _ = self.send_command("ATAT2"); // 2× adaptive timing
+        let _ = self.send_command("ATST FF"); // Max timeout (255 × 4ms = 1.02s)
 
         std::thread::sleep(Duration::from_millis(300));
         self.configure_adapter()?;
@@ -112,7 +112,7 @@ impl Elm327Connection {
 
         // Only essential commands
         let _ = self.send_command_timeout("ATE0", 2000);
-        let _ = self.send_command("ATS1");   // Spaces on (easier parsing)
+        let _ = self.send_command("ATS1"); // Spaces on (easier parsing)
         self.elm_version = "Minimal".to_string();
         self.chip_type = ChipType::Unknown;
 

@@ -168,7 +168,10 @@ impl SafetyGuard {
     /// Validate hex command string — supports both "2E F1 90" and "2EF190" formats
     pub fn validate_hex(command: &str) -> Result<(), String> {
         if command.len() > Self::MAX_COMMAND_LENGTH {
-            return Err(format!("Command exceeds {} characters", Self::MAX_COMMAND_LENGTH));
+            return Err(format!(
+                "Command exceeds {} characters",
+                Self::MAX_COMMAND_LENGTH
+            ));
         }
         if command.chars().any(|character| character.is_control()) {
             return Err("Control characters are not allowed".to_string());
@@ -188,8 +191,7 @@ impl SafetyGuard {
                 if part.len() != 2 {
                     return Err(format!("Invalid hex byte: '{}'", part));
                 }
-                u8::from_str_radix(part, 16)
-                    .map_err(|_| format!("Invalid hex: '{}'", part))?;
+                u8::from_str_radix(part, 16).map_err(|_| format!("Invalid hex: '{}'", part))?;
             }
         } else {
             // Unspaced format: validate all chars are hex and length is even
@@ -197,11 +199,21 @@ impl SafetyGuard {
                 return Err(format!("Odd-length hex string: '{}'", trimmed));
             }
             for i in (0..trimmed.len()).step_by(2) {
-                u8::from_str_radix(&trimmed[i..i+2], 16)
-                    .map_err(|_| format!("Invalid hex at position {}: '{}'", i, &trimmed[i..i+2]))?;
+                u8::from_str_radix(&trimmed[i..i + 2], 16).map_err(|_| {
+                    format!("Invalid hex at position {}: '{}'", i, &trimmed[i..i + 2])
+                })?;
             }
         }
         Ok(())
+    }
+
+    pub fn normalize_hex(command: &str) -> Result<String, String> {
+        Self::validate_hex(command)?;
+        Ok(command
+            .chars()
+            .filter(|character| character.is_ascii_hexdigit())
+            .map(|character| character.to_ascii_uppercase())
+            .collect())
     }
 }
 
@@ -223,15 +235,42 @@ mod tests {
         assert_eq!(SafetyGuard::check_command("08"), RiskLevel::Blocked);
 
         // Always blocked in advanced mode too
-        assert_eq!(SafetyGuard::check_command_advanced("11"), RiskLevel::Blocked);
-        assert_eq!(SafetyGuard::check_command_advanced("27"), RiskLevel::Blocked);
-        assert_eq!(SafetyGuard::check_command_advanced("28"), RiskLevel::Blocked);
-        assert_eq!(SafetyGuard::check_command_advanced("34"), RiskLevel::Blocked);
-        assert_eq!(SafetyGuard::check_command_advanced("35"), RiskLevel::Blocked);
-        assert_eq!(SafetyGuard::check_command_advanced("36"), RiskLevel::Blocked);
-        assert_eq!(SafetyGuard::check_command_advanced("37"), RiskLevel::Blocked);
-        assert_eq!(SafetyGuard::check_command_advanced("3D"), RiskLevel::Blocked);
-        assert_eq!(SafetyGuard::check_command_advanced("08"), RiskLevel::Blocked);
+        assert_eq!(
+            SafetyGuard::check_command_advanced("11"),
+            RiskLevel::Blocked
+        );
+        assert_eq!(
+            SafetyGuard::check_command_advanced("27"),
+            RiskLevel::Blocked
+        );
+        assert_eq!(
+            SafetyGuard::check_command_advanced("28"),
+            RiskLevel::Blocked
+        );
+        assert_eq!(
+            SafetyGuard::check_command_advanced("34"),
+            RiskLevel::Blocked
+        );
+        assert_eq!(
+            SafetyGuard::check_command_advanced("35"),
+            RiskLevel::Blocked
+        );
+        assert_eq!(
+            SafetyGuard::check_command_advanced("36"),
+            RiskLevel::Blocked
+        );
+        assert_eq!(
+            SafetyGuard::check_command_advanced("37"),
+            RiskLevel::Blocked
+        );
+        assert_eq!(
+            SafetyGuard::check_command_advanced("3D"),
+            RiskLevel::Blocked
+        );
+        assert_eq!(
+            SafetyGuard::check_command_advanced("08"),
+            RiskLevel::Blocked
+        );
     }
 
     #[test]
@@ -260,17 +299,32 @@ mod tests {
         assert_eq!(SafetyGuard::check_command("31"), RiskLevel::Blocked);
 
         // But allowed (as Caution) in advanced mode
-        assert_eq!(SafetyGuard::check_command_advanced("2E"), RiskLevel::Caution);
-        assert_eq!(SafetyGuard::check_command_advanced("2F"), RiskLevel::Caution);
-        assert_eq!(SafetyGuard::check_command_advanced("30"), RiskLevel::Caution);
-        assert_eq!(SafetyGuard::check_command_advanced("31"), RiskLevel::Caution);
+        assert_eq!(
+            SafetyGuard::check_command_advanced("2E"),
+            RiskLevel::Caution
+        );
+        assert_eq!(
+            SafetyGuard::check_command_advanced("2F"),
+            RiskLevel::Caution
+        );
+        assert_eq!(
+            SafetyGuard::check_command_advanced("30"),
+            RiskLevel::Caution
+        );
+        assert_eq!(
+            SafetyGuard::check_command_advanced("31"),
+            RiskLevel::Caution
+        );
     }
 
     #[test]
     fn test_mode04_clear_dtc() {
         // Mode 04 (Clear DTCs) should be Caution in normal mode
         assert_eq!(SafetyGuard::check_command("04"), RiskLevel::Caution);
-        assert_eq!(SafetyGuard::check_command_advanced("04"), RiskLevel::Caution);
+        assert_eq!(
+            SafetyGuard::check_command_advanced("04"),
+            RiskLevel::Caution
+        );
     }
 
     #[test]
@@ -319,8 +373,14 @@ mod tests {
         assert_eq!(SafetyGuard::check_command("ATWS"), RiskLevel::Blocked);
 
         // Should be blocked in advanced mode too
-        assert_eq!(SafetyGuard::check_command_advanced("ATMA"), RiskLevel::Blocked);
-        assert_eq!(SafetyGuard::check_command_advanced("ATWS"), RiskLevel::Blocked);
+        assert_eq!(
+            SafetyGuard::check_command_advanced("ATMA"),
+            RiskLevel::Blocked
+        );
+        assert_eq!(
+            SafetyGuard::check_command_advanced("ATWS"),
+            RiskLevel::Blocked
+        );
     }
 
     #[test]

@@ -1,11 +1,11 @@
-use tauri::command;
+use super::dashboard_did::decode_did_value;
+use super::dashboard_discovery::{DISCOVERED_DIDS, DISCOVERED_PIDS};
+use crate::commands::connection::{is_demo, with_real_connection};
 use crate::models::PidValue;
 use crate::obd::demo::DemoConnection;
-use crate::obd::pid;
 use crate::obd::dev_log;
-use crate::commands::connection::{is_demo, with_real_connection};
-use super::dashboard_did::decode_did_value;
-use super::dashboard_discovery::{DISCOVERED_PIDS, DISCOVERED_DIDS};
+use crate::obd::pid;
+use tauri::command;
 
 use std::collections::{HashMap, VecDeque};
 use std::sync::Mutex;
@@ -51,7 +51,12 @@ fn query_all_pids(
     definitions: &[crate::models::PidDefinition],
     fail_snapshot: &HashMap<u16, u32>,
     supported_pids: &[u8],
-) -> (Vec<(u16, String, String, Vec<u8>)>, Vec<(u16, bool)>, usize, usize) {
+) -> (
+    Vec<(u16, String, String, Vec<u8>)>,
+    Vec<(u16, bool)>,
+    usize,
+    usize,
+) {
     let has_pid_bitmap = !supported_pids.is_empty();
     let mut raw_results: Vec<(u16, String, String, Vec<u8>)> = Vec::new();
     let mut fail_updates: Vec<(u16, bool)> = Vec::new();
@@ -63,6 +68,9 @@ fn query_all_pids(
         let mut batch_timeouts = 0;
 
         for def in definitions {
+            if super::connection::is_obd_cancelled() {
+                break;
+            }
             let pid_u8 = def.pid as u8;
 
             if has_pid_bitmap && !supported_pids.contains(&pid_u8) {
@@ -83,7 +91,9 @@ fn query_all_pids(
                     batch_results.push((def.pid, true, bytes));
                 }
                 Err(e) => {
-                    if e.contains("Timeout") { batch_timeouts += 1; }
+                    if e.contains("Timeout") {
+                        batch_timeouts += 1;
+                    }
                     batch_results.push((def.pid, false, vec![]));
                 }
             }
@@ -134,14 +144,24 @@ fn decode_and_record_history(
         if let Some(value) = pid::decode_pid(*pid, bytes) {
             let hist = history.entry(*pid).or_insert_with(VecDeque::new);
             hist.push_back(value);
-            if hist.len() > 120 { hist.pop_front(); }
+            if hist.len() > 120 {
+                hist.pop_front();
+            }
 
             // Use definition min/max as bounds, then narrow to observed range
             let def = definitions.iter().find(|d| d.pid == *pid);
             let hist_min = hist.iter().cloned().fold(f64::INFINITY, f64::min);
             let hist_max = hist.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
-            let min = if let Some(d) = def { d.min.min(hist_min) } else { hist_min };
-            let max = if let Some(d) = def { d.max.max(hist_max) } else { hist_max };
+            let min = if let Some(d) = def {
+                d.min.min(hist_min)
+            } else {
+                hist_min
+            };
+            let max = if let Some(d) = def {
+                d.max.max(hist_max)
+            } else {
+                hist_max
+            };
 
             results.push(PidValue {
                 pid: *pid,
@@ -166,9 +186,7 @@ fn decode_and_record_history(
 /// Get current PID data — real or demo
 #[command]
 pub async fn get_pid_data() -> Vec<PidValue> {
-    match tokio::task::spawn_blocking(|| {
-        get_pid_data_inner()
-    }).await {
+    match tokio::task::spawn_blocking(|| get_pid_data_inner()).await {
         Ok(data) => data,
         Err(e) => {
             dev_log::log_error("dashboard", &format!("get_pid_data task failed: {}", e));
@@ -184,7 +202,13 @@ fn get_pid_data_inner() -> Vec<PidValue> {
         if demo.is_none() {
             *demo = Some(DemoConnection::new());
         }
-        return demo.as_mut().map(|d| { d.refresh_lang(); d.get_pid_data() }).unwrap_or_default();
+        return demo
+            .as_mut()
+            .map(|d| {
+                d.refresh_lang();
+                d.get_pid_data()
+            })
+            .unwrap_or_default();
     }
 
     let _guard = match super::connection::OBDBusyGuard::try_acquire() {
@@ -199,7 +223,6 @@ fn get_pid_data_inner() -> Vec<PidValue> {
 }
 
 fn get_pid_data_real_inner() -> Vec<PidValue> {
-
     dev_log::log_debug("dashboard", "Real mode: querying live PID data");
 
     let lang = super::connection::get_lang();
@@ -224,14 +247,17 @@ fn get_pid_data_real_inner() -> Vec<PidValue> {
             pids.sort_unstable();
             pids.dedup();
             Ok(pids)
-        }).unwrap_or_default()
+        })
+        .unwrap_or_default()
     } else {
         supported_pids
     };
 
     let candidates: Vec<_> = definitions
         .iter()
-        .filter(|definition| supported_pids.is_empty() || supported_pids.contains(&(definition.pid as u8)))
+        .filter(|definition| {
+            supported_pids.is_empty() || supported_pids.contains(&(definition.pid as u8))
+        })
         .cloned()
         .collect();
     let poll_definitions = rotating_window(&candidates, &PID_POLL_CURSOR, STANDARD_PIDS_PER_CYCLE);
@@ -242,10 +268,15 @@ fn get_pid_data_real_inner() -> Vec<PidValue> {
 
     let results = decode_and_record_history(&raw_results, &definitions, now);
 
-    dev_log::log_debug("dashboard", &format!(
-        "PID poll: {} ok, {} failed, {} skipped (bitmap/blacklist)",
-        raw_results.len(), fail_count, skip_count
-    ));
+    dev_log::log_debug(
+        "dashboard",
+        &format!(
+            "PID poll: {} ok, {} failed, {} skipped (bitmap/blacklist)",
+            raw_results.len(),
+            fail_count,
+            skip_count
+        ),
+    );
     results
 }
 
@@ -254,19 +285,23 @@ fn get_pid_data_real_inner() -> Vec<PidValue> {
 pub fn get_all_pids() -> Vec<crate::models::PidDefinition> {
     let lang = super::connection::get_lang();
     let pids = pid::get_pid_definitions(&lang);
-    dev_log::log_debug("dashboard", &format!("Retrieved {} PID definitions", pids.len()));
+    dev_log::log_debug(
+        "dashboard",
+        &format!("Retrieved {} PID definitions", pids.len()),
+    );
     pids
 }
 
 /// Get extended PID data including manufacturer-specific DIDs
 #[command]
 pub async fn get_pid_data_extended(manufacturer: String) -> Vec<PidValue> {
-    match tokio::task::spawn_blocking(move || {
-        get_pid_data_extended_inner(manufacturer)
-    }).await {
+    match tokio::task::spawn_blocking(move || get_pid_data_extended_inner(manufacturer)).await {
         Ok(data) => data,
         Err(e) => {
-            dev_log::log_error("dashboard", &format!("get_pid_data_extended task failed: {}", e));
+            dev_log::log_error(
+                "dashboard",
+                &format!("get_pid_data_extended task failed: {}", e),
+            );
             Vec::new()
         }
     }
@@ -274,7 +309,10 @@ pub async fn get_pid_data_extended(manufacturer: String) -> Vec<PidValue> {
 
 fn get_pid_data_extended_inner(manufacturer: String) -> Vec<PidValue> {
     if is_demo() || manufacturer.is_empty() {
-        dev_log::log_debug("dashboard", "Extended polling skipped: demo mode or empty manufacturer");
+        dev_log::log_debug(
+            "dashboard",
+            "Extended polling skipped: demo mode or empty manufacturer",
+        );
         return get_pid_data_inner();
     }
 
@@ -287,7 +325,10 @@ fn get_pid_data_extended_inner(manufacturer: String) -> Vec<PidValue> {
     };
     let mut results = get_pid_data_real_inner();
 
-    dev_log::log_info("dashboard", &format!("Extended polling for manufacturer: {}", manufacturer));
+    dev_log::log_info(
+        "dashboard",
+        &format!("Extended polling for manufacturer: {}", manufacturer),
+    );
 
     // Use discovered DIDs if available, else fallback to full manufacturer list
     let dids: Vec<(String, String)> = {
@@ -297,7 +338,10 @@ fn get_pid_data_extended_inner(manufacturer: String) -> Vec<PidValue> {
             None => Vec::new(),
         }
     };
-    dev_log::log_debug("dashboard", &format!("Polling {} DIDs for {}", dids.len(), manufacturer));
+    dev_log::log_debug(
+        "dashboard",
+        &format!("Polling {} DIDs for {}", dids.len(), manufacturer),
+    );
 
     let now = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -312,12 +356,13 @@ fn get_pid_data_extended_inner(manufacturer: String) -> Vec<PidValue> {
     }
 
     // Step 2: Query DIDs — single CONNECTION lock for entire batch
-    let mut did_results: Vec<(u16, String, Vec<u8>)> = Vec::new();
+    let mut did_results: Vec<(u16, String, String, Vec<u8>)> = Vec::new();
     let mut fail_updates: Vec<(u16, bool)> = Vec::new();
 
     // Poll a bounded rotating window so a large catalog cannot monopolize the bus.
     let did_window = rotating_window(&dids, &DID_POLL_CURSOR, MANUFACTURER_DIDS_PER_CYCLE);
-    let parsed_dids: Vec<(u16, &str, &str)> = did_window.iter()
+    let parsed_dids: Vec<(u16, &str, &str)> = did_window
+        .iter()
         .filter_map(|(did_hex, did_name)| {
             let did_id = u16::from_str_radix(did_hex, 16).ok()?;
             let _previous_failures = fail_snapshot.get(&did_id).copied().unwrap_or(0);
@@ -330,6 +375,9 @@ fn get_pid_data_extended_inner(manufacturer: String) -> Vec<PidValue> {
     let _ = with_real_connection(|conn| {
         let mut current_header = None;
         for &(did_id, did_name, header) in &parsed_dids {
+            if super::connection::is_obd_cancelled() {
+                break;
+            }
             if current_header != Some(header) {
                 conn.set_ecu_header(header)?;
                 current_header = Some(header);
@@ -337,7 +385,7 @@ fn get_pid_data_extended_inner(manufacturer: String) -> Vec<PidValue> {
             match conn.query_did(did_id) {
                 Ok(bytes) => {
                     fail_updates.push((did_id, true));
-                    did_results.push((did_id, did_name.to_string(), bytes));
+                    did_results.push((did_id, did_name.to_string(), header.to_string(), bytes));
                 }
                 Err(_) => {
                     fail_updates.push((did_id, false));
@@ -366,16 +414,20 @@ fn get_pid_data_extended_inner(manufacturer: String) -> Vec<PidValue> {
         let mut cache_guard = DID_INFO_CACHE.lock().unwrap_or_else(|e| e.into_inner());
         let cache = cache_guard.get_or_insert_with(HashMap::new);
         let initial_size = cache.len();
-        for &(did_id, _, _) in &parsed_dids {
-            let did_hex = format!("{:04X}", did_id);
-            if !cache.contains_key(&did_hex) {
-                if let Some(info) = super::database::get_did_info_sync(&did_hex, &manufacturer) {
-                    cache.insert(did_hex, info);
-                }
-            }
-        }
+        let missing: Vec<String> = parsed_dids
+            .iter()
+            .map(|(did_id, _, _)| format!("{did_id:04X}"))
+            .filter(|did| !cache.contains_key(did))
+            .collect();
+        cache.extend(super::database::get_did_info_batch_sync(
+            &missing,
+            &manufacturer,
+        ));
         if cache.len() != initial_size {
-            dev_log::log_info("dashboard", &format!("DID info cache contains {} entries from DB", cache.len()));
+            dev_log::log_info(
+                "dashboard",
+                &format!("DID info cache contains {} entries from DB", cache.len()),
+            );
         }
     }
 
@@ -391,25 +443,37 @@ fn get_pid_data_extended_inner(manufacturer: String) -> Vec<PidValue> {
         let mut history_guard = PID_HISTORY.lock().unwrap_or_else(|e| e.into_inner());
         let history = history_guard.get_or_insert_with(HashMap::new);
 
-        for (did_id, did_name, response_bytes) in &did_results {
+        for (did_id, did_name, request_header, response_bytes) in &did_results {
             // Format hex once per DID
             let did_hex = format!("{:04X}", did_id);
             let db_info = cache.get(&did_hex);
 
             // Choose best name: DB name (localized) > ecu_profiles name > fallback
-            let display_name = if let Some((name_en, name_fr, _ecu)) = db_info {
-                let name = if lang == "fr" && !name_fr.is_empty() { name_fr } else { name_en };
-                if !name.is_empty() { name.clone() } else { did_name.clone() }
+            let base_name = if let Some((name_en, name_fr, _ecu)) = db_info {
+                let name = if lang == "fr" && !name_fr.is_empty() {
+                    name_fr
+                } else {
+                    name_en
+                };
+                if !name.is_empty() {
+                    name.clone()
+                } else {
+                    did_name.clone()
+                }
             } else {
                 did_name.clone()
             };
+            let display_name = format!("{base_name} [ECU {request_header}]");
 
-            // Decode value with heuristic based on name
+            // Keep undocumented manufacturer data raw until an authoritative
+            // per-DID formula is available.
             let (value, unit) = decode_did_value(&response_bytes, &display_name);
 
             let hist = history.entry(*did_id).or_insert_with(VecDeque::new);
             hist.push_back(value);
-            if hist.len() > 120 { hist.pop_front(); }
+            if hist.len() > 120 {
+                hist.pop_front();
+            }
 
             let min = hist.iter().cloned().fold(f64::INFINITY, f64::min);
             let max = hist.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
@@ -429,7 +493,13 @@ fn get_pid_data_extended_inner(manufacturer: String) -> Vec<PidValue> {
     }
 
     let standard_count = results.len() - success_count.min(results.len());
-    dev_log::log_info("dashboard", &format!("Extended polling: {} standard PIDs + {} manufacturer DIDs", standard_count, success_count));
+    dev_log::log_info(
+        "dashboard",
+        &format!(
+            "Extended polling: {} standard PIDs + {} manufacturer DIDs",
+            standard_count, success_count
+        ),
+    );
 
     results
 }
@@ -479,8 +549,12 @@ pub fn clear_pid_history() {
         *demo_guard = None;
     }
 
-    *PID_POLL_CURSOR.lock().unwrap_or_else(|error| error.into_inner()) = 0;
-    *DID_POLL_CURSOR.lock().unwrap_or_else(|error| error.into_inner()) = 0;
+    *PID_POLL_CURSOR
+        .lock()
+        .unwrap_or_else(|error| error.into_inner()) = 0;
+    *DID_POLL_CURSOR
+        .lock()
+        .unwrap_or_else(|error| error.into_inner()) = 0;
 
     dev_log::log_info("connection", "PID history and discovery data cleared");
 }
@@ -495,11 +569,11 @@ pub async fn get_battery_voltage() -> Option<f64> {
         return None;
     }
     tokio::task::spawn_blocking(|| {
-        with_real_connection(|conn| {
-            Ok(conn.get_voltage())
-        }).unwrap_or(None)
-    }).await.unwrap_or(None)
+        let _guard = super::connection::OBDBusyGuard::try_acquire().ok()?;
+        with_real_connection(|conn| Ok(conn.get_voltage())).unwrap_or(None)
+    })
+    .await
+    .unwrap_or(None)
 }
 
 // get_discovery_progress and reset_discovered_params_inner moved to dashboard_discovery.rs
-

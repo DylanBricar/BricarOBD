@@ -1,12 +1,15 @@
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
 const CACHE_TTL_DAYS: u64 = 30;
+const CACHE_SCHEMA_VERSION: u32 = 2;
 
 /// VIN-based cache system for storing discovered PIDs, DIDs, and ECU addresses
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct VinCache {
+    #[serde(default)]
+    pub schema_version: u32,
     pub vin: String,
     pub supported_pids: Vec<u8>,
     pub supported_dids: Vec<(String, String)>, // (hex_id, name)
@@ -26,6 +29,7 @@ impl VinCache {
             .as_secs();
 
         Self {
+            schema_version: CACHE_SCHEMA_VERSION,
             vin,
             supported_pids: Vec::new(),
             supported_dids: Vec::new(),
@@ -94,16 +98,28 @@ pub fn load_cache(vin: &str) -> Option<VinCache> {
     let content = std::fs::read_to_string(&path).ok()?;
     let cache: VinCache = serde_json::from_str(&content).ok()?;
 
+    // Version 1 cached every timeout as a 30-day unsupported parameter. Do
+    // not carry that false-negative state into the corrected discovery logic.
+    if cache.schema_version != CACHE_SCHEMA_VERSION {
+        return None;
+    }
+
     // Validate that VIN matches after deserialization
     if cache.vin != vin {
         return None;
     }
 
     // Check TTL
-    let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_secs();
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs();
     let age_days = now.saturating_sub(cache.created_at) / 86400;
     if age_days > CACHE_TTL_DAYS {
-        crate::obd::dev_log::log_warn("vin_cache", &format!("VIN cache for {} is {} days old, refreshing", vin, age_days));
+        crate::obd::dev_log::log_warn(
+            "vin_cache",
+            &format!("VIN cache for {} is {} days old, refreshing", vin, age_days),
+        );
         return None;
     }
 
@@ -119,8 +135,7 @@ pub fn save_cache(cache: &VinCache) -> Result<(), String> {
     let json = serde_json::to_string_pretty(cache)
         .map_err(|e| format!("Failed to serialize cache: {}", e))?;
 
-    std::fs::write(&path, json)
-        .map_err(|e| format!("Failed to write cache: {}", e))?;
+    std::fs::write(&path, json).map_err(|e| format!("Failed to write cache: {}", e))?;
 
     Ok(())
 }
@@ -137,8 +152,7 @@ pub fn clear_cache(vin: &str) -> Result<(), String> {
     let path = cache_dir.join(format!("{}.json", filename));
 
     if path.exists() {
-        std::fs::remove_file(&path)
-            .map_err(|e| format!("Failed to delete cache: {}", e))?;
+        std::fs::remove_file(&path).map_err(|e| format!("Failed to delete cache: {}", e))?;
     }
 
     Ok(())
@@ -151,6 +165,7 @@ mod tests {
     #[test]
     fn test_vin_cache_new() {
         let cache = VinCache::new("VF3LCBHZ6JS000000".to_string());
+        assert_eq!(cache.schema_version, CACHE_SCHEMA_VERSION);
         assert_eq!(cache.vin, "VF3LCBHZ6JS000000");
         assert!(cache.supported_pids.is_empty());
         assert!(cache.supported_dids.is_empty());
@@ -207,10 +222,13 @@ mod tests {
 
     #[test]
     fn test_save_and_load_cache() {
-        let vin = format!("TEST_VIN_{}", std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_millis());
+        let vin = format!(
+            "TEST_VIN_{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_millis()
+        );
         let mut cache = VinCache::new(vin.clone());
         cache.supported_pids = vec![0x01, 0x05];
         cache.supported_dids = vec![("F190".to_string(), "VIN".to_string())];
@@ -227,10 +245,13 @@ mod tests {
 
     #[test]
     fn test_has_cache() {
-        let vin = format!("TEST_HAS_{}", std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_millis());
+        let vin = format!(
+            "TEST_HAS_{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_millis()
+        );
         assert!(!has_cache(&vin));
 
         let cache = VinCache::new(vin.clone());
@@ -242,10 +263,13 @@ mod tests {
 
     #[test]
     fn test_clear_cache() {
-        let vin = format!("TEST_CLEAR_{}", std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_millis());
+        let vin = format!(
+            "TEST_CLEAR_{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_millis()
+        );
         let cache = VinCache::new(vin.clone());
         if let Ok(()) = save_cache(&cache) {
             assert!(has_cache(&vin));
@@ -271,10 +295,13 @@ mod tests {
 
     #[test]
     fn test_cache_vin_validation() {
-        let vin = format!("TEST_VIN_MISMATCH_{}", std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_millis());
+        let vin = format!(
+            "TEST_VIN_MISMATCH_{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_millis()
+        );
         let cache = VinCache::new(vin.clone());
         if let Ok(()) = save_cache(&cache) {
             let loaded = load_cache("DIFFERENT_VIN");

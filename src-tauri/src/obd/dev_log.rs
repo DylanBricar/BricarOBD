@@ -1,15 +1,15 @@
-use std::sync::Mutex;
-use std::sync::atomic::{AtomicU64, Ordering::Relaxed};
+use serde::{Deserialize, Serialize};
 use std::collections::VecDeque;
 use std::io::Write;
-use serde::{Serialize, Deserialize};
+use std::sync::atomic::{AtomicU64, Ordering::Relaxed};
+use std::sync::Mutex;
 
 /// A single dev log entry
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LogEntry {
     pub timestamp: String,
-    pub level: String,    // "TX", "RX", "INFO", "WARN", "ERROR", "DEBUG"
-    pub source: String,   // "obd", "dtc", "ecu", "db", "ui", "safety"
+    pub level: String,  // "TX", "RX", "INFO", "WARN", "ERROR", "DEBUG"
+    pub source: String, // "obd", "dtc", "ecu", "db", "ui", "safety"
     pub message: String,
 }
 
@@ -105,7 +105,11 @@ fn push(entry: LogEntry) {
     // Buffer lock released — now write to file without holding it
     if let Ok(mut file_guard) = LOG_FILE.lock() {
         if let Some(ref mut file) = *file_guard {
-            let _ = writeln!(file, "[{}] {} {} — {}", file_entry.timestamp, file_entry.level, file_entry.source, file_entry.message);
+            let _ = writeln!(
+                file,
+                "[{}] {} {} — {}",
+                file_entry.timestamp, file_entry.level, file_entry.source, file_entry.message
+            );
         }
     }
 }
@@ -113,7 +117,10 @@ fn push(entry: LogEntry) {
 /// Get all logs (for the dev console)
 pub fn get_all_logs() -> Vec<LogEntry> {
     let guard = get_buffer();
-    guard.as_ref().map(|b| b.iter().cloned().collect()).unwrap_or_default()
+    guard
+        .as_ref()
+        .map(|b| b.iter().cloned().collect())
+        .unwrap_or_default()
 }
 
 /// Get logs since a given index (for incremental polling)
@@ -125,13 +132,9 @@ pub fn get_logs_since(since_index: usize) -> Vec<LogEntry> {
     } else {
         0
     };
-    guard.as_ref()
-        .map(|b| {
-            b.iter()
-                .skip(adjusted_index)
-                .cloned()
-                .collect()
-        })
+    guard
+        .as_ref()
+        .map(|b| b.iter().skip(adjusted_index).cloned().collect())
         .unwrap_or_default()
 }
 
@@ -158,7 +161,11 @@ pub fn init_log_file() {
 
         match std::fs::File::create(&path) {
             Ok(mut file) => {
-                let _ = writeln!(file, "BricarOBD Log Session Started — {}", chrono::Local::now());
+                let _ = writeln!(
+                    file,
+                    "BricarOBD Log Session Started — {}",
+                    chrono::Local::now()
+                );
                 let _ = writeln!(file, "---");
                 if let Ok(mut file_guard) = LOG_FILE.lock() {
                     *file_guard = Some(file);

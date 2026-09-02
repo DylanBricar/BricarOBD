@@ -11,6 +11,8 @@ function createRealPollFn(
   manufacturer: string,
   setPidData: React.Dispatch<React.SetStateAction<Map<number, PidValue>>>,
   pollInProgressRef: React.MutableRefObject<boolean>,
+  pollGenerationRef: React.MutableRefObject<number>,
+  generation: number,
 ) {
   return async () => {
     if (pollInProgressRef.current) return;
@@ -19,14 +21,19 @@ function createRealPollFn(
       const cmd = manufacturer ? "get_pid_data_extended" : "get_pid_data";
       const args = manufacturer ? { manufacturer } : {};
       const pids = await invoke<PidValue[]>(cmd, args);
-      if (pids.length === 0) return;
+      if (pids.length === 0 || pollGenerationRef.current !== generation) return;
       setPidData(prev => {
+        if (pollGenerationRef.current !== generation) return prev;
         const merged = new Map(prev);
         for (const p of pids) {
           if (p.history && p.history.length > 300) {
             p.history = p.history.slice(-300);
           }
           merged.set(p.pid, p);
+        }
+        const staleBefore = Date.now() - 30_000;
+        for (const [pid, value] of merged) {
+          if (value.timestamp < staleBefore) merged.delete(pid);
         }
         return merged;
       });
@@ -62,6 +69,7 @@ export function useVehicleData() {
   const pollingModeRef = useRef<"demo" | "real">("demo");
   const manufacturerRef = useRef("");
   const pollInProgressRef = useRef(false);
+  const pollGenerationRef = useRef(0);
   const isLoadingMode06Ref = useRef(false);
   const isLoadingFreezeFrameRef = useRef(false);
   const { t, i18n } = useTranslation();
@@ -97,6 +105,7 @@ export function useVehicleData() {
       clearInterval(intervalRef.current);
     }
     pollingModeRef.current = "demo";
+    const generation = ++pollGenerationRef.current;
     manufacturerRef.current = "";
     setIsPolling(true);
     setDtcsWithHistory(demoDtcs);
@@ -129,6 +138,7 @@ export function useVehicleData() {
     const pollFn = async () => {
       try {
         const data = await invoke<PidValue[]>("get_pid_data");
+        if (pollGenerationRef.current !== generation) return;
         setPidData(prev => {
           const merged = new Map(prev);
           for (const p of data) merged.set(p.pid, p);
@@ -149,6 +159,7 @@ export function useVehicleData() {
       clearInterval(intervalRef.current);
     }
     pollingModeRef.current = "real";
+    const generation = ++pollGenerationRef.current;
     manufacturerRef.current = manufacturer;
     setIsPolling(true);
 
@@ -167,7 +178,7 @@ export function useVehicleData() {
     }
 
     // Use shared poll function
-    const pollFn = createRealPollFn(manufacturer, setPidData, pollInProgressRef);
+    const pollFn = createRealPollFn(manufacturer, setPidData, pollInProgressRef, pollGenerationRef, generation);
 
     pollFn(); // First poll immediately
     intervalRef.current = window.setInterval(pollFn, intervalMs);
@@ -213,6 +224,7 @@ export function useVehicleData() {
   const pausePolling = useCallback(() => {
     devInfo("ui", "Polling paused");
     setIsPolling(false);
+    pollGenerationRef.current += 1;
     if (intervalRef.current) {
       clearInterval(intervalRef.current);
       intervalRef.current = null;
@@ -222,6 +234,8 @@ export function useVehicleData() {
   const stopPolling = useCallback(() => {
     devInfo("ui", "Polling stopped — clearing all vehicle data");
     setIsPolling(false);
+    pollGenerationRef.current += 1;
+    pollInProgressRef.current = false;
     if (intervalRef.current) {
       clearInterval(intervalRef.current);
       intervalRef.current = null;
@@ -246,12 +260,15 @@ export function useVehicleData() {
     if (pollingModeRef.current !== "demo" && pollingModeRef.current !== "real") return;
 
     if (pollingModeRef.current === "real") {
-      const pollFn = createRealPollFn(manufacturerRef.current, setPidData, pollInProgressRef);
+      const generation = ++pollGenerationRef.current;
+      const pollFn = createRealPollFn(manufacturerRef.current, setPidData, pollInProgressRef, pollGenerationRef, generation);
       intervalRef.current = window.setInterval(pollFn, intervalMs);
     } else {
+      const generation = ++pollGenerationRef.current;
       const pollFn = async () => {
         try {
           const data = await invoke<PidValue[]>("get_pid_data");
+          if (pollGenerationRef.current !== generation) return;
           setPidData(prev => {
             const merged = new Map(prev);
             for (const p of data) merged.set(p.pid, p);

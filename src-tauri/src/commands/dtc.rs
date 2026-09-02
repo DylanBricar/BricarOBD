@@ -1,10 +1,10 @@
-use tauri::command;
-use crate::models::{DtcCode, DtcStatus};
-use crate::obd::demo::DemoConnection;
-use crate::obd::dtc;
-use crate::obd::dev_log;
 use crate::commands::connection::{is_demo, with_real_connection};
 use crate::commands::OBDBusyGuard;
+use crate::models::{DtcCode, DtcStatus};
+use crate::obd::demo::DemoConnection;
+use crate::obd::dev_log;
+use crate::obd::dtc;
+use tauri::command;
 
 /// Read all DTCs — Mode 03 (active), Mode 07 (pending), Mode 0A (permanent) + UDS 0x19
 #[command]
@@ -71,22 +71,32 @@ pub async fn read_all_dtcs(lang: Option<String>) -> Vec<DtcCode> {
             };
 
             // UDS 0x19 02 FF — Read all DTCs by status mask
-            if let Ok(response) = with_real_connection(|conn| conn.send_command_timeout("1902FF", timeout_ms)) {
+            if let Ok(response) =
+                with_real_connection(|conn| conn.send_command_timeout("1902FF", timeout_ms))
+            {
                 if response.contains("59 02") || response.contains("5902") {
                     let uds_dtcs = parse_uds_dtc_response(&response, addr, lang);
                     if !uds_dtcs.is_empty() {
-                        dev_log::log_info("dtc", &format!("UDS 0x19 at {}: {} DTCs", addr, uds_dtcs.len()));
+                        dev_log::log_info(
+                            "dtc",
+                            &format!("UDS 0x19 at {}: {} DTCs", addr, uds_dtcs.len()),
+                        );
                         all_dtcs.extend(uds_dtcs);
                     }
                 }
             }
 
             // 0x19 0F FF — mirror memory DTCs
-            if let Ok(response) = with_real_connection(|conn| conn.send_command_timeout("190FFF", timeout_ms)) {
+            if let Ok(response) =
+                with_real_connection(|conn| conn.send_command_timeout("190FFF", timeout_ms))
+            {
                 if response.contains("59 0F") || response.contains("590F") {
                     let mirror_dtcs = parse_uds_dtc_response(&response, addr, lang);
                     if !mirror_dtcs.is_empty() {
-                        dev_log::log_info("dtc", &format!("UDS 0x19 0F at {}: {} mirror DTCs", addr, mirror_dtcs.len()));
+                        dev_log::log_info(
+                            "dtc",
+                            &format!("UDS 0x19 0F at {}: {} mirror DTCs", addr, mirror_dtcs.len()),
+                        );
                         for mut d in mirror_dtcs {
                             d.status = DtcStatus::Pending;
                             d.source = format!("UDS 0x19 0F ({})", addr);
@@ -106,13 +116,12 @@ pub async fn read_all_dtcs(lang: Option<String>) -> Vec<DtcCode> {
 
         // Second pass: if same code appears as both Active and Pending, keep only Active
         // A DTC cannot logically be "pending confirmation" if it's already confirmed/active
-        let active_codes: std::collections::HashSet<String> = all_dtcs.iter()
+        let active_codes: std::collections::HashSet<String> = all_dtcs
+            .iter()
             .filter(|d| d.status == DtcStatus::Active)
             .map(|d| d.code.clone())
             .collect();
-        all_dtcs.retain(|d| {
-            !(d.status == DtcStatus::Pending && active_codes.contains(&d.code))
-        });
+        all_dtcs.retain(|d| !(d.status == DtcStatus::Pending && active_codes.contains(&d.code)));
 
         // ====== Persist DTCs to database ======
         if !all_dtcs.is_empty() {
@@ -121,7 +130,13 @@ pub async fn read_all_dtcs(lang: Option<String>) -> Vec<DtcCode> {
             if let Err(e) = super::database::with_db(|db| {
                 db.execute_batch("BEGIN")?;
                 for dtc in &all_dtcs {
-                    if let Err(e) = db.save_dtc(&dtc.code, &dtc.description, &format!("{:?}", dtc.status), &dtc.source, &vin) {
+                    if let Err(e) = db.save_dtc(
+                        &dtc.code,
+                        &dtc.description,
+                        &format!("{:?}", dtc.status),
+                        &dtc.source,
+                        &vin,
+                    ) {
                         let _ = db.execute_batch("ROLLBACK");
                         return Err(e);
                     }
@@ -148,21 +163,37 @@ pub async fn read_all_dtcs(lang: Option<String>) -> Vec<DtcCode> {
             }
         }
 
-        dev_log::log_info("dtc", &format!("DTC scan complete: {} unique DTCs found", all_dtcs.len()));
+        dev_log::log_info(
+            "dtc",
+            &format!("DTC scan complete: {} unique DTCs found", all_dtcs.len()),
+        );
         tracing::info!("Read {} DTCs from vehicle", all_dtcs.len());
         all_dtcs
-    }).await.unwrap_or_default()
+    })
+    .await
+    .unwrap_or_default()
 }
 
 /// Read DTCs from a specific OBD mode with retry logic
-fn read_dtc_mode_with_retry(mode: &str, status: DtcStatus, source: &str, lang: &str) -> Result<Vec<DtcCode>, String> {
+fn read_dtc_mode_with_retry(
+    mode: &str,
+    status: DtcStatus,
+    source: &str,
+    lang: &str,
+) -> Result<Vec<DtcCode>, String> {
     for attempt in 0..2 {
         let response = match with_real_connection(|conn| conn.send_command_timeout(mode, 5000)) {
             Ok(r) => r,
             Err(e) => {
                 if attempt == 0 {
-                    dev_log::log_debug("dtc", &format!("Mode {} attempt 1 failed: {}, retrying...", mode, e));
-                    let _ = with_real_connection(|conn| { conn.tester_present(); Ok(()) });
+                    dev_log::log_debug(
+                        "dtc",
+                        &format!("Mode {} attempt 1 failed: {}, retrying...", mode, e),
+                    );
+                    let _ = with_real_connection(|conn| {
+                        conn.tester_present();
+                        Ok(())
+                    });
                     std::thread::sleep(std::time::Duration::from_millis(200));
                     continue;
                 }
@@ -192,7 +223,10 @@ fn parse_uds_dtc_response(response: &str, ecu_addr: &str, lang: &str) -> Vec<Dtc
 
     let data_start = if bytes.len() > 3 && bytes[0] == 0x59 {
         3
-    } else if let Some(pos) = bytes.windows(2).position(|w| w[0] == 0x59 && (w[1] == 0x02 || w[1] == 0x0F)) {
+    } else if let Some(pos) = bytes
+        .windows(2)
+        .position(|w| w[0] == 0x59 && (w[1] == 0x02 || w[1] == 0x0F))
+    {
         pos + 3
     } else {
         return dtcs;
@@ -232,7 +266,11 @@ fn parse_uds_dtc_response(response: &str, ecu_addr: &str, lang: &str) -> Vec<Dtc
             };
 
             dtcs.push(DtcCode {
-                code: if full_code.ends_with("-00") { code } else { full_code },
+                code: if full_code.ends_with("-00") {
+                    code
+                } else {
+                    full_code
+                },
                 description,
                 status,
                 source: format!("UDS 0x19 ({})", ecu_addr),
@@ -251,18 +289,28 @@ fn parse_uds_dtc_response(response: &str, ecu_addr: &str, lang: &str) -> Vec<Dtc
 /// Export DTCs to JSON or text
 #[command]
 pub fn export_dtcs(dtcs: Vec<DtcCode>, format: String) -> Result<String, String> {
-    dev_log::log_info("dtc", &format!("Exporting {} DTCs as {}", dtcs.len(), format));
+    dev_log::log_info(
+        "dtc",
+        &format!("Exporting {} DTCs as {}", dtcs.len(), format),
+    );
     match format.as_str() {
         "json" => serde_json::to_string_pretty(&dtcs).map_err(|e| format!("Export failed: {}", e)),
-        "text" => {
-            Ok(dtcs.iter()
-                .map(|d| format!("{} - {} [{}] ({:?})", d.code, d.description, d.source, d.status))
-                .collect::<Vec<_>>()
-                .join("\n"))
-        }
+        "text" => Ok(dtcs
+            .iter()
+            .map(|d| {
+                format!(
+                    "{} - {} [{}] ({:?})",
+                    d.code, d.description, d.source, d.status
+                )
+            })
+            .collect::<Vec<_>>()
+            .join("\n")),
         _ => {
             dev_log::log_warn("dtc", &format!("Unsupported export format: {}", format));
-            Err(crate::commands::connection::err_msg("Format non supporté", "Unsupported format"))
+            Err(crate::commands::connection::err_msg(
+                "Format non supporté",
+                "Unsupported format",
+            ))
         }
     }
 }

@@ -1,5 +1,5 @@
-use crate::obd::dev_log;
 use super::Elm327Connection;
+use crate::obd::dev_log;
 
 impl Elm327Connection {
     // ==================== SUPPORTED PID DISCOVERY ====================
@@ -32,8 +32,8 @@ impl Elm327Connection {
         }
 
         for base in [0x60u8, 0x80, 0xA0, 0xC0, 0xE0] {
-            let continuation_supported = self.supported_pids.contains(&base)
-                || self.supported_pids_ext.contains(&base);
+            let continuation_supported =
+                self.supported_pids.contains(&base) || self.supported_pids_ext.contains(&base);
             if !continuation_supported {
                 break;
             }
@@ -48,10 +48,14 @@ impl Elm327Connection {
         self.supported_pids_ext.sort();
         self.supported_pids_ext.dedup();
 
-        dev_log::log_info("obd", &format!(
-            "Supported PIDs: {} standard (0x01-0x60), {} extended (0x61+)",
-            self.supported_pids.len(), self.supported_pids_ext.len()
-        ));
+        dev_log::log_info(
+            "obd",
+            &format!(
+                "Supported PIDs: {} standard (0x01-0x60), {} extended (0x61+)",
+                self.supported_pids.len(),
+                self.supported_pids_ext.len()
+            ),
+        );
     }
 
     /// Parse supported PIDs bitmask from any "41 XX" response
@@ -72,7 +76,10 @@ impl Elm327Connection {
         for line in response.lines().filter(|line| line.contains(prefix)) {
             let tokens: Vec<&str> = line.split_whitespace().collect();
             let Some(position) = tokens.windows(prefix_tokens.len()).position(|window| {
-                window.iter().zip(&prefix_tokens).all(|(left, right)| left.eq_ignore_ascii_case(right))
+                window
+                    .iter()
+                    .zip(&prefix_tokens)
+                    .all(|(left, right)| left.eq_ignore_ascii_case(right))
             }) else {
                 continue;
             };
@@ -94,7 +101,9 @@ impl Elm327Connection {
                 if data_start + 8 <= clean.len() {
                     let bytes: Vec<u8> = (0..8)
                         .step_by(2)
-                        .filter_map(|i| u8::from_str_radix(&clean[data_start+i..data_start+i+2], 16).ok())
+                        .filter_map(|i| {
+                            u8::from_str_radix(&clean[data_start + i..data_start + i + 2], 16).ok()
+                        })
                         .collect();
                     Self::decode_bitmap(&bytes, base, &mut pids);
                 }
@@ -121,7 +130,8 @@ impl Elm327Connection {
 
     /// Check if a PID is supported by the vehicle (binary search on sorted vecs)
     pub fn is_pid_supported(&self, pid: u8) -> bool {
-        self.supported_pids.binary_search(&pid).is_ok() || self.supported_pids_ext.binary_search(&pid).is_ok()
+        self.supported_pids.binary_search(&pid).is_ok()
+            || self.supported_pids_ext.binary_search(&pid).is_ok()
     }
 }
 
@@ -192,11 +202,7 @@ mod tests {
 
     #[test]
     fn test_pid_bitmap_parsing_with_can_header() {
-        let pids = Elm327Connection::parse_pid_bitmap(
-            "7E8 06 41 00 80 00 00 00",
-            "41 00",
-            0x00,
-        );
+        let pids = Elm327Connection::parse_pid_bitmap("7E8 06 41 00 80 00 00 00", "41 00", 0x00);
         assert_eq!(pids, vec![0x01]);
     }
 
@@ -210,7 +216,9 @@ mod tests {
             if data_start + 8 <= clean.len() {
                 let bytes: Vec<u8> = (0..8)
                     .step_by(2)
-                    .filter_map(|i| u8::from_str_radix(&clean[data_start+i..data_start+i+2], 16).ok())
+                    .filter_map(|i| {
+                        u8::from_str_radix(&clean[data_start + i..data_start + i + 2], 16).ok()
+                    })
                     .collect();
                 assert_eq!(bytes.len(), 4);
             }

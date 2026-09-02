@@ -1,6 +1,6 @@
-use std::time::Duration;
-use crate::obd::dev_log;
 use super::Elm327Connection;
+use crate::obd::dev_log;
+use std::time::Duration;
 
 impl Elm327Connection {
     // ==================== KEEP-ALIVE / HEALTH ====================
@@ -29,10 +29,13 @@ impl Elm327Connection {
 
         // If too many errors, force disconnect to prevent infinite retry loops
         if self.consecutive_errors >= Self::MAX_CONSECUTIVE_ERRORS {
-            dev_log::log_error("obd", &format!(
-                "Connection dead: {} consecutive errors — forcing disconnect",
-                self.consecutive_errors
-            ));
+            dev_log::log_error(
+                "obd",
+                &format!(
+                    "Connection dead: {} consecutive errors — forcing disconnect",
+                    self.consecutive_errors
+                ),
+            );
         }
 
         false
@@ -47,7 +50,13 @@ impl Elm327Connection {
     /// Guard timeout is 15 seconds, but individual serial I/O operations add their own timeouts,
     /// so actual worst-case recovery time can reach ~25 seconds.
     pub fn attempt_recovery(&mut self) -> Result<(), String> {
-        dev_log::log_warn("obd", &format!("Attempting recovery (consecutive errors: {})", self.consecutive_errors));
+        dev_log::log_warn(
+            "obd",
+            &format!(
+                "Attempting recovery (consecutive errors: {})",
+                self.consecutive_errors
+            ),
+        );
 
         let recovery_start = std::time::Instant::now();
         let recovery_timeout = Duration::from_secs(15);
@@ -100,7 +109,12 @@ impl Elm327Connection {
         if let Ok(response) = self.send_command_timeout("0100", 8000) {
             if self.check_valid_pid_response(&response, "41 00") {
                 let proto = self.send_command("ATDPN").unwrap_or_default();
-                self.protocol_num = proto.trim().chars().last().map(|c| c.to_string()).unwrap_or_default();
+                self.protocol_num = proto
+                    .trim()
+                    .chars()
+                    .last()
+                    .map(|c| c.to_string())
+                    .unwrap_or_default();
                 self.protocol = Self::decode_protocol(&proto);
                 self.consecutive_errors = 0;
                 dev_log::log_info("obd", "Recovery via re-detect successful");

@@ -1,7 +1,7 @@
-pub mod obd;
-pub mod db;
 pub mod commands;
+pub mod db;
 pub mod models;
+pub mod obd;
 
 use commands::*;
 use tauri::Manager;
@@ -15,33 +15,61 @@ pub fn run() {
     obd::dev_log::init_log_file();
 
     tauri::Builder::default()
-        .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())
         .setup(|app| {
             // Auto-initialize the SQLite database at app startup
-            let resource_dir = app.path().resource_dir()
+            let resource_dir = app
+                .path()
+                .resource_dir()
                 .unwrap_or_else(|_| std::path::PathBuf::from("."));
+            let app_data_dir = app
+                .path()
+                .app_data_dir()
+                .map_err(|error| format!("Unable to resolve app data directory: {error}"))?;
+            let user_db_path = app_data_dir.join("bricarobd-user.db");
 
             // Try multiple paths to find the DB
             let possible_paths = vec![
                 resource_dir.join("data").join("bricarobd.db"),
                 resource_dir.join("bricarobd.db"),
-                std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("data").join("bricarobd.db"),
+                std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+                    .join("data")
+                    .join("bricarobd.db"),
             ];
 
+            let mut database_initialized = false;
+            let mut last_database_error = None;
             for db_path in &possible_paths {
                 if db_path.exists() {
-                    match database::init_database_internal(db_path) {
+                    match database::init_database_internal(db_path, &user_db_path) {
                         Ok(stats) => {
-                            tracing::info!("Database auto-initialized: {:?} from {}", stats, db_path.display());
+                            tracing::info!(
+                                "Database auto-initialized: {:?} from {}",
+                                stats,
+                                db_path.display()
+                            );
+                            database_initialized = true;
                             break;
                         }
                         Err(e) => {
                             tracing::warn!("Failed to init DB from {}: {}", db_path.display(), e);
+                            last_database_error = Some(e);
                         }
                     }
                 }
+            }
+
+            if !database_initialized {
+                let reason = last_database_error.unwrap_or_else(|| {
+                    "operations database resource was not found in any expected location"
+                        .to_string()
+                });
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::NotFound,
+                    format!("BricarOBD cannot start: {reason}"),
+                )
+                .into());
             }
 
             Ok(())

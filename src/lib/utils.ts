@@ -11,8 +11,9 @@ export function clamp(value: number, min: number, max: number): number {
 
 export function escapeCSV(value: string | number): string {
   const str = String(value);
-  const escaped = str.replace(/"/g, '""');
-  if (/[,"\n\r]/.test(str) || /^[=+\-@\t\r]/.test(str)) {
+  const neutralized = /^[=+\-@\t\r]/.test(str) ? `'${str}` : str;
+  const escaped = neutralized.replace(/"/g, '""');
+  if (/[,"\n\r]/.test(str) || neutralized !== str) {
     return `"${escaped}"`;
   }
   return escaped;

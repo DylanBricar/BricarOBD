@@ -1,10 +1,8 @@
+use bricarobd_lib::commands::ecu_scan::{get_ecu_probes, is_valid_ecu_response};
 use bricarobd_lib::models::DtcStatus;
 use bricarobd_lib::obd::dtc::parse_dtc_response;
-use bricarobd_lib::obd::ecu_profiles::{
-    get_did_definitions_for_manufacturer, parse_did_key,
-};
+use bricarobd_lib::obd::ecu_profiles::{get_did_definitions_for_manufacturer, parse_did_key};
 use bricarobd_lib::obd::safety::SafetyGuard;
-use bricarobd_lib::commands::ecu_scan::{get_ecu_probes, is_valid_ecu_response};
 
 #[test]
 fn rejects_command_separator_injection() {

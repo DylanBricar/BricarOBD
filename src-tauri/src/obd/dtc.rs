@@ -1,6 +1,6 @@
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::LazyLock;
-use serde::{Deserialize, Serialize};
 
 use crate::models::{DtcCode, DtcStatus};
 
@@ -12,18 +12,15 @@ pub struct RepairTips {
 }
 
 static DTC_DESCRIPTIONS: LazyLock<HashMap<String, String>> = LazyLock::new(|| {
-    serde_json::from_str(include_str!("../../data/dtc_descriptions.json"))
-        .unwrap_or_default()
+    serde_json::from_str(include_str!("../../data/dtc_descriptions.json")).unwrap_or_default()
 });
 
 static DTC_DESCRIPTIONS_FR: LazyLock<HashMap<String, String>> = LazyLock::new(|| {
-    serde_json::from_str(include_str!("../../data/dtc_descriptions_fr.json"))
-        .unwrap_or_default()
+    serde_json::from_str(include_str!("../../data/dtc_descriptions_fr.json")).unwrap_or_default()
 });
 
 static DTC_REPAIR_TIPS: LazyLock<HashMap<String, RepairTips>> = LazyLock::new(|| {
-    serde_json::from_str(include_str!("../../data/dtc_repair_tips.json"))
-        .unwrap_or_default()
+    serde_json::from_str(include_str!("../../data/dtc_repair_tips.json")).unwrap_or_default()
 });
 
 /// Decode DTC from 2-byte raw data
@@ -41,7 +38,12 @@ pub fn decode_dtc_bytes(b1: u8, b2: u8) -> String {
 }
 
 /// Parse DTC response from Mode 03/07/0A
-pub fn parse_dtc_response(response: &str, status: DtcStatus, source: &str, lang: &str) -> Vec<DtcCode> {
+pub fn parse_dtc_response(
+    response: &str,
+    status: DtcStatus,
+    source: &str,
+    lang: &str,
+) -> Vec<DtcCode> {
     let mut dtcs = Vec::new();
 
     let response_sid = match status {
@@ -108,16 +110,13 @@ pub fn get_dtc_description(code: &str, lang: &str) -> String {
             return desc.clone();
         }
     }
-    DTC_DESCRIPTIONS
-        .get(code)
-        .cloned()
-        .unwrap_or_else(|| {
-            if lang == "fr" {
-                format!("Code {} — description non disponible", code)
-            } else {
-                format!("Code {} — description not available", code)
-            }
-        })
+    DTC_DESCRIPTIONS.get(code).cloned().unwrap_or_else(|| {
+        if lang == "fr" {
+            format!("Code {} — description non disponible", code)
+        } else {
+            format!("Code {} — description not available", code)
+        }
+    })
 }
 
 /// Get repair tips for DTC from embedded JSON database (language-aware)
@@ -129,12 +128,22 @@ pub fn get_dtc_repair_tips(code: &str, lang: &str) -> Option<String> {
 pub fn get_dtc_repair_tips_lang(code: &str, lang: &str) -> Option<String> {
     DTC_REPAIR_TIPS.get(code).map(|tips| {
         let mut result = String::new();
-        let causes_label = if lang == "fr" { "Causes possibles:" } else { "Possible causes:" };
-        let check_label = if lang == "fr" { "Vérification rapide: " } else { "Quick check: " };
+        let causes_label = if lang == "fr" {
+            "Causes possibles:"
+        } else {
+            "Possible causes:"
+        };
+        let check_label = if lang == "fr" {
+            "Vérification rapide: "
+        } else {
+            "Quick check: "
+        };
 
         if let Some(causes) = &tips.causes {
             // Try requested language, fallback to other
-            let lang_causes = causes.get(lang).or_else(|| causes.get(if lang == "fr" { "en" } else { "fr" }));
+            let lang_causes = causes
+                .get(lang)
+                .or_else(|| causes.get(if lang == "fr" { "en" } else { "fr" }));
             if let Some(causes_list) = lang_causes {
                 if !causes_list.is_empty() {
                     result.push_str(causes_label);
@@ -147,7 +156,9 @@ pub fn get_dtc_repair_tips_lang(code: &str, lang: &str) -> Option<String> {
         }
 
         if let Some(quick_check) = &tips.quick_check {
-            let lang_check = quick_check.get(lang).or_else(|| quick_check.get(if lang == "fr" { "en" } else { "fr" }));
+            let lang_check = quick_check
+                .get(lang)
+                .or_else(|| quick_check.get(if lang == "fr" { "en" } else { "fr" }));
             if let Some(check) = lang_check {
                 if !check.is_empty() {
                     result.push_str(check_label);
@@ -162,13 +173,16 @@ pub fn get_dtc_repair_tips_lang(code: &str, lang: &str) -> Option<String> {
 }
 
 /// Get structured repair data (causes, quick_check, difficulty)
-pub fn get_dtc_repair_data(code: &str, lang: &str) -> (Option<Vec<String>>, Option<String>, Option<u32>) {
+pub fn get_dtc_repair_data(
+    code: &str,
+    lang: &str,
+) -> (Option<Vec<String>>, Option<String>, Option<u32>) {
     if let Some(tips) = DTC_REPAIR_TIPS.get(code) {
         let lang_key = if lang == "fr" { "fr" } else { "en" };
-        let causes = tips.causes.as_ref()
-            .and_then(|c| c.get(lang_key))
-            .cloned();
-        let quick_check = tips.quick_check.as_ref()
+        let causes = tips.causes.as_ref().and_then(|c| c.get(lang_key)).cloned();
+        let quick_check = tips
+            .quick_check
+            .as_ref()
             .and_then(|q| q.get(lang_key))
             .cloned();
         let difficulty = tips.difficulty;

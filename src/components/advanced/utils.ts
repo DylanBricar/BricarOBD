@@ -19,24 +19,21 @@ export const parseServiceId = (command: string): number | null => {
   return null;
 };
 
-/// Check if command is blocked (matches ALWAYS_BLOCKED list from backend)
+/// Match the backend's default-deny raw-command policy. The console is a
+/// diagnostic reader, not a generic ECU programming surface.
 export const isCommandBlocked = (command: string): boolean => {
   const trimmed = command.trim().toUpperCase();
+  if (!trimmed) return false;
 
-  // Blocked AT commands
-  const blockedAt = ["ATMA", "ATBD", "ATBI", "ATPP", "ATWS"];
-  for (const at of blockedAt) {
-    if (trimmed.startsWith(at)) {
-      return true;
-    }
-  }
+  // The backend normalizes raw commands as hexadecimal, so AT commands are
+  // intentionally unavailable from this screen.
+  if (trimmed.startsWith("AT")) return true;
 
-  // Blocked service IDs (always blocked even in advanced mode)
-  const alwaysBlocked = [0x11, 0x27, 0x28, 0x34, 0x35, 0x36, 0x37, 0x3D];
   const serviceId = parseServiceId(command);
-  if (serviceId !== null && alwaysBlocked.includes(serviceId)) {
-    return true;
-  }
-
-  return false;
+  if (serviceId === null) return true;
+  const readOnlyServices = [
+    0x01, 0x02, 0x03, 0x05, 0x06, 0x07, 0x09, 0x0a,
+    0x19, 0x22, 0x3e,
+  ];
+  return !readOnlyServices.includes(serviceId);
 };

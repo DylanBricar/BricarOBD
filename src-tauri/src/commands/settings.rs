@@ -1,7 +1,7 @@
-use std::path::PathBuf;
-use tauri::command;
 use crate::models::AppSettings;
 use crate::obd::dev_log;
+use std::path::PathBuf;
+use tauri::command;
 
 /// Get application settings
 #[command]
@@ -21,24 +21,47 @@ pub fn save_settings(settings: AppSettings) -> Result<(), String> {
             ("auto_connect", &settings.auto_connect.to_string()),
         ])
     })?;
-    dev_log::log_info("settings", &format!("Settings saved: lang={}, baud={}, theme={}, auto_connect={}", settings.language, settings.default_baud_rate, settings.theme, settings.auto_connect));
+    dev_log::log_info(
+        "settings",
+        &format!(
+            "Settings saved: lang={}, baud={}, theme={}, auto_connect={}",
+            settings.language, settings.default_baud_rate, settings.theme, settings.auto_connect
+        ),
+    );
     Ok(())
 }
 
 /// Save CSV content to file on disk, returns the full path
 #[command]
 pub fn save_csv_file(filename: String, content: String) -> Result<String, String> {
+    const MAX_CSV_SIZE: usize = 25 * 1024 * 1024;
+    if content.len() > MAX_CSV_SIZE {
+        return Err(crate::commands::connection::err_msg(
+            "Export trop volumineux (max 25 Mo)",
+            "Export too large (max 25 MB)",
+        ));
+    }
     // Sanitize filename - only allow safe characters
-    let safe_name: String = filename.chars()
+    let safe_name: String = filename
+        .chars()
         .filter(|c| c.is_alphanumeric() || *c == '_' || *c == '-' || *c == '.')
         .collect();
     if safe_name.is_empty() || safe_name.contains("..") {
         dev_log::log_warn("settings", "Invalid filename: sanitization failed");
-        return Err(crate::commands::connection::err_msg("Nom de fichier invalide", "Invalid filename"));
+        return Err(crate::commands::connection::err_msg(
+            "Nom de fichier invalide",
+            "Invalid filename",
+        ));
     }
     if !safe_name.ends_with(".csv") {
-        dev_log::log_warn("settings", &format!("Rejected non-CSV filename: {}", safe_name));
-        return Err(crate::commands::connection::err_msg("Le fichier doit se terminer par .csv", "Filename must end with .csv"));
+        dev_log::log_warn(
+            "settings",
+            &format!("Rejected non-CSV filename: {}", safe_name),
+        );
+        return Err(crate::commands::connection::err_msg(
+            "Le fichier doit se terminer par .csv",
+            "Filename must end with .csv",
+        ));
     }
 
     // Save to Desktop
@@ -49,13 +72,23 @@ pub fn save_csv_file(filename: String, content: String) -> Result<String, String
     let path = dir.join(&safe_name);
 
     // Defense in depth: verify resolved path stays inside exports dir
-    let canonical_dir = dir.canonicalize().map_err(|e| format!("Cannot resolve dir: {}", e))?;
+    let canonical_dir = dir
+        .canonicalize()
+        .map_err(|e| format!("Cannot resolve dir: {}", e))?;
     // For new files, canonicalize the parent and check
     if let Some(parent) = path.parent() {
-        let canonical_parent = parent.canonicalize().map_err(|e| format!("Cannot resolve path: {}", e))?;
+        let canonical_parent = parent
+            .canonicalize()
+            .map_err(|e| format!("Cannot resolve path: {}", e))?;
         if !canonical_parent.starts_with(&canonical_dir) {
-            dev_log::log_warn("settings", &format!("Path traversal blocked: {}", path.display()));
-            return Err(crate::commands::connection::err_msg("Traversée de chemin bloquée", "Path traversal blocked"));
+            dev_log::log_warn(
+                "settings",
+                &format!("Path traversal blocked: {}", path.display()),
+            );
+            return Err(crate::commands::connection::err_msg(
+                "Traversée de chemin bloquée",
+                "Path traversal blocked",
+            ));
         }
     }
 
@@ -64,7 +97,10 @@ pub fn save_csv_file(filename: String, content: String) -> Result<String, String
     std::fs::write(&path, bom_content).map_err(|e| format!("Cannot write file: {}", e))?;
 
     let full_path = path.to_string_lossy().to_string();
-    dev_log::log_info("settings", &format!("CSV saved: {} (size: {} bytes)", full_path, content.len()));
+    dev_log::log_info(
+        "settings",
+        &format!("CSV saved: {} (size: {} bytes)", full_path, content.len()),
+    );
     Ok(full_path)
 }
 
@@ -73,24 +109,48 @@ pub fn save_csv_file(filename: String, content: String) -> Result<String, String
 pub fn read_csv_file(path: String) -> Result<String, String> {
     dev_log::log_debug("settings", &format!("Reading CSV file: {}", path));
     let file_path = std::path::PathBuf::from(&path);
-    let canonical = file_path.canonicalize().map_err(|e| format!("Invalid path: {}", e))?;
+    let canonical = file_path
+        .canonicalize()
+        .map_err(|e| format!("Invalid path: {}", e))?;
     let desktop = dirs_next().ok_or("Cannot find directory")?;
     let allowed_dir = desktop.join("BricarOBD_Exports");
-    let allowed_dir = allowed_dir.canonicalize().map_err(|e| format!("Cannot resolve exports dir: {}", e))?;
+    let allowed_dir = allowed_dir
+        .canonicalize()
+        .map_err(|e| format!("Cannot resolve exports dir: {}", e))?;
     if !canonical.starts_with(&allowed_dir) {
-        dev_log::log_warn("settings", &format!("Access denied for path outside exports directory: {}", path));
-        return Err(crate::commands::connection::err_msg("Accès refusé : chemin en dehors du répertoire d'exports", "Access denied: path outside exports directory"));
+        dev_log::log_warn(
+            "settings",
+            &format!("Access denied for path outside exports directory: {}", path),
+        );
+        return Err(crate::commands::connection::err_msg(
+            "Accès refusé : chemin en dehors du répertoire d'exports",
+            "Access denied: path outside exports directory",
+        ));
     }
 
     // Check file size (reject > 50MB)
-    let metadata = std::fs::metadata(&canonical).map_err(|e| format!("Cannot read file metadata: {}", e))?;
+    let metadata =
+        std::fs::metadata(&canonical).map_err(|e| format!("Cannot read file metadata: {}", e))?;
     const MAX_FILE_SIZE: u64 = 50 * 1024 * 1024; // 50MB
     if metadata.len() > MAX_FILE_SIZE {
-        dev_log::log_warn("settings", &format!("File too large: {} bytes", metadata.len()));
-        return Err(crate::commands::connection::err_msg("Fichier trop volumineux (max 50MB)", "File too large (max 50MB)"));
+        dev_log::log_warn(
+            "settings",
+            &format!("File too large: {} bytes", metadata.len()),
+        );
+        return Err(crate::commands::connection::err_msg(
+            "Fichier trop volumineux (max 50MB)",
+            "File too large (max 50MB)",
+        ));
     }
 
-    dev_log::log_info("settings", &format!("CSV file access allowed: {} (size: {} bytes)", canonical.to_string_lossy(), metadata.len()));
+    dev_log::log_info(
+        "settings",
+        &format!(
+            "CSV file access allowed: {} (size: {} bytes)",
+            canonical.to_string_lossy(),
+            metadata.len()
+        ),
+    );
     std::fs::read_to_string(&canonical).map_err(|e| format!("Cannot read file: {}", e))
 }
 
@@ -108,7 +168,7 @@ pub fn list_exports() -> Result<Vec<serde_json::Value>, String> {
     let mut files = Vec::new();
     let entries = std::fs::read_dir(&dir).map_err(|e| format!("Cannot read dir: {}", e))?;
 
-    for entry in entries.flatten() {
+    for entry in entries.flatten().take(10_000) {
         let path = entry.path();
         if path.extension().map(|e| e == "csv").unwrap_or(false) {
             let metadata = std::fs::metadata(&path).ok();
@@ -125,11 +185,15 @@ pub fn list_exports() -> Result<Vec<serde_json::Value>, String> {
     }
 
     files.sort_by(|a, b| {
-        b.get("modified").and_then(|v| v.as_u64())
+        b.get("modified")
+            .and_then(|v| v.as_u64())
             .cmp(&a.get("modified").and_then(|v| v.as_u64()))
     });
 
-    dev_log::log_debug("settings", &format!("Listed {} exported CSV files", files.len()));
+    dev_log::log_debug(
+        "settings",
+        &format!("Listed {} exported CSV files", files.len()),
+    );
     Ok(files)
 }
 
@@ -139,16 +203,25 @@ pub fn open_exports_folder() -> Result<(), String> {
     let desktop = dirs_next().ok_or("Cannot find Desktop directory")?;
     let dir = desktop.join("BricarOBD_Exports");
     std::fs::create_dir_all(&dir).ok();
-    dev_log::log_info("settings", &format!("Opening exports folder: {}", dir.to_string_lossy()));
+    dev_log::log_info(
+        "settings",
+        &format!("Opening exports folder: {}", dir.to_string_lossy()),
+    );
 
     #[cfg(target_os = "macos")]
     std::process::Command::new("open").arg(&dir).spawn().ok();
 
     #[cfg(target_os = "windows")]
-    std::process::Command::new("explorer").arg(&dir).spawn().ok();
+    std::process::Command::new("explorer")
+        .arg(&dir)
+        .spawn()
+        .ok();
 
     #[cfg(target_os = "linux")]
-    std::process::Command::new("xdg-open").arg(&dir).spawn().ok();
+    std::process::Command::new("xdg-open")
+        .arg(&dir)
+        .spawn()
+        .ok();
 
     Ok(())
 }
@@ -231,8 +304,7 @@ fn dirs_next() -> Option<PathBuf> {
 /// Get the path to the logs directory
 #[command]
 pub fn get_log_dir() -> Option<String> {
-    crate::obd::dev_log::get_log_dir_path()
-        .map(|p| p.to_string_lossy().to_string())
+    crate::obd::dev_log::get_log_dir_path().map(|p| p.to_string_lossy().to_string())
 }
 
 /// Open the logs folder in file manager
@@ -241,18 +313,27 @@ pub fn open_log_folder() -> Result<(), String> {
     let log_dir = crate::obd::dev_log::get_log_dir_path()
         .ok_or_else(|| "Cannot get log directory".to_string())?;
 
-    dev_log::log_info("settings", &format!("Opening logs folder: {}", log_dir.to_string_lossy()));
+    dev_log::log_info(
+        "settings",
+        &format!("Opening logs folder: {}", log_dir.to_string_lossy()),
+    );
 
     #[cfg(target_os = "macos")]
-    std::process::Command::new("open").arg(&log_dir).spawn()
+    std::process::Command::new("open")
+        .arg(&log_dir)
+        .spawn()
         .map_err(|e| format!("Failed to open folder: {}", e))?;
 
     #[cfg(target_os = "windows")]
-    std::process::Command::new("explorer").arg(&log_dir).spawn()
+    std::process::Command::new("explorer")
+        .arg(&log_dir)
+        .spawn()
         .map_err(|e| format!("Failed to open folder: {}", e))?;
 
     #[cfg(target_os = "linux")]
-    std::process::Command::new("xdg-open").arg(&log_dir).spawn()
+    std::process::Command::new("xdg-open")
+        .arg(&log_dir)
+        .spawn()
         .map_err(|e| format!("Failed to open folder: {}", e))?;
 
     Ok(())

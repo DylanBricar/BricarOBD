@@ -1,37 +1,55 @@
-use rusqlite::{params, Connection};
+use rusqlite::{params, params_from_iter, Connection, OpenFlags};
+use std::collections::HashMap;
 use std::path::Path;
 use tracing::info;
 
 use crate::models::AppSettings;
 
 /// SQLite database for BricarOBD
-/// Ships with a pre-built DB containing 3.27M operations, 90 vehicle profiles, 4866 ECUs
+/// Ships with a pre-built DB containing 3.17M operations, 90 vehicle profiles, 4866 ECUs
 pub struct Database {
-    conn: Connection,
+    catalog: Connection,
+    user: Connection,
 }
 
 impl Database {
     /// Execute raw SQL batch (for transaction control: BEGIN, COMMIT, ROLLBACK)
     pub fn execute_batch(&self, sql: &str) -> Result<(), String> {
-        self.conn.execute_batch(sql).map_err(|e| format!("SQL batch failed: {}", e))
+        self.user
+            .execute_batch(sql)
+            .map_err(|e| format!("SQL batch failed: {}", e))
     }
 
     /// Open pre-built database
-    pub fn open(path: &Path) -> Result<Self, String> {
-        let conn = Connection::open(path)
-            .map_err(|e| format!("Failed to open database: {}", e))?;
+    pub fn open(catalog_path: &Path, user_path: &Path) -> Result<Self, String> {
+        let catalog = Connection::open_with_flags(
+            catalog_path,
+            OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_NO_MUTEX,
+        )
+        .map_err(|e| format!("Failed to open catalog database: {}", e))?;
+        catalog
+            .execute_batch(
+                "PRAGMA query_only = ON;
+                 PRAGMA cache_size = -32000;
+                 PRAGMA temp_store = MEMORY;",
+            )
+            .map_err(|e| format!("Failed to configure catalog database: {}", e))?;
 
-        // WAL mode: better read concurrency, creates -wal/-shm sidecar files
-        conn.execute_batch(
+        if let Some(parent) = user_path.parent() {
+            std::fs::create_dir_all(parent)
+                .map_err(|e| format!("Failed to create user data directory: {}", e))?;
+        }
+        let user = Connection::open(user_path)
+            .map_err(|e| format!("Failed to open user database: {}", e))?;
+        user.execute_batch(
             "PRAGMA journal_mode = WAL;
              PRAGMA synchronous = NORMAL;
-             PRAGMA cache_size = -32000;
-             PRAGMA temp_store = MEMORY;",
+             PRAGMA busy_timeout = 5000;",
         )
-        .ok();
+        .map_err(|e| format!("Failed to configure user database: {}", e))?;
 
         // Create user tables if missing (operations/ecus are pre-built)
-        if let Err(e) = conn.execute_batch(
+        if let Err(e) = user.execute_batch(
             "CREATE TABLE IF NOT EXISTS dtc_history (
                 id INTEGER PRIMARY KEY AUTOINCREMENT, code TEXT NOT NULL, description TEXT,
                 status TEXT NOT NULL, source TEXT, vehicle_vin TEXT,
@@ -48,8 +66,12 @@ impl Database {
             return Err(format!("User tables creation failed: {}", e));
         }
 
-        let db = Self { conn };
-        info!("Database opened: {}", path.display());
+        let db = Self { catalog, user };
+        info!(
+            "Catalog opened read-only: {}; user data: {}",
+            catalog_path.display(),
+            user_path.display()
+        );
         Ok(db)
     }
 
@@ -59,12 +81,14 @@ impl Database {
     pub fn operations_count(&self) -> u64 {
         use std::sync::atomic::{AtomicU64, Ordering};
         static CACHED_OPS_COUNT: AtomicU64 = AtomicU64::new(0);
-        static CACHED_INITIALIZED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+        static CACHED_INITIALIZED: std::sync::atomic::AtomicBool =
+            std::sync::atomic::AtomicBool::new(false);
 
         if CACHED_INITIALIZED.load(Ordering::Relaxed) {
             return CACHED_OPS_COUNT.load(Ordering::Relaxed);
         }
-        let count: u64 = self.conn
+        let count: u64 = self
+            .catalog
             .query_row("SELECT COUNT(*) FROM operations", [], |r| r.get(0))
             .unwrap_or(0);
         CACHED_OPS_COUNT.store(count, Ordering::Relaxed);
@@ -75,10 +99,16 @@ impl Database {
     /// Get database stats (operations count is cached; profiles/ecus are small tables)
     pub fn get_stats(&self) -> (u64, u64, u64) {
         let ops = self.operations_count();
-        let profiles: u64 = self.conn
-            .query_row("SELECT COUNT(DISTINCT profile_name) FROM vehicle_profiles", [], |r| r.get(0))
+        let profiles: u64 = self
+            .catalog
+            .query_row(
+                "SELECT COUNT(DISTINCT profile_name) FROM vehicle_profiles",
+                [],
+                |r| r.get(0),
+            )
             .unwrap_or(0);
-        let ecus: u64 = self.conn
+        let ecus: u64 = self
+            .catalog
             .query_row("SELECT COUNT(*) FROM ecu_catalog", [], |r| r.get(0))
             .unwrap_or(0);
         (ops, profiles, ecus)
@@ -86,11 +116,15 @@ impl Database {
 
     /// Search operations by keyword (name, ECU, DID).
     /// Requires at least 2 characters to avoid full-table scans on 3.27M rows.
-    pub fn search_operations(&self, query: &str, limit: u32) -> Result<Vec<serde_json::Value>, String> {
+    pub fn search_operations(
+        &self,
+        query: &str,
+        limit: u32,
+    ) -> Result<Vec<serde_json::Value>, String> {
         if query.trim().len() < 2 {
             return Ok(Vec::new());
         }
-        let mut stmt = self.conn.prepare(
+        let mut stmt = self.catalog.prepare(
             "SELECT o.id, n.name, o.name_fr, o.sentbytes, o.service, o.did, o.op_type,
                     e.name, o.ecu_tx, o.ecu_rx, v.name, o.risk
              FROM operations o
@@ -103,118 +137,147 @@ impl Database {
 
         let escaped_query = query.replace('%', "\\%").replace('_', "\\_");
         let pattern = format!("%{}%", escaped_query);
-        let rows = stmt.query_map(params![pattern, limit], |row| {
-            Ok(serde_json::json!({
-                "id": row.get::<_, String>(0).unwrap_or_default(),
-                "name": row.get::<_, String>(1).unwrap_or_default(),
-                "name_fr": row.get::<_, String>(2).unwrap_or_default(),
-                "sentbytes": row.get::<_, String>(3).unwrap_or_default(),
-                "service": row.get::<_, String>(4).unwrap_or_default(),
-                "did": row.get::<_, String>(5).unwrap_or_default(),
-                "type": row.get::<_, String>(6).unwrap_or_default(),
-                "ecu_name": row.get::<_, String>(7).unwrap_or_default(),
-                "ecu_tx": row.get::<_, String>(8).unwrap_or_default(),
-                "ecu_rx": row.get::<_, String>(9).unwrap_or_default(),
-                "vehicle": row.get::<_, String>(10).unwrap_or_default(),
-                "risk": row.get::<_, String>(11).unwrap_or_default(),
-            }))
-        }).map_err(|e| format!("Query failed: {}", e))?;
+        let rows = stmt
+            .query_map(params![pattern, limit], |row| {
+                Ok(serde_json::json!({
+                    "id": row.get::<_, String>(0).unwrap_or_default(),
+                    "name": row.get::<_, String>(1).unwrap_or_default(),
+                    "name_fr": row.get::<_, String>(2).unwrap_or_default(),
+                    "sentbytes": row.get::<_, String>(3).unwrap_or_default(),
+                    "service": row.get::<_, String>(4).unwrap_or_default(),
+                    "did": row.get::<_, String>(5).unwrap_or_default(),
+                    "type": row.get::<_, String>(6).unwrap_or_default(),
+                    "ecu_name": row.get::<_, String>(7).unwrap_or_default(),
+                    "ecu_tx": row.get::<_, String>(8).unwrap_or_default(),
+                    "ecu_rx": row.get::<_, String>(9).unwrap_or_default(),
+                    "vehicle": row.get::<_, String>(10).unwrap_or_default(),
+                    "risk": row.get::<_, String>(11).unwrap_or_default(),
+                }))
+            })
+            .map_err(|e| format!("Query failed: {}", e))?;
 
         Ok(rows.filter_map(|r| r.ok()).collect())
     }
 
     /// Get operations for a vehicle make (e.g. "Peugeot")
-    pub fn get_operations_for_vehicle(&self, vehicle: &str, limit: u32) -> Result<Vec<serde_json::Value>, String> {
-        let mut stmt = self.conn.prepare(
-            "SELECT o.id, n.name, o.name_fr, o.sentbytes, o.service, o.did, o.op_type,
+    pub fn get_operations_for_vehicle(
+        &self,
+        vehicle: &str,
+        limit: u32,
+    ) -> Result<Vec<serde_json::Value>, String> {
+        let mut stmt = self
+            .catalog
+            .prepare(
+                "SELECT o.id, n.name, o.name_fr, o.sentbytes, o.service, o.did, o.op_type,
                     e.name, o.ecu_tx, o.ecu_rx, o.risk
              FROM operations o
              LEFT JOIN names n ON o.name_id = n.id
              LEFT JOIN ecu_names e ON o.ecu_name_id = e.id
              JOIN vehicles v ON o.vehicle_id = v.id AND v.name LIKE ?1 ESCAPE '\\'
-             LIMIT ?2"
-        ).map_err(|e| format!("Query failed: {}", e))?;
+             LIMIT ?2",
+            )
+            .map_err(|e| format!("Query failed: {}", e))?;
 
         let escaped_vehicle = vehicle.replace('%', "\\%").replace('_', "\\_");
         let pattern = format!("%{}%", escaped_vehicle);
-        let rows = stmt.query_map(params![pattern, limit], |row| {
-            Ok(serde_json::json!({
-                "id": row.get::<_, String>(0).unwrap_or_default(),
-                "name": row.get::<_, String>(1).unwrap_or_default(),
-                "name_fr": row.get::<_, String>(2).unwrap_or_default(),
-                "sentbytes": row.get::<_, String>(3).unwrap_or_default(),
-                "service": row.get::<_, String>(4).unwrap_or_default(),
-                "did": row.get::<_, String>(5).unwrap_or_default(),
-                "type": row.get::<_, String>(6).unwrap_or_default(),
-                "ecu_name": row.get::<_, String>(7).unwrap_or_default(),
-                "ecu_tx": row.get::<_, String>(8).unwrap_or_default(),
-                "ecu_rx": row.get::<_, String>(9).unwrap_or_default(),
-                "risk": row.get::<_, String>(10).unwrap_or_default(),
-            }))
-        }).map_err(|e| format!("Query failed: {}", e))?;
+        let rows = stmt
+            .query_map(params![pattern, limit], |row| {
+                Ok(serde_json::json!({
+                    "id": row.get::<_, String>(0).unwrap_or_default(),
+                    "name": row.get::<_, String>(1).unwrap_or_default(),
+                    "name_fr": row.get::<_, String>(2).unwrap_or_default(),
+                    "sentbytes": row.get::<_, String>(3).unwrap_or_default(),
+                    "service": row.get::<_, String>(4).unwrap_or_default(),
+                    "did": row.get::<_, String>(5).unwrap_or_default(),
+                    "type": row.get::<_, String>(6).unwrap_or_default(),
+                    "ecu_name": row.get::<_, String>(7).unwrap_or_default(),
+                    "ecu_tx": row.get::<_, String>(8).unwrap_or_default(),
+                    "ecu_rx": row.get::<_, String>(9).unwrap_or_default(),
+                    "risk": row.get::<_, String>(10).unwrap_or_default(),
+                }))
+            })
+            .map_err(|e| format!("Query failed: {}", e))?;
 
         Ok(rows.filter_map(|r| r.ok()).collect())
     }
 
     /// Get read operations for ECU + vehicle (used by Live Data & Dashboard)
-    pub fn get_read_operations(&self, ecu_name: &str, vehicle: &str) -> Result<Vec<serde_json::Value>, String> {
-        let mut stmt = self.conn.prepare(
-            "SELECT o.id, n.name, o.name_fr, o.sentbytes, o.did, o.ecu_tx, o.ecu_rx
+    pub fn get_read_operations(
+        &self,
+        ecu_name: &str,
+        vehicle: &str,
+    ) -> Result<Vec<serde_json::Value>, String> {
+        let mut stmt = self
+            .catalog
+            .prepare(
+                "SELECT o.id, n.name, o.name_fr, o.sentbytes, o.did, o.ecu_tx, o.ecu_rx
              FROM operations o
              LEFT JOIN names n ON o.name_id = n.id
              JOIN ecu_names e ON o.ecu_name_id = e.id AND e.name LIKE ?1 ESCAPE '\\'
              JOIN vehicles v ON o.vehicle_id = v.id AND v.name LIKE ?2 ESCAPE '\\'
              WHERE o.op_type = 'read'
-             LIMIT 500"
-        ).map_err(|e| format!("Query failed: {}", e))?;
+             LIMIT 500",
+            )
+            .map_err(|e| format!("Query failed: {}", e))?;
 
         let escaped_ecu = ecu_name.replace('%', "\\%").replace('_', "\\_");
         let escaped_vehicle = vehicle.replace('%', "\\%").replace('_', "\\_");
         let ecu_pat = format!("%{}%", escaped_ecu);
         let veh_pat = format!("%{}%", escaped_vehicle);
-        let rows = stmt.query_map(params![ecu_pat, veh_pat], |row| {
-            Ok(serde_json::json!({
-                "id": row.get::<_, String>(0).unwrap_or_default(),
-                "name": row.get::<_, String>(1).unwrap_or_default(),
-                "name_fr": row.get::<_, String>(2).unwrap_or_default(),
-                "sentbytes": row.get::<_, String>(3).unwrap_or_default(),
-                "did": row.get::<_, String>(4).unwrap_or_default(),
-                "ecu_tx": row.get::<_, String>(5).unwrap_or_default(),
-                "ecu_rx": row.get::<_, String>(6).unwrap_or_default(),
-            }))
-        }).map_err(|e| format!("Query failed: {}", e))?;
+        let rows = stmt
+            .query_map(params![ecu_pat, veh_pat], |row| {
+                Ok(serde_json::json!({
+                    "id": row.get::<_, String>(0).unwrap_or_default(),
+                    "name": row.get::<_, String>(1).unwrap_or_default(),
+                    "name_fr": row.get::<_, String>(2).unwrap_or_default(),
+                    "sentbytes": row.get::<_, String>(3).unwrap_or_default(),
+                    "did": row.get::<_, String>(4).unwrap_or_default(),
+                    "ecu_tx": row.get::<_, String>(5).unwrap_or_default(),
+                    "ecu_rx": row.get::<_, String>(6).unwrap_or_default(),
+                }))
+            })
+            .map_err(|e| format!("Query failed: {}", e))?;
 
         Ok(rows.filter_map(|r| r.ok()).collect())
     }
 
     /// Get write operations for ECU (used by Advanced page)
-    pub fn get_write_operations(&self, ecu_name: &str, vehicle: &str) -> Result<Vec<serde_json::Value>, String> {
-        let mut stmt = self.conn.prepare(
-            "SELECT o.id, n.name, o.name_fr, o.sentbytes, o.did, o.ecu_tx, o.ecu_rx, o.risk
+    pub fn get_write_operations(
+        &self,
+        ecu_name: &str,
+        vehicle: &str,
+    ) -> Result<Vec<serde_json::Value>, String> {
+        let mut stmt = self
+            .catalog
+            .prepare(
+                "SELECT o.id, n.name, o.name_fr, o.sentbytes, o.did, o.ecu_tx, o.ecu_rx, o.risk
              FROM operations o
              LEFT JOIN names n ON o.name_id = n.id
              JOIN ecu_names e ON o.ecu_name_id = e.id AND e.name LIKE ?1 ESCAPE '\\'
              JOIN vehicles v ON o.vehicle_id = v.id AND v.name LIKE ?2 ESCAPE '\\'
              WHERE o.op_type = 'write'
-             LIMIT 500"
-        ).map_err(|e| format!("Query failed: {}", e))?;
+             LIMIT 500",
+            )
+            .map_err(|e| format!("Query failed: {}", e))?;
 
         let escaped_ecu = ecu_name.replace('%', "\\%").replace('_', "\\_");
         let escaped_vehicle = vehicle.replace('%', "\\%").replace('_', "\\_");
         let ecu_pat = format!("%{}%", escaped_ecu);
         let veh_pat = format!("%{}%", escaped_vehicle);
-        let rows = stmt.query_map(params![ecu_pat, veh_pat], |row| {
-            Ok(serde_json::json!({
-                "id": row.get::<_, String>(0).unwrap_or_default(),
-                "name": row.get::<_, String>(1).unwrap_or_default(),
-                "name_fr": row.get::<_, String>(2).unwrap_or_default(),
-                "sentbytes": row.get::<_, String>(3).unwrap_or_default(),
-                "did": row.get::<_, String>(4).unwrap_or_default(),
-                "ecu_tx": row.get::<_, String>(5).unwrap_or_default(),
-                "ecu_rx": row.get::<_, String>(6).unwrap_or_default(),
-                "risk": row.get::<_, String>(7).unwrap_or_default(),
-            }))
-        }).map_err(|e| format!("Query failed: {}", e))?;
+        let rows = stmt
+            .query_map(params![ecu_pat, veh_pat], |row| {
+                Ok(serde_json::json!({
+                    "id": row.get::<_, String>(0).unwrap_or_default(),
+                    "name": row.get::<_, String>(1).unwrap_or_default(),
+                    "name_fr": row.get::<_, String>(2).unwrap_or_default(),
+                    "sentbytes": row.get::<_, String>(3).unwrap_or_default(),
+                    "did": row.get::<_, String>(4).unwrap_or_default(),
+                    "ecu_tx": row.get::<_, String>(5).unwrap_or_default(),
+                    "ecu_rx": row.get::<_, String>(6).unwrap_or_default(),
+                    "risk": row.get::<_, String>(7).unwrap_or_default(),
+                }))
+            })
+            .map_err(|e| format!("Query failed: {}", e))?;
 
         Ok(rows.filter_map(|r| r.ok()).collect())
     }
@@ -222,61 +285,78 @@ impl Database {
     // ==================== VEHICLE PROFILES ====================
 
     pub fn get_vehicle_profiles(&self) -> Result<Vec<String>, String> {
-        let mut stmt = self.conn.prepare(
-            "SELECT DISTINCT profile_name FROM vehicle_profiles ORDER BY profile_name"
-        ).map_err(|e| format!("Query failed: {}", e))?;
+        let mut stmt = self
+            .catalog
+            .prepare("SELECT DISTINCT profile_name FROM vehicle_profiles ORDER BY profile_name")
+            .map_err(|e| format!("Query failed: {}", e))?;
 
-        let rows = stmt.query_map([], |row| row.get(0))
+        let rows = stmt
+            .query_map([], |row| row.get(0))
             .map_err(|e| format!("Query failed: {}", e))?;
 
         Ok(rows.filter_map(|r| r.ok()).collect())
     }
 
     pub fn get_profile_ecus(&self, profile_name: &str) -> Result<Vec<serde_json::Value>, String> {
-        let mut stmt = self.conn.prepare(
+        let mut stmt = self.catalog.prepare(
             "SELECT ecu_name, ecu_name_fr, tx, rx FROM vehicle_profiles WHERE profile_name = ?1"
         ).map_err(|e| format!("Query failed: {}", e))?;
 
-        let rows = stmt.query_map(params![profile_name], |row| {
-            Ok(serde_json::json!({
-                "name": row.get::<_, String>(0).unwrap_or_default(),
-                "name_fr": row.get::<_, String>(1).unwrap_or_default(),
-                "tx": row.get::<_, String>(2).unwrap_or_default(),
-                "rx": row.get::<_, String>(3).unwrap_or_default(),
-            }))
-        }).map_err(|e| format!("Query failed: {}", e))?;
+        let rows = stmt
+            .query_map(params![profile_name], |row| {
+                Ok(serde_json::json!({
+                    "name": row.get::<_, String>(0).unwrap_or_default(),
+                    "name_fr": row.get::<_, String>(1).unwrap_or_default(),
+                    "tx": row.get::<_, String>(2).unwrap_or_default(),
+                    "rx": row.get::<_, String>(3).unwrap_or_default(),
+                }))
+            })
+            .map_err(|e| format!("Query failed: {}", e))?;
 
         Ok(rows.filter_map(|r| r.ok()).collect())
     }
 
     // ==================== ECU CATALOG ====================
 
-    pub fn search_ecu_catalog(&self, query: &str, limit: u32) -> Result<Vec<serde_json::Value>, String> {
-        let mut stmt = self.conn.prepare(
+    pub fn search_ecu_catalog(
+        &self,
+        query: &str,
+        limit: u32,
+    ) -> Result<Vec<serde_json::Value>, String> {
+        let mut stmt = self.catalog.prepare(
             "SELECT filename, ecuname, address, group_name, protocol, projects
              FROM ecu_catalog WHERE ecuname LIKE ?1 ESCAPE '\\' OR group_name LIKE ?1 ESCAPE '\\' LIMIT ?2"
         ).map_err(|e| format!("Query failed: {}", e))?;
 
         let escaped_query = query.replace('%', "\\%").replace('_', "\\_");
         let pattern = format!("%{}%", escaped_query);
-        let rows = stmt.query_map(params![pattern, limit], |row| {
-            Ok(serde_json::json!({
-                "filename": row.get::<_, String>(0).unwrap_or_default(),
-                "ecuname": row.get::<_, String>(1).unwrap_or_default(),
-                "address": row.get::<_, String>(2).unwrap_or_default(),
-                "group": row.get::<_, String>(3).unwrap_or_default(),
-                "protocol": row.get::<_, String>(4).unwrap_or_default(),
-                "projects": row.get::<_, String>(5).unwrap_or_default(),
-            }))
-        }).map_err(|e| format!("Query failed: {}", e))?;
+        let rows = stmt
+            .query_map(params![pattern, limit], |row| {
+                Ok(serde_json::json!({
+                    "filename": row.get::<_, String>(0).unwrap_or_default(),
+                    "ecuname": row.get::<_, String>(1).unwrap_or_default(),
+                    "address": row.get::<_, String>(2).unwrap_or_default(),
+                    "group": row.get::<_, String>(3).unwrap_or_default(),
+                    "protocol": row.get::<_, String>(4).unwrap_or_default(),
+                    "projects": row.get::<_, String>(5).unwrap_or_default(),
+                }))
+            })
+            .map_err(|e| format!("Query failed: {}", e))?;
 
         Ok(rows.filter_map(|r| r.ok()).collect())
     }
 
     // ==================== USER DATA ====================
 
-    pub fn save_dtc(&self, code: &str, desc: &str, status: &str, source: &str, vin: &str) -> Result<(), String> {
-        self.conn
+    pub fn save_dtc(
+        &self,
+        code: &str,
+        desc: &str,
+        status: &str,
+        source: &str,
+        vin: &str,
+    ) -> Result<(), String> {
+        self.user
             .execute(
                 "INSERT INTO dtc_history (code, description, status, source, vehicle_vin) VALUES (?1, ?2, ?3, ?4, ?5)",
                 params![code, desc, status, source, vin],
@@ -285,34 +365,59 @@ impl Database {
         Ok(())
     }
 
-    pub fn save_session(&self, vin: &str, make: &str, model: &str, dtc_count: i32, notes: &str, data: &str) -> Result<i64, String> {
-        self.conn
+    pub fn save_session(
+        &self,
+        vin: &str,
+        make: &str,
+        model: &str,
+        dtc_count: i32,
+        notes: &str,
+        data: &str,
+    ) -> Result<i64, String> {
+        self.user
             .execute(
                 "INSERT INTO sessions (vehicle_vin, vehicle_make, vehicle_model, dtc_count, notes, data) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
                 params![vin, make, model, dtc_count, notes, data],
             )
             .map_err(|e| format!("Failed to save session: {}", e))?;
-        Ok(self.conn.last_insert_rowid())
+        Ok(self.user.last_insert_rowid())
     }
 
     pub fn get_settings(&self) -> AppSettings {
         let mut settings = AppSettings::default();
-        if let Ok(lang) = self.get_setting("language") { settings.language = lang; }
-        if let Ok(baud) = self.get_setting("default_baud_rate") {
-            if let Ok(v) = baud.parse() { settings.default_baud_rate = v; }
+        if let Ok(lang) = self.get_setting("language") {
+            settings.language = lang;
         }
-        if let Ok(theme) = self.get_setting("theme") { settings.theme = theme; }
-        if let Ok(auto_connect) = self.get_setting("auto_connect") { settings.auto_connect = auto_connect.parse().unwrap_or(false); }
+        if let Ok(baud) = self.get_setting("default_baud_rate") {
+            if let Ok(v) = baud.parse() {
+                settings.default_baud_rate = v;
+            }
+        }
+        if let Ok(theme) = self.get_setting("theme") {
+            settings.theme = theme;
+        }
+        if let Ok(auto_connect) = self.get_setting("auto_connect") {
+            settings.auto_connect = auto_connect.parse().unwrap_or(false);
+        }
         settings
     }
 
     fn get_setting(&self, key: &str) -> Result<String, String> {
-        self.conn.query_row("SELECT value FROM settings WHERE key = ?1", params![key], |row| row.get(0))
+        self.user
+            .query_row(
+                "SELECT value FROM settings WHERE key = ?1",
+                params![key],
+                |row| row.get(0),
+            )
             .map_err(|e| format!("Setting '{}' not found: {}", key, e))
     }
 
     pub fn save_setting(&self, key: &str, value: &str) -> Result<(), String> {
-        self.conn.execute("INSERT OR REPLACE INTO settings (key, value) VALUES (?1, ?2)", params![key, value])
+        self.user
+            .execute(
+                "INSERT OR REPLACE INTO settings (key, value) VALUES (?1, ?2)",
+                params![key, value],
+            )
             .map_err(|e| format!("Failed to save setting: {}", e))?;
         Ok(())
     }
@@ -321,42 +426,54 @@ impl Database {
         // Note: We use manual BEGIN/COMMIT because rusqlite's transaction() requires &mut self,
         // but this method only has &self (the Connection is behind a Mutex already).
         // ROLLBACK is handled explicitly on error.
-        self.conn.execute_batch("BEGIN").map_err(|e| format!("Failed to begin: {}", e))?;
+        self.user
+            .execute_batch("BEGIN")
+            .map_err(|e| format!("Failed to begin: {}", e))?;
         for (key, value) in settings {
-            if let Err(e) = self.conn.execute("INSERT OR REPLACE INTO settings (key, value) VALUES (?1, ?2)", params![key, value]) {
-                let _ = self.conn.execute_batch("ROLLBACK");
+            if let Err(e) = self.user.execute(
+                "INSERT OR REPLACE INTO settings (key, value) VALUES (?1, ?2)",
+                params![key, value],
+            ) {
+                let _ = self.user.execute_batch("ROLLBACK");
                 return Err(format!("Failed to save '{}': {}", key, e));
             }
         }
-        self.conn.execute_batch("COMMIT").map_err(|e| format!("Failed to commit: {}", e))?;
+        self.user
+            .execute_batch("COMMIT")
+            .map_err(|e| format!("Failed to commit: {}", e))?;
         Ok(())
     }
 
     // ==================== SESSIONS ====================
 
     pub fn get_sessions(&self) -> Result<Vec<serde_json::Value>, String> {
-        let mut stmt = self.conn.prepare(
-            "SELECT id, vehicle_vin, vehicle_make, vehicle_model, dtc_count, notes, timestamp
-             FROM sessions ORDER BY timestamp DESC LIMIT 100"
-        ).map_err(|e| format!("Query failed: {}", e))?;
+        let mut stmt = self
+            .user
+            .prepare(
+                "SELECT id, vehicle_vin, vehicle_make, vehicle_model, dtc_count, notes, timestamp
+             FROM sessions ORDER BY timestamp DESC LIMIT 100",
+            )
+            .map_err(|e| format!("Query failed: {}", e))?;
 
-        let rows = stmt.query_map([], |row| {
-            Ok(serde_json::json!({
-                "id": row.get::<_, i64>(0)?,
-                "vin": row.get::<_, String>(1).unwrap_or_default(),
-                "make": row.get::<_, String>(2).unwrap_or_default(),
-                "model": row.get::<_, String>(3).unwrap_or_default(),
-                "dtc_count": row.get::<_, i32>(4).unwrap_or(0),
-                "notes": row.get::<_, String>(5).unwrap_or_default(),
-                "timestamp": row.get::<_, String>(6).unwrap_or_default(),
-            }))
-        }).map_err(|e| format!("Query failed: {}", e))?;
+        let rows = stmt
+            .query_map([], |row| {
+                Ok(serde_json::json!({
+                    "id": row.get::<_, i64>(0)?,
+                    "vin": row.get::<_, String>(1).unwrap_or_default(),
+                    "make": row.get::<_, String>(2).unwrap_or_default(),
+                    "model": row.get::<_, String>(3).unwrap_or_default(),
+                    "dtc_count": row.get::<_, i32>(4).unwrap_or(0),
+                    "notes": row.get::<_, String>(5).unwrap_or_default(),
+                    "timestamp": row.get::<_, String>(6).unwrap_or_default(),
+                }))
+            })
+            .map_err(|e| format!("Query failed: {}", e))?;
 
         Ok(rows.filter_map(|r| r.ok()).collect())
     }
 
     pub fn delete_session(&self, id: i64) -> Result<(), String> {
-        self.conn
+        self.user
             .execute("DELETE FROM sessions WHERE id = ?1", params![id])
             .map_err(|e| format!("Failed to delete session: {}", e))?;
         Ok(())
@@ -368,31 +485,48 @@ impl Database {
         None
     }
 
-    /// Look up DID info from the database for a specific vehicle
-    /// Returns (name_en, name_fr, ecu_name) if found
-    pub fn get_did_info(&self, did: &str, vehicle: &str) -> Option<(String, String, String)> {
-        if did.is_empty() || vehicle.is_empty() {
-            return None;
+    pub fn get_did_info_batch(
+        &self,
+        dids: &[String],
+        vehicle: &str,
+    ) -> HashMap<String, (String, String, String)> {
+        if dids.is_empty() || vehicle.is_empty() {
+            return HashMap::new();
         }
         let escaped_vehicle = vehicle.replace('%', "\\%").replace('_', "\\_");
-        let veh_pattern = format!("%{}%", escaped_vehicle);
-        self.conn
-            .query_row(
-                "SELECT n.name, o.name_fr, e.name
-                 FROM operations o
-                 LEFT JOIN names n ON o.name_id = n.id
-                 LEFT JOIN ecu_names e ON o.ecu_name_id = e.id
-                 JOIN vehicles v ON o.vehicle_id = v.id AND v.name LIKE ?2 ESCAPE '\\'
-                 WHERE o.service = '22' AND o.did = ?1 AND o.op_type = 'read'
-                 LIMIT 1",
-                params![did, veh_pattern],
-                |row| Ok((
-                    row.get::<_, String>(0).unwrap_or_default(),
-                    row.get::<_, String>(1).unwrap_or_default(),
-                    row.get::<_, String>(2).unwrap_or_default(),
-                )),
-            )
-            .ok()
+        let veh_pattern = format!("%{escaped_vehicle}%");
+        let placeholders = std::iter::repeat_n("?", dids.len())
+            .collect::<Vec<_>>()
+            .join(",");
+        let sql = format!(
+            "SELECT o.did, n.name, o.name_fr, e.name
+             FROM operations o
+             LEFT JOIN names n ON o.name_id = n.id
+             LEFT JOIN ecu_names e ON o.ecu_name_id = e.id
+             JOIN vehicles v ON o.vehicle_id = v.id AND v.name LIKE ? ESCAPE '\\'
+             WHERE o.service = '22' AND o.op_type = 'read' AND o.did IN ({placeholders})
+             GROUP BY o.did"
+        );
+        let mut values = Vec::with_capacity(dids.len() + 1);
+        values.push(veh_pattern);
+        values.extend(dids.iter().cloned());
+        let mut statement = match self.catalog.prepare(&sql) {
+            Ok(statement) => statement,
+            Err(_) => return HashMap::new(),
+        };
+        statement
+            .query_map(params_from_iter(values.iter()), |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    (
+                        row.get::<_, String>(1).unwrap_or_default(),
+                        row.get::<_, String>(2).unwrap_or_default(),
+                        row.get::<_, String>(3).unwrap_or_default(),
+                    ),
+                ))
+            })
+            .map(|rows| rows.filter_map(Result::ok).collect())
+            .unwrap_or_default()
     }
 
     /// Search for DTC-related info from the operations database
@@ -403,14 +537,14 @@ impl Database {
         }
         let escaped_vehicle = vehicle.replace('%', "\\%").replace('_', "\\_");
         let veh_pattern = format!("%{}%", escaped_vehicle);
-        let mut stmt = match self.conn.prepare(
+        let mut stmt = match self.catalog.prepare(
             "SELECT DISTINCT n.name, o.name_fr, e.name
              FROM operations o
              LEFT JOIN names n ON o.name_id = n.id
              LEFT JOIN ecu_names e ON o.ecu_name_id = e.id
              JOIN vehicles v ON o.vehicle_id = v.id AND v.name LIKE ?1 ESCAPE '\\'
              WHERE o.service = '19'
-             LIMIT 50"
+             LIMIT 50",
         ) {
             Ok(s) => s,
             Err(_) => return Vec::new(),
@@ -425,5 +559,42 @@ impl Database {
         })
         .map(|rows| rows.filter_map(|r| r.ok()).collect())
         .unwrap_or_default()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::Database;
+    use std::path::Path;
+
+    #[test]
+    fn catalog_is_read_only_and_user_data_is_persisted_separately() {
+        let catalog_path = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("data")
+            .join("bricarobd.db");
+        assert!(catalog_path.exists(), "test catalog database is missing");
+
+        let unique = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_nanos();
+        let test_dir = std::env::temp_dir().join(format!("bricarobd-db-test-{unique}"));
+        let user_path = test_dir.join("user.db");
+
+        {
+            let database = Database::open(&catalog_path, &user_path).expect("open databases");
+            database
+                .save_setting("language", "fr")
+                .expect("save user setting");
+            assert_eq!(database.get_setting("language").as_deref(), Ok("fr"));
+            let query_only: i64 = database
+                .catalog
+                .query_row("PRAGMA query_only", [], |row| row.get(0))
+                .expect("read catalog mode");
+            assert_eq!(query_only, 1);
+        }
+
+        assert!(user_path.exists());
+        std::fs::remove_dir_all(&test_dir).expect("remove isolated test database");
     }
 }

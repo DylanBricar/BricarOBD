@@ -1,6 +1,5 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@config "../../tailwind.config.ts";
+@import "tailwindcss";
 
 @layer base {
   /* Dark theme (default) */
@@ -124,7 +123,10 @@
 
 @layer components {
   /* Glassmorphic card */
-  .glass-card {
+  .glass-card,
+  .glass-card-static,
+  .glass-card-hover,
+  .glass-sidebar {
     background-color: var(--glass-bg);
     @apply border border-obd-border/50 rounded-xl;
     box-shadow:
@@ -134,11 +136,11 @@
   }
 
   .glass-card-static {
-    @apply glass-card backdrop-blur-md;
+    @apply backdrop-blur-md;
   }
 
   .glass-card-hover {
-    @apply glass-card transition-all duration-300 backdrop-blur-md;
+    @apply transition-all duration-300 backdrop-blur-md;
   }
 
   .glass-card-hover:hover {
@@ -153,24 +155,26 @@
   /* Glassmorphic sidebar */
   .glass-sidebar {
     background-color: var(--glass-sidebar-bg);
-    @apply glass-card-static backdrop-blur-xl border-r border-obd-border/50;
+    @apply backdrop-blur-xl border-r border-obd-border/50;
     box-shadow:
       4px 0 24px var(--glass-shadow),
       inset -1px 0 0 var(--glass-highlight);
   }
 
   /* Status indicator */
-  .status-dot {
+  .status-dot,
+  .status-dot-connected,
+  .status-dot-disconnected {
     @apply w-2 h-2 rounded-full;
   }
 
   .status-dot-connected {
-    @apply status-dot bg-obd-success;
+    @apply bg-obd-success;
     box-shadow: 0 0 8px rgba(16, 185, 129, 0.6);
   }
 
   .status-dot-disconnected {
-    @apply status-dot bg-obd-danger;
+    @apply bg-obd-danger;
     box-shadow: 0 0 8px rgba(239, 68, 68, 0.6);
   }
 
@@ -263,24 +267,28 @@
   }
 
   /* Badge */
-  .badge {
+  .badge,
+  .badge-success,
+  .badge-warning,
+  .badge-danger,
+  .badge-info {
     @apply inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium;
   }
 
   .badge-success {
-    @apply badge bg-obd-success/15 text-obd-success border border-obd-success/20;
+    @apply bg-obd-success/15 text-obd-success border border-obd-success/20;
   }
 
   .badge-warning {
-    @apply badge bg-obd-warning/15 text-obd-warning border border-obd-warning/20;
+    @apply bg-obd-warning/15 text-obd-warning border border-obd-warning/20;
   }
 
   .badge-danger {
-    @apply badge bg-obd-danger/15 text-obd-danger border border-obd-danger/20;
+    @apply bg-obd-danger/15 text-obd-danger border border-obd-danger/20;
   }
 
   .badge-info {
-    @apply badge bg-obd-info/15 text-obd-info border border-obd-info/20;
+    @apply bg-obd-info/15 text-obd-info border border-obd-info/20;
   }
 }
 

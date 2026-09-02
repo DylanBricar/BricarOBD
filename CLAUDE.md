@@ -1,7 +1,7 @@
 # BricarOBD — Project Rules
 
 ## Architecture
-- **Frontend**: React 18 + TypeScript + Vite 5 + Tailwind CSS 3 (NOT Next.js — this is a Tauri desktop app)
+- **Frontend**: React 19 + TypeScript 6 + Vite 8 + Tailwind CSS 4 (NOT Next.js — this is a Tauri desktop app)
 - **Backend**: Rust + Tauri 2.x + rusqlite + serialport
 - **IPC**: Frontend ↔ Backend via `invoke()` from `@tauri-apps/api/core`
 - **Database**: Pre-built SQLite 503MB (3.17M operations, 90 vehicle profiles, 4866 ECUs)
@@ -9,11 +9,11 @@
 
 ## Critical Safety Rules
 - **ALL OBD commands outside Advanced page MUST be read-only** (Mode 01, 03, 07, 09, 0A, Service 22, 3E)
-- **Write services (2E, 2F, 30, 31) are ONLY allowed via `send_raw_command`** which uses `SafetyGuard::check_command_advanced`
+- **Write services (2E, 2F, 30, 31), actuator tests and regeneration operations stay backend-disabled** until an exact verified vehicle/ECU profile is available
 - **Always blocked everywhere**: 0x11 (ECUReset), 0x27 (SecurityAccess), 0x34-0x37 (Download/Upload), 0x3D (WriteMemory), 0x28 (CommControl)
 - **Mode 04 (Clear DTCs)** requires SafetyGuard check + frontend confirmation dialog
 - **Never trust frontend input** for file paths — sanitize filenames, validate paths stay within BricarOBD_Exports/
-- **AT commands**: Block ATMA, ATBD, ATBI, ATPP, ATWS
+- **Raw console**: default-deny; allow only explicitly listed read-only diagnostic services and block raw AT commands
 
 ## Connection Modes
 - `ConnectionMode::Demo` — all data comes from `DemoConnection` (JS + Rust demo generators)

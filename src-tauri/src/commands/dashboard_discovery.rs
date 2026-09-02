@@ -1,8 +1,8 @@
-use tauri::command;
+use crate::commands::connection::{is_demo, with_real_connection};
 use crate::obd::dev_log;
 use crate::obd::vin_cache::{self, VinCache};
-use crate::commands::connection::{is_demo, with_real_connection};
 use std::sync::Mutex;
+use tauri::command;
 
 // Discovered PIDs/DIDs — populated once by discover_vehicle_params, then used for polling
 pub static DISCOVERED_PIDS: Mutex<Option<Vec<u8>>> = Mutex::new(None);
@@ -10,6 +10,13 @@ pub static DISCOVERED_DIDS: Mutex<Option<Vec<(String, String)>>> = Mutex::new(No
 
 // Discovery progress tracking (current, total, phase)
 static DISCOVERY_PROGRESS: Mutex<(u32, u32, &'static str)> = Mutex::new((0, 0, ""));
+
+fn is_explicitly_unsupported(error: &str) -> bool {
+    let error = error.to_ascii_lowercase();
+    error.contains("not supported")
+        || error.contains("negative response")
+        || error.contains("no data")
+}
 
 /// Update discovery progress
 fn update_progress(current: u32, total: u32, phase: &'static str) {
@@ -50,6 +57,7 @@ pub async fn discover_vehicle_params(manufacturer: String, vin: String) -> serde
                 });
             }
         };
+        let mut discovery_complete = true;
 
         // === Load cached failure lists (if available) ===
         let cached = if !vin.is_empty() { vin_cache::load_cache(&vin) } else { None };
@@ -85,6 +93,10 @@ pub async fn discover_vehicle_params(manufacturer: String, vin: String) -> serde
             let mut found = Vec::new();
             let mut last_keepalive = std::time::Instant::now();
             for pid in &common_pids {
+                if super::connection::is_obd_cancelled() {
+                    discovery_complete = false;
+                    break;
+                }
                 // Skip PIDs known to fail from cache
                 if failed_pids.contains(pid) {
                     continue;
@@ -95,7 +107,13 @@ pub async fn discover_vehicle_params(manufacturer: String, vin: String) -> serde
                 }
                 match with_real_connection(|conn| conn.query_pid(0x01, *pid)) {
                     Ok(_) => { found.push(*pid); }
-                    Err(_) => { failed_pids.push(*pid); }
+                    Err(error) if is_explicitly_unsupported(&error) => {
+                        failed_pids.push(*pid);
+                    }
+                    Err(error) => dev_log::log_debug(
+                        "dashboard",
+                        &format!("Transient PID discovery failure for {pid:02X}: {error}"),
+                    ),
                 }
             }
             found
@@ -111,7 +129,10 @@ pub async fn discover_vehicle_params(manufacturer: String, vin: String) -> serde
         update_progress(50, 100, "scanning_dids");
 
         // === Phase 2: Discover manufacturer-specific DIDs ===
-        let mut discovered_dids: Vec<(String, String)> = Vec::new();
+        let mut discovered_dids: Vec<(String, String)> = cached
+            .as_ref()
+            .map(|cache| cache.supported_dids.clone())
+            .unwrap_or_default();
 
         if !manufacturer.is_empty() {
             let mut all_dids = crate::obd::ecu_profiles::get_did_definitions_for_manufacturer(&manufacturer);
@@ -120,9 +141,15 @@ pub async fn discover_vehicle_params(manufacturer: String, vin: String) -> serde
                     .cmp(&crate::obd::ecu_profiles::did_discovery_priority(&right.name))
                     .then_with(|| left.id.cmp(&right.id))
             });
-            // Filter out known-failed DIDs, keep new + previously-successful candidates
+            let cached_supported: std::collections::HashSet<String> = discovered_dids
+                .iter()
+                .map(|(did, _)| did.clone())
+                .collect();
+            // Resume after the previous 30-second window instead of probing
+            // successful DIDs again on every continuation pass.
             let candidates: Vec<_> = all_dids.iter()
                 .filter(|did| !failed_dids.contains(&format!("{:04X}", did.id)))
+                .filter(|did| !cached_supported.contains(&format!("{:04X}", did.id)))
                 .filter_map(|did| {
                     crate::obd::ecu_profiles::get_did_request_header(&manufacturer, &did.name)
                         .map(|header| (did, header))
@@ -140,8 +167,13 @@ pub async fn discover_vehicle_params(manufacturer: String, vin: String) -> serde
             let mut last_keepalive = std::time::Instant::now();
             let mut current_header = None;
             for (did, header) in &candidates {
+                if super::connection::is_obd_cancelled() {
+                    discovery_complete = false;
+                    break;
+                }
                 if discovery_start.elapsed() >= DISCOVERY_BUDGET {
                     dev_log::log_info("dashboard", "DID discovery budget reached; remaining parameters will be retried later");
+                    discovery_complete = false;
                     break;
                 }
 
@@ -160,7 +192,7 @@ pub async fn discover_vehicle_params(manufacturer: String, vin: String) -> serde
                 let did_hex = format!("{:04X}", did.id);
                 match result {
                     Ok(_) => discovered_dids.push((did_hex, did.name.clone())),
-                    Err(error) if error.contains("not supported") || error.contains("negative response") => {
+                    Err(error) if is_explicitly_unsupported(&error) => {
                         failed_dids.push(did_hex);
                     }
                     Err(error) => dev_log::log_debug(
@@ -172,19 +204,15 @@ pub async fn discover_vehicle_params(manufacturer: String, vin: String) -> serde
                 std::thread::sleep(std::time::Duration::from_millis(30));
             }
 
-            // Also include previously-discovered DIDs from cache that we skipped testing
-            if let Some(ref cache) = cached {
-                for (hex, name) in &cache.supported_dids {
-                    if !discovered_dids.iter().any(|(h, _)| h == hex) {
-                        discovered_dids.push((hex.clone(), name.clone()));
-                    }
-                }
-            }
         }
 
         dev_log::log_info("dashboard", &format!("Discovered {} manufacturer DIDs", discovered_dids.len()));
         let did_count = discovered_dids.len();
-        update_progress(100, 100, "complete");
+        if discovery_complete {
+            update_progress(100, 100, "complete");
+        } else {
+            update_progress(90, 100, "partial");
+        }
 
         // === Save to VIN cache: supportés + échoués ===
         if !vin.is_empty() {
@@ -209,12 +237,25 @@ pub async fn discover_vehicle_params(manufacturer: String, vin: String) -> serde
             "standardPids": standard_pids.len(),
             "manufacturerDids": did_count,
             "fromCache": has_cache,
-            "complete": true
+            "complete": discovery_complete
         })
     }).await.unwrap_or_else(|e| {
         dev_log::log_error("dashboard", &format!("discover_vehicle_params task failed: {}", e));
         serde_json::json!({})
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::is_explicitly_unsupported;
+
+    #[test]
+    fn transient_transport_errors_are_not_permanently_cached() {
+        assert!(!is_explicitly_unsupported("Timeout waiting for ELM327"));
+        assert!(!is_explicitly_unsupported("Serial port disconnected"));
+        assert!(is_explicitly_unsupported("NO DATA"));
+        assert!(is_explicitly_unsupported("Negative response 7F 22 31"));
+    }
 }
 
 /// Reset discovered parameters (call from connection when clearing cache)

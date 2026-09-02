@@ -2,11 +2,11 @@
 //! Allows the same ELM327 protocol to work over any physical link.
 
 use std::io::{Read, Write};
-use std::time::Duration;
 use std::net::TcpStream;
+use std::time::Duration;
 
 use super::dev_log;
-pub use super::transport_ble::{BleTransport, BleDeviceInfo};
+pub use super::transport_ble::{BleDeviceInfo, BleTransport};
 
 /// Transport type identifier
 #[derive(Debug, Clone, Copy, PartialEq, serde::Serialize, serde::Deserialize)]
@@ -36,7 +36,10 @@ pub struct SerialTransport {
 #[cfg(feature = "desktop")]
 impl SerialTransport {
     pub fn new(port_name: &str, baud_rate: u32, timeout_ms: u64) -> Result<Self, String> {
-        dev_log::log_info("transport", &format!("Opening serial: {} @ {} baud", port_name, baud_rate));
+        dev_log::log_info(
+            "transport",
+            &format!("Opening serial: {} @ {} baud", port_name, baud_rate),
+        );
         let port = serialport::new(port_name, baud_rate)
             .data_bits(serialport::DataBits::Eight)
             .parity(serialport::Parity::None)
@@ -80,19 +83,25 @@ impl SerialTransport {
                 dev_log::log_error("transport", &detail);
                 detail
             })?;
-        Ok(Self { port, current_timeout_ms: timeout_ms })
+        Ok(Self {
+            port,
+            current_timeout_ms: timeout_ms,
+        })
     }
 }
 
 #[cfg(feature = "desktop")]
 impl OBDTransport for SerialTransport {
     fn write_bytes(&mut self, data: &[u8]) -> Result<(), String> {
-        self.port.write_all(data).map_err(|e| format!("Serial write: {}", e))
+        self.port
+            .write_all(data)
+            .map_err(|e| format!("Serial write: {}", e))
     }
 
     fn read_bytes(&mut self, buf: &mut [u8], timeout_ms: u64) -> Result<usize, String> {
         if timeout_ms != self.current_timeout_ms {
-            self.port.set_timeout(Duration::from_millis(timeout_ms))
+            self.port
+                .set_timeout(Duration::from_millis(timeout_ms))
                 .map_err(|e| format!("Failed to set timeout: {}", e))?;
             self.current_timeout_ms = timeout_ms;
         }
@@ -105,10 +114,14 @@ impl OBDTransport for SerialTransport {
     }
 
     fn flush(&mut self) -> Result<(), String> {
-        self.port.flush().map_err(|e| format!("Serial flush: {}", e))
+        self.port
+            .flush()
+            .map_err(|e| format!("Serial flush: {}", e))
     }
 
-    fn transport_type(&self) -> TransportType { TransportType::Serial }
+    fn transport_type(&self) -> TransportType {
+        TransportType::Serial
+    }
 
     fn close(&mut self) {
         // SerialPort closes on drop
@@ -135,9 +148,11 @@ impl WiFiTransport {
             msg
         })?;
 
-        stream.set_read_timeout(Some(Duration::from_millis(timeout_ms)))
+        stream
+            .set_read_timeout(Some(Duration::from_millis(timeout_ms)))
             .map_err(|e| format!("Set read timeout: {}", e))?;
-        stream.set_write_timeout(Some(Duration::from_millis(timeout_ms)))
+        stream
+            .set_write_timeout(Some(Duration::from_millis(timeout_ms)))
             .map_err(|e| format!("Set write timeout: {}", e))?;
         stream.set_nodelay(true).ok();
 
@@ -148,12 +163,16 @@ impl WiFiTransport {
 
 impl OBDTransport for WiFiTransport {
     fn write_bytes(&mut self, data: &[u8]) -> Result<(), String> {
-        self.stream.write_all(data).map_err(|e| format!("WiFi write: {}", e))
+        self.stream
+            .write_all(data)
+            .map_err(|e| format!("WiFi write: {}", e))
     }
 
     fn read_bytes(&mut self, buf: &mut [u8], timeout_ms: u64) -> Result<usize, String> {
         let orig = self.stream.read_timeout().ok().flatten();
-        let _ = self.stream.set_read_timeout(Some(Duration::from_millis(timeout_ms)));
+        let _ = self
+            .stream
+            .set_read_timeout(Some(Duration::from_millis(timeout_ms)));
 
         let result = match self.stream.read(buf) {
             Ok(n) => Ok(n),
@@ -172,10 +191,14 @@ impl OBDTransport for WiFiTransport {
     }
 
     fn flush(&mut self) -> Result<(), String> {
-        self.stream.flush().map_err(|e| format!("WiFi flush: {}", e))
+        self.stream
+            .flush()
+            .map_err(|e| format!("WiFi flush: {}", e))
     }
 
-    fn transport_type(&self) -> TransportType { TransportType::WiFi }
+    fn transport_type(&self) -> TransportType {
+        TransportType::WiFi
+    }
 
     fn close(&mut self) {
         self.stream.shutdown(std::net::Shutdown::Both).ok();
@@ -187,19 +210,19 @@ impl OBDTransport for WiFiTransport {
 /// List available WiFi ELM327 endpoints (common defaults)
 pub fn default_wifi_endpoints() -> Vec<(String, u16)> {
     vec![
-        ("192.168.0.10".to_string(), 35000),  // Most common WiFi ELM327 (Viecar, generic)
-        ("192.168.0.10".to_string(), 23),     // Some adapters use telnet port
-        ("192.168.4.1".to_string(), 35000),   // Konnwei / hotspot-mode adapters
-        ("192.168.1.10".to_string(), 35000),  // Alternative subnet
-        ("192.168.1.1".to_string(), 3333),    // Older clones (non-standard port)
-        ("10.0.0.1".to_string(), 35000),      // Some newer adapters
-        ("192.168.2.10".to_string(), 35000),  // Rare subnet variant
+        ("192.168.0.10".to_string(), 35000), // Most common WiFi ELM327 (Viecar, generic)
+        ("192.168.0.10".to_string(), 23),    // Some adapters use telnet port
+        ("192.168.4.1".to_string(), 35000),  // Konnwei / hotspot-mode adapters
+        ("192.168.1.10".to_string(), 35000), // Alternative subnet
+        ("192.168.1.1".to_string(), 3333),   // Older clones (non-standard port)
+        ("10.0.0.1".to_string(), 35000),     // Some newer adapters
+        ("192.168.2.10".to_string(), 35000), // Rare subnet variant
     ]
 }
 
 /// Try to connect via WiFi by probing common addresses in parallel
 pub fn auto_connect_wifi(timeout_ms: u64) -> Result<WiFiTransport, String> {
-    use std::sync::{Mutex, Arc};
+    use std::sync::{Arc, Mutex};
     let endpoints = default_wifi_endpoints();
     let found: Arc<Mutex<Option<WiFiTransport>>> = Arc::new(Mutex::new(None));
 
@@ -211,13 +234,18 @@ pub fn auto_connect_wifi(timeout_ms: u64) -> Result<WiFiTransport, String> {
                 // Skip connection attempt if another thread already succeeded
                 {
                     let result = found.lock().unwrap_or_else(|e| e.into_inner());
-                    if result.is_some() { return; }
+                    if result.is_some() {
+                        return;
+                    }
                 }
                 dev_log::log_debug("transport", &format!("Probing WiFi {}:{}", host, port));
                 if let Ok(transport) = WiFiTransport::new(&host, port, timeout_ms.min(2000)) {
                     let mut result = found.lock().unwrap_or_else(|e| e.into_inner());
                     if result.is_none() {
-                        dev_log::log_info("transport", &format!("WiFi connected at {}:{}", host, port));
+                        dev_log::log_info(
+                            "transport",
+                            &format!("WiFi connected at {}:{}", host, port),
+                        );
                         *result = Some(transport);
                     }
                     // Loser transport is dropped here — TCP stream closed cleanly
@@ -232,5 +260,7 @@ pub fn auto_connect_wifi(timeout_ms: u64) -> Result<WiFiTransport, String> {
     });
 
     let mut guard = found.lock().unwrap_or_else(|e| e.into_inner());
-    guard.take().ok_or_else(|| "No WiFi ELM327 found at common addresses".to_string())
+    guard
+        .take()
+        .ok_or_else(|| "No WiFi ELM327 found at common addresses".to_string())
 }

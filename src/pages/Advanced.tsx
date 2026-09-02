@@ -232,6 +232,13 @@ export default function Advanced() {
         {ecuAddress === "custom" && <input value={customEcuAddress} onChange={e => setCustomEcuAddress(e.target.value)} placeholder="0x7XX" className="bg-obd-surface border border-obd-border rounded px-2 py-1 text-sm w-20" />}
       </div>
 
+      <div className="flex items-start gap-3 p-4 rounded-xl bg-obd-warning/5 border border-obd-warning/20">
+        <Lock className="text-obd-warning flex-shrink-0 mt-0.5" size={18} />
+        <p className="text-xs text-obd-warning/90 leading-relaxed">
+          {t("advanced.profileRequired")}
+        </p>
+      </div>
+
       <div className="flex flex-col md:flex-row gap-4 md:gap-6 flex-1 min-h-0">
         {/* Operations and Raw Command panel */}
         <div className="flex-1 overflow-y-auto space-y-3">
@@ -314,6 +321,7 @@ export default function Advanced() {
                           <div className="flex gap-2">
                             <input
                               type="text"
+                              disabled
                               value={operationValues[op.id] || ""}
                               onChange={(e) =>
                                 setOperationValues((prev) => ({
@@ -322,12 +330,12 @@ export default function Advanced() {
                                 }))
                               }
                               placeholder={`${t("advanced.value")} (${op.unit || ""})`}
-                              className="input-field text-xs flex-1"
+                              className="input-field text-xs flex-1 opacity-50 cursor-not-allowed"
                             />
                             <button
                               onClick={() => executeOperation(op)}
-                              disabled={executingOp === op.id}
-                              className={cn("btn-accent-solid px-3 flex items-center gap-1.5 text-xs", executingOp === op.id && "opacity-50 cursor-not-allowed")}
+                              disabled
+                              className="btn-accent-solid px-3 flex items-center gap-1.5 text-xs opacity-50 cursor-not-allowed"
                             >
                               {executingOp === op.id ? <RefreshCw size={12} className="animate-spin" /> : <Send size={12} />}
                               {t("advanced.execute")}
@@ -338,8 +346,8 @@ export default function Advanced() {
                         {!op.needs_value && (
                           <button
                             onClick={() => executeOperation(op)}
-                            disabled={executingOp === op.id}
-                            className={cn("w-full btn-accent-solid px-3 py-2 text-xs flex items-center justify-center gap-1.5", executingOp === op.id && "opacity-50 cursor-not-allowed")}
+                            disabled
+                            className="w-full btn-accent-solid px-3 py-2 text-xs flex items-center justify-center gap-1.5 opacity-50 cursor-not-allowed"
                           >
                             {executingOp === op.id ? <RefreshCw size={12} className="animate-spin" /> : <Send size={12} />}
                             {t("advanced.execute")}

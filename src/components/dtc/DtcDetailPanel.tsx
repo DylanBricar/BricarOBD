@@ -1,4 +1,4 @@
-import { AlertTriangle, Wrench, ExternalLink, Youtube } from "lucide-react";
+import { AlertTriangle, Wrench, ExternalLink, Video } from "lucide-react";
 import type { DtcCode, DtcHistoryEntry } from "@/stores/vehicle";
 import { cn } from "@/lib/utils";
 
@@ -116,7 +116,7 @@ export default function DtcDetailPanel({
         onClick={() => onOpenExternal(onBuildSearchQuery(selectedData.code, "youtube"))}
         className="w-full px-4 py-2 rounded-lg font-medium text-sm transition-all duration-200 bg-red-600/20 text-red-400 border border-red-500/30 hover:bg-red-600/30 hover:border-red-500/50 active:scale-[0.98] flex items-center justify-center gap-1.5 text-xs"
       >
-        <Youtube size={14} />
+        <Video size={14} />
         {t("dtc.youtubeSearch")}
       </button>
     </div>

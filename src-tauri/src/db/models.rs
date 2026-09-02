@@ -1,6 +1,5 @@
 /// Database result models extracted from database.rs
 /// Provides shared struct definitions for operation and session queries
-
 use serde::{Deserialize, Serialize};
 
 /// Result of a single operation query (read/write/diagnostic)
@@ -118,17 +117,34 @@ mod tests {
     #[test]
     fn test_operation_result_serialize_camel_case() {
         let op = OperationResult {
-            id: "1".into(), name: "Read VIN".into(), name_fr: "Lire VIN".into(),
-            sentbytes: "22F190".into(), service: "22".into(), did: "F190".into(),
-            op_type: "read".into(), ecu_name: "Engine".into(), ecu_tx: "7E0".into(),
-            ecu_rx: "7E8".into(), vehicle: "Peugeot 207".into(), risk: "low".into(),
+            id: "1".into(),
+            name: "Read VIN".into(),
+            name_fr: "Lire VIN".into(),
+            sentbytes: "22F190".into(),
+            service: "22".into(),
+            did: "F190".into(),
+            op_type: "read".into(),
+            ecu_name: "Engine".into(),
+            ecu_tx: "7E0".into(),
+            ecu_rx: "7E8".into(),
+            vehicle: "Peugeot 207".into(),
+            risk: "low".into(),
         };
         let json = serde_json::to_string(&op).unwrap();
         assert!(json.contains("\"nameFr\""), "Should use camelCase: nameFr");
-        assert!(json.contains("\"ecuName\""), "Should use camelCase: ecuName");
+        assert!(
+            json.contains("\"ecuName\""),
+            "Should use camelCase: ecuName"
+        );
         assert!(json.contains("\"ecuTx\""), "Should use camelCase: ecuTx");
-        assert!(json.contains("\"type\""), "op_type should serialize as 'type'");
-        assert!(!json.contains("\"op_type\""), "Should not contain snake_case op_type");
+        assert!(
+            json.contains("\"type\""),
+            "op_type should serialize as 'type'"
+        );
+        assert!(
+            !json.contains("\"op_type\""),
+            "Should not contain snake_case op_type"
+        );
     }
 
     #[test]
@@ -142,8 +158,13 @@ mod tests {
     #[test]
     fn test_read_operation_serialize() {
         let op = ReadOperation {
-            id: "1".into(), name: "Read VIN".into(), name_fr: "Lire VIN".into(),
-            sentbytes: "22F190".into(), did: "F190".into(), ecu_tx: "7E0".into(), ecu_rx: "7E8".into(),
+            id: "1".into(),
+            name: "Read VIN".into(),
+            name_fr: "Lire VIN".into(),
+            sentbytes: "22F190".into(),
+            did: "F190".into(),
+            ecu_tx: "7E0".into(),
+            ecu_rx: "7E8".into(),
         };
         let json = serde_json::to_string(&op).unwrap();
         assert!(json.contains("\"nameFr\""));
@@ -153,8 +174,14 @@ mod tests {
     #[test]
     fn test_write_operation_has_risk() {
         let op = WriteOperation {
-            id: "1".into(), name: "Write VIN".into(), name_fr: "Écrire VIN".into(),
-            sentbytes: "2EF190".into(), did: "F190".into(), ecu_tx: "7E0".into(), ecu_rx: "7E8".into(), risk: "high".into(),
+            id: "1".into(),
+            name: "Write VIN".into(),
+            name_fr: "Écrire VIN".into(),
+            sentbytes: "2EF190".into(),
+            did: "F190".into(),
+            ecu_tx: "7E0".into(),
+            ecu_rx: "7E8".into(),
+            risk: "high".into(),
         };
         let json = serde_json::to_string(&op).unwrap();
         assert!(json.contains("\"risk\":\"high\""));
@@ -162,7 +189,12 @@ mod tests {
 
     #[test]
     fn test_ecu_profile_serialize() {
-        let profile = EcuProfile { name: "Engine".into(), name_fr: "Moteur".into(), tx: "7E0".into(), rx: "7E8".into() };
+        let profile = EcuProfile {
+            name: "Engine".into(),
+            name_fr: "Moteur".into(),
+            tx: "7E0".into(),
+            rx: "7E8".into(),
+        };
         let json = serde_json::to_string(&profile).unwrap();
         assert!(json.contains("\"nameFr\""));
     }
@@ -170,8 +202,12 @@ mod tests {
     #[test]
     fn test_ecu_catalog_result_serialize() {
         let result = EcuCatalogResult {
-            filename: "ecm.xml".into(), ecuname: "ECM".into(), address: "7E0".into(),
-            group: "Engine".into(), protocol: "CAN".into(), projects: "207,208".into(),
+            filename: "ecm.xml".into(),
+            ecuname: "ECM".into(),
+            address: "7E0".into(),
+            group: "Engine".into(),
+            protocol: "CAN".into(),
+            projects: "207,208".into(),
         };
         let json = serde_json::to_string(&result).unwrap();
         assert!(json.contains("\"ecuname\""));
@@ -180,8 +216,13 @@ mod tests {
     #[test]
     fn test_session_result_serialize() {
         let session = SessionResult {
-            id: 1, vin: "VF3LCBHZ6JS000000".into(), make: "Peugeot".into(),
-            model: "207".into(), dtc_count: 3, notes: "".into(), timestamp: "2024-01-01".into(),
+            id: 1,
+            vin: "VF3LCBHZ6JS000000".into(),
+            make: "Peugeot".into(),
+            model: "207".into(),
+            dtc_count: 3,
+            notes: "".into(),
+            timestamp: "2024-01-01".into(),
         };
         let json = serde_json::to_string(&session).unwrap();
         assert!(json.contains("\"dtcCount\":3"));
@@ -189,7 +230,11 @@ mod tests {
 
     #[test]
     fn test_db_stats_serialize() {
-        let stats = DbStats { operations: 1000, profiles: 50, ecus: 200 };
+        let stats = DbStats {
+            operations: 1000,
+            profiles: 50,
+            ecus: 200,
+        };
         let json = serde_json::to_string(&stats).unwrap();
         assert!(json.contains("\"operations\":1000"));
         assert!(json.contains("\"profiles\":50"));
@@ -198,10 +243,17 @@ mod tests {
     #[test]
     fn test_operation_result_no_vehicle_serialize() {
         let op = OperationResultNoVehicle {
-            id: "1".into(), name: "Test".into(), name_fr: "Test".into(),
-            sentbytes: "010C".into(), service: "01".into(), did: "0C".into(),
-            op_type: "read".into(), ecu_name: "ECM".into(), ecu_tx: "7E0".into(),
-            ecu_rx: "7E8".into(), risk: "low".into(),
+            id: "1".into(),
+            name: "Test".into(),
+            name_fr: "Test".into(),
+            sentbytes: "010C".into(),
+            service: "01".into(),
+            did: "0C".into(),
+            op_type: "read".into(),
+            ecu_name: "ECM".into(),
+            ecu_tx: "7E0".into(),
+            ecu_rx: "7E8".into(),
+            risk: "low".into(),
         };
         let json = serde_json::to_string(&op).unwrap();
         assert!(!json.contains("vehicle"), "Should not have vehicle field");
@@ -210,7 +262,11 @@ mod tests {
 
     #[test]
     fn test_roundtrip_db_stats() {
-        let stats = DbStats { operations: 3170000, profiles: 90, ecus: 4866 };
+        let stats = DbStats {
+            operations: 3170000,
+            profiles: 90,
+            ecus: 4866,
+        };
         let json = serde_json::to_string(&stats).unwrap();
         let parsed: DbStats = serde_json::from_str(&json).unwrap();
         assert_eq!(parsed.operations, 3170000);
