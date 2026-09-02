@@ -179,6 +179,16 @@ mod tests {
     }
 
     #[test]
+    fn test_pid_bitmap_parsing_with_can_header() {
+        let pids = Elm327Connection::parse_pid_bitmap(
+            "7E8 06 41 00 80 00 00 00",
+            "41 00",
+            0x00,
+        );
+        assert_eq!(pids, vec![0x01]);
+    }
+
+    #[test]
     fn test_pid_bitmap_parsing_without_spaces() {
         let response = "4100FFFFFFFF";
         let clean = response.replace(" ", "");

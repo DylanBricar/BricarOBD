@@ -177,3 +177,28 @@ impl Elm327Connection {
         Err(format!("Invalid response for DID {:04X}", did))
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parses_pid_data_after_positive_response_not_after_can_header() {
+        assert_eq!(
+            Elm327Connection::parse_pid_response("7E8 04 41 0C 1A F8", 0x01, 0x0C),
+            Some(vec![0x1A, 0xF8]),
+        );
+    }
+
+    #[test]
+    fn does_not_mix_second_ecu_response_into_pid_data() {
+        assert_eq!(
+            Elm327Connection::parse_pid_response(
+                "7E8 04 41 0C 1A F8\n7E9 04 41 0C 00 00",
+                0x01,
+                0x0C,
+            ),
+            Some(vec![0x1A, 0xF8]),
+        );
+    }
+}

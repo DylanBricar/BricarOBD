@@ -279,6 +279,22 @@ mod tests {
     use super::*;
 
     #[test]
+    fn freeze_frame_payload_skips_frame_number_and_can_header() {
+        assert_eq!(
+            parse_freeze_frame_payload("7E8 05 42 0C 00 1A F8", 0x0C, 0),
+            Some(vec![0x1A, 0xF8]),
+        );
+    }
+
+    #[test]
+    fn freeze_frame_payload_requires_requested_frame() {
+        assert_eq!(
+            parse_freeze_frame_payload("42 0C 01 1A F8", 0x0C, 0),
+            None,
+        );
+    }
+
+    #[test]
     fn test_parse_mode06_bitmap_empty() {
         let response = "";
         let bitmap = parse_mode06_bitmap(response);
