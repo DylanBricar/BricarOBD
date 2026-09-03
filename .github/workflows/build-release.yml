@@ -36,7 +36,9 @@ jobs:
               --title "BricarOBD $RELEASE_TAG" \
               --notes "Multi-platform release for BricarOBD $RELEASE_TAG."
           fi
-          RELEASE_ID=$(gh api "repos/${GITHUB_REPOSITORY}/releases/tags/${RELEASE_TAG}" --jq .id)
+          RELEASE_ID=$(gh api "repos/${GITHUB_REPOSITORY}/releases?per_page=100" \
+            --jq '.[] | select(.tag_name == env.RELEASE_TAG) | .id')
+          test -n "$RELEASE_ID"
           echo "release_id=$RELEASE_ID" >> "$GITHUB_OUTPUT"
 
   # ═══════════════════════════════════════════
