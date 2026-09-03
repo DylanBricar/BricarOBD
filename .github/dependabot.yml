@@ -44,7 +44,6 @@ updates:
       timezone: Europe/Brussels
     open-pull-requests-limit: 5
     groups:
-      actions-minor-and-patch:
-        update-types:
-          - minor
-          - patch
+      all-actions:
+        patterns:
+          - "*"
