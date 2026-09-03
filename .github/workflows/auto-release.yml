@@ -79,12 +79,12 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           NEW_TAG: ${{ steps.bump.outputs.new_tag }}
         run: |
-          gh release create "$NEW_TAG" \
-            --verify-tag \
-            --draft \
-            --title "BricarOBD $NEW_TAG" \
-            --notes "Automated multi-platform release for BricarOBD $NEW_TAG."
-          RELEASE_ID=$(gh api "repos/${GITHUB_REPOSITORY}/releases/tags/${NEW_TAG}" \
+          gh api "repos/${GITHUB_REPOSITORY}/git/ref/tags/${NEW_TAG}" >/dev/null
+          RELEASE_ID=$(gh api --method POST "repos/${GITHUB_REPOSITORY}/releases" \
+            -f tag_name="$NEW_TAG" \
+            -f name="BricarOBD $NEW_TAG" \
+            -f body="Automated multi-platform release for BricarOBD $NEW_TAG." \
+            -F draft=true \
             --jq '.id')
           test -n "$RELEASE_ID"
           echo "release_id=$RELEASE_ID" >> "$GITHUB_OUTPUT"
