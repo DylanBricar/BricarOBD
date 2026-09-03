@@ -18,12 +18,39 @@ for (const nested of [false, true]) {
       await mkdir(packageDir, { recursive: true });
       await writeFile(
         join(packageDir, "MainActivity.kt"),
-        "package com.bricarobd.app\n\nclass MainActivity : TauriActivity()\n",
+        [
+          "package com.bricarobd.app",
+          "",
+          "import android.os.Bundle",
+          "import androidx.activity.enableEdgeToEdge",
+          "",
+          "class MainActivity : TauriActivity() {",
+          "  override fun onCreate(savedInstanceState: Bundle?) {",
+          "    enableEdgeToEdge()",
+          "    super.onCreate(savedInstanceState)",
+          "  }",
+          "}",
+          "",
+        ].join("\n"),
       );
       await writeFile(join(projectRoot, "settings.gradle"), "include ':app'\n\napply from: 'tauri.settings.gradle'\n");
       await writeFile(
         join(projectRoot, "build.gradle.kts"),
-        "allprojects {\n    repositories {\n        google()\n        mavenCentral()\n    }\n}\n",
+        [
+          "buildscript {",
+          "    dependencies {",
+          '        classpath("org.jetbrains.kotlin:kotlin-gradle-plugin:1.9.25")',
+          "    }",
+          "}",
+          "",
+          "allprojects {",
+          "    repositories {",
+          "        google()",
+          "        mavenCentral()",
+          "    }",
+          "}",
+          "",
+        ].join("\n"),
       );
       await writeFile(join(projectRoot, "app", "build.gradle.kts"), "dependencies {\n}\n");
       await writeFile(
@@ -43,11 +70,15 @@ for (const nested of [false, true]) {
       const manifest = await readFile(join(sourceDir, "AndroidManifest.xml"), "utf8");
 
       assert.equal(activity.match(/addJavascriptInterface/g)?.length, 1);
+      assert.equal(activity.match(/override fun onCreate/g)?.length, 1);
       assert.match(bridge, /InetAddress\.getLoopbackAddress\(\)/);
       assert.match(bridge, /UsbSerialProber\.getDefaultProber/);
       assert.match(bridge, /SecureRandom/);
       assert.match(bridge, /BRICAROBD-AUTH/);
+      assert.match(bridge, /byte == '\\n'\.code/);
+      assert.match(bridge, /byte != '\\r'\.code/);
       assert.equal(rootGradle.match(/https:\/\/jitpack\.io/g)?.length, 1);
+      assert.equal(rootGradle.match(/kotlin-gradle-plugin:2\.2\.21/g)?.length, 1);
       assert.equal(gradle.match(/usb-serial-for-android:3\.11\.0/g)?.length, 1);
       assert.equal(manifest.match(/android\.hardware\.usb\.host/g)?.length, 1);
     } finally {

@@ -47,15 +47,15 @@ if (!packageMatch) throw new Error("Generated MainActivity.kt has no package dec
 const packageName = packageMatch[1];
 
 if (!mainActivity.includes('addJavascriptInterface(AndroidUsbBridge(this), "AndroidUsb")')) {
-  requireMarker(mainActivity, "class MainActivity : TauriActivity()", mainActivityPath);
+  const classMarker = "class MainActivity : TauriActivity() {";
+  requireMarker(mainActivity, classMarker, mainActivityPath);
   mainActivity = mainActivity.replace(packageMatch[0], `${packageMatch[0]}\n\nimport android.webkit.WebView`);
   mainActivity = mainActivity.replace(
-    "class MainActivity : TauriActivity()",
-    `class MainActivity : TauriActivity() {
+    classMarker,
+    `${classMarker}
   override fun onWebViewCreate(webView: WebView) {
     webView.addJavascriptInterface(AndroidUsbBridge(this), "AndroidUsb")
-  }
-}`,
+  }`,
   );
   await writeFile(mainActivityPath, mainActivity, "utf8");
 }
@@ -234,8 +234,8 @@ private class UsbSerialTcpBridge(
     while (received.size() <= 128) {
       val byte = input.read()
       if (byte < 0) return false
-      if (byte == '\n'.code) break
-      if (byte != '\r'.code) received.write(byte)
+      if (byte == '\\n'.code) break
+      if (byte != '\\r'.code) received.write(byte)
     }
     val expected = "BRICAROBD-AUTH $authenticationToken".toByteArray(Charsets.UTF_8)
     return MessageDigest.isEqual(received.toByteArray(), expected)
@@ -259,13 +259,21 @@ private class UsbSerialTcpBridge(
 await writeFile(bridgePath, bridgeSource, "utf8");
 
 let rootGradle = await readFile(rootGradlePath, "utf8");
+// Tauri 2.11's template still pins 1.9.25, but its current AndroidX graph contains
+// Kotlin 2.2 metadata. KGP 2.2.21 supports the template's Gradle 8.14 / AGP 8.11 pair.
+const oldKotlinPlugin = 'classpath("org.jetbrains.kotlin:kotlin-gradle-plugin:1.9.25")';
+const compatibleKotlinPlugin = 'classpath("org.jetbrains.kotlin:kotlin-gradle-plugin:2.2.21")';
+if (!rootGradle.includes(compatibleKotlinPlugin)) {
+  requireMarker(rootGradle, oldKotlinPlugin, rootGradlePath);
+  rootGradle = rootGradle.replace(oldKotlinPlugin, compatibleKotlinPlugin);
+}
 if (!rootGradle.includes('maven(url = "https://jitpack.io")')) {
   const projectRepositories = /allprojects\s*\{[\s\S]*?repositories\s*\{/;
   const match = rootGradle.match(projectRepositories);
   if (!match) throw new Error("Unsupported Android template: project repositories not found");
   rootGradle = rootGradle.replace(match[0], `${match[0]}\n        maven(url = "https://jitpack.io")`);
-  await writeFile(rootGradlePath, rootGradle, "utf8");
 }
+await writeFile(rootGradlePath, rootGradle, "utf8");
 
 let appGradle = await readFile(appGradlePath, "utf8");
 const serialDependency = 'implementation("com.github.mik3y:usb-serial-for-android:3.11.0")';
