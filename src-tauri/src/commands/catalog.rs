@@ -14,6 +14,17 @@ pub const CATALOG_EXPECTED_SHA256: &str =
 #[cfg(feature = "mobile")]
 const PROGRESS_STEP_BYTES: u64 = 1024 * 1024;
 
+#[cfg(feature = "mobile")]
+fn encode_hex(bytes: &[u8]) -> String {
+    const HEX_DIGITS: &[u8; 16] = b"0123456789abcdef";
+    let mut encoded = String::with_capacity(bytes.len() * 2);
+    for &byte in bytes {
+        encoded.push(HEX_DIGITS[(byte >> 4) as usize] as char);
+        encoded.push(HEX_DIGITS[(byte & 0x0f) as usize] as char);
+    }
+    encoded
+}
+
 static DOWNLOAD_IN_PROGRESS: AtomicBool = AtomicBool::new(false);
 
 #[derive(Debug, Clone, Serialize)]
@@ -174,7 +185,7 @@ pub async fn download_catalog(
         .map_err(|error| format!("Unable to persist catalog: {error}"))?;
     drop(file);
 
-    let actual_sha256 = format!("{:x}", hasher.finalize());
+    let actual_sha256 = encode_hex(&hasher.finalize());
     if downloaded_bytes != CATALOG_EXPECTED_BYTES || actual_sha256 != CATALOG_EXPECTED_SHA256 {
         let _ = tokio::fs::remove_file(&partial_path).await;
         return Err(format!(
@@ -216,5 +227,11 @@ mod tests {
         assert_eq!(CATALOG_EXPECTED_SHA256.len(), 64);
         assert!(CATALOG_DOWNLOAD_URL.starts_with("https://github.com/"));
         assert!(!CATALOG_DOWNLOAD_URL.contains('?'));
+    }
+
+    #[cfg(feature = "mobile")]
+    #[test]
+    fn digest_bytes_are_encoded_as_lowercase_hex() {
+        assert_eq!(encode_hex(&[0x00, 0x0f, 0x10, 0xab, 0xff]), "000f10abff");
     }
 }
