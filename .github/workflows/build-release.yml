@@ -49,15 +49,19 @@ jobs:
         include:
           - platform: macos-latest
             target: aarch64-apple-darwin
+            bundles: dmg
             name: macOS (Apple Silicon)
           - platform: macos-latest
             target: x86_64-apple-darwin
+            bundles: dmg
             name: macOS (Intel)
           - platform: windows-latest
             target: x86_64-pc-windows-msvc
+            bundles: msi,nsis
             name: Windows (x64)
           - platform: ubuntu-22.04
             target: x86_64-unknown-linux-gnu
+            bundles: deb,appimage
             name: Linux (x64)
 
     runs-on: ${{ matrix.platform }}
@@ -139,7 +143,7 @@ jobs:
           releaseId: ${{ needs.prepare-release.outputs.release_id }}
           tagName: ${{ inputs.tag || github.ref_name }}
           retryAttempts: 5
-          args: --target ${{ matrix.target }}
+          args: --target ${{ matrix.target }} --bundles ${{ matrix.bundles }}
 
   # ═══════════════════════════════════════════
   # Android build (.apk)
