@@ -27,6 +27,7 @@ jobs:
         id: release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
           RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
         run: |
           if ! gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
@@ -275,6 +276,7 @@ jobs:
         shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
           RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
           ANDROID_SIGNING_ENABLED: ${{ vars.ANDROID_SIGNING_ENABLED }}
           APPLE_SIGNING_ENABLED: ${{ vars.APPLE_SIGNING_ENABLED }}

@@ -321,6 +321,7 @@ jobs:
         shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
           RELEASE_TAG: ${{ needs.bump-and-tag.outputs.new_tag }}
           RELEASE_VERSION: ${{ needs.bump-and-tag.outputs.new_version }}
           ANDROID_SIGNING_ENABLED: ${{ vars.ANDROID_SIGNING_ENABLED }}
