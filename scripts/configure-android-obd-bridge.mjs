@@ -1,11 +1,5 @@
-import { readdir, readFile, writeFile } from "node:fs/promises";
-import { join, resolve } from "node:path";
-
-const androidRoot = resolve(process.argv[2] ?? "src-tauri/gen/android");
-const javaRoot = join(androidRoot, "app", "src", "main", "java");
-const manifestPath = join(androidRoot, "app", "src", "main", "AndroidManifest.xml");
-const appGradlePath = join(androidRoot, "app", "build.gradle.kts");
-const settingsPath = join(androidRoot, "settings.gradle.kts");
+import { access, readdir, readFile, writeFile } from "node:fs/promises";
+import { dirname, join, resolve } from "node:path";
 
 async function findFile(directory, fileName) {
   for (const entry of await readdir(directory, { withFileTypes: true })) {
@@ -19,6 +13,22 @@ async function findFile(directory, fileName) {
   }
   return null;
 }
+
+async function resolveAndroidProjectRoot(baseDirectory) {
+  const settings = await findFile(baseDirectory, "settings.gradle.kts");
+  if (!settings) throw new Error(`Generated settings.gradle.kts was not found below ${baseDirectory}`);
+
+  const projectRoot = dirname(settings);
+  await access(join(projectRoot, "app", "build.gradle.kts"));
+  return projectRoot;
+}
+
+const androidBase = resolve(process.argv[2] ?? "src-tauri/gen/android");
+const androidRoot = await resolveAndroidProjectRoot(androidBase);
+const javaRoot = join(androidRoot, "app", "src", "main", "java");
+const manifestPath = join(androidRoot, "app", "src", "main", "AndroidManifest.xml");
+const appGradlePath = join(androidRoot, "app", "build.gradle.kts");
+const settingsPath = join(androidRoot, "settings.gradle.kts");
 
 function requireMarker(contents, marker, file) {
   if (!contents.includes(marker)) {

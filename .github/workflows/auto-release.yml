@@ -269,7 +269,12 @@ jobs:
           printf '%s' "$ANDROID_KEY_BASE64" | base64 --decode > "$RUNNER_TEMP/android-release.jks"
           chmod 600 "$RUNNER_TEMP/android-release.jks"
           export ANDROID_KEYSTORE_PATH="$RUNNER_TEMP/android-release.jks"
-          node scripts/configure-android-signing.mjs
+          SETTINGS_PATH=$(find src-tauri/gen/android -type f -name settings.gradle.kts -print -quit)
+          test -n "$SETTINGS_PATH"
+          ANDROID_PROJECT=$(dirname "$SETTINGS_PATH")
+          node scripts/configure-android-signing.mjs \
+            "$ANDROID_PROJECT/app/build.gradle.kts" \
+            "$ANDROID_PROJECT/keystore.properties"
           keytool -list \
             -keystore "$ANDROID_KEYSTORE_PATH" \
             -storepass "$ANDROID_KEY_PASSWORD" \
@@ -281,21 +286,24 @@ jobs:
           NDK_HOME: ${{ env.ANDROID_HOME }}/ndk/27.2.12479018
 
       - name: Verify signed Android APK
+        id: android-apk
         shell: bash
         run: |
-          APK="src-tauri/gen/android/app/build/outputs/apk/universal/release/app-universal-release.apk"
+          APK=$(find src-tauri/gen/android -type f \
+            -path '*/app/build/outputs/apk/universal/release/app-universal-release.apk' \
+            -print -quit)
           test -f "$APK"
           APKSIGNER=$(find "$ANDROID_HOME/build-tools" -type f -name apksigner | sort -V | tail -1)
           test -n "$APKSIGNER"
           "$APKSIGNER" verify --verbose --print-certs "$APK"
+          echo "path=$APK" >> "$GITHUB_OUTPUT"
 
       - name: Upload APK to release
         uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3
         with:
           tag_name: ${{ needs.bump-and-tag.outputs.new_tag }}
           fail_on_unmatched_files: true
-          files: |
-            src-tauri/gen/android/app/build/outputs/apk/universal/release/app-universal-release.apk
+          files: ${{ steps.android-apk.outputs.path }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
