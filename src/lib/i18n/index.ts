@@ -16,6 +16,7 @@ import { common } from "./common";
 import { devConsole } from "./devConsole";
 import { demo } from "./demo";
 import { update } from "./update";
+import { catalog } from "./catalog";
 
 const resources = {
   fr: {
@@ -36,6 +37,7 @@ const resources = {
       ...devConsole.fr,
       ...demo.fr,
       ...update.fr,
+      ...catalog.fr,
     },
   },
   en: {
@@ -56,6 +58,7 @@ const resources = {
       ...devConsole.en,
       ...demo.en,
       ...update.en,
+      ...catalog.en,
     },
   },
 };

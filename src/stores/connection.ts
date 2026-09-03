@@ -2,12 +2,7 @@ import { useSyncExternalStore, useMemo } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { devInfo, devError } from "@/lib/devlog";
 
-export type ConnectionStatus =
-  | "disconnected"
-  | "connecting"
-  | "connected"
-  | "error"
-  | "demo";
+export type ConnectionStatus = "disconnected" | "connecting" | "connected" | "error" | "demo";
 
 export interface VehicleInfo {
   vin: string;
@@ -86,9 +81,9 @@ const setPorts = (ports: string[]) => {
 
 const scanPorts = async () => {
   try {
-    const ports = await invoke<Array<{name: string, description: string}>>("list_serial_ports");
+    const ports = await invoke<Array<{ name: string; description: string }>>("list_serial_ports");
     devInfo("ui", "Ports found: " + ports.length);
-    globalState = { ...globalState, availablePorts: ports.map(p => p.name) };
+    globalState = { ...globalState, availablePorts: ports.map((p) => p.name) };
     notify();
   } catch (e) {
     console.error("[BricarOBD] Failed to scan ports: " + String(e));
@@ -100,7 +95,10 @@ const connect = async () => {
   globalState = { ...globalState, status: "connecting", error: null };
   notify();
   try {
-    const vehicle = await invoke<VehicleInfo>("connect_obd", { port: globalState.port, baudRate: globalState.baudRate });
+    const vehicle = await invoke<VehicleInfo>("connect_obd", {
+      port: globalState.port,
+      baudRate: globalState.baudRate,
+    });
     devInfo("ui", "Connected: " + vehicle.make + " " + vehicle.model);
     globalState = { ...globalState, status: "connected", vehicle };
     notify();
@@ -113,12 +111,16 @@ const connect = async () => {
 
 const disconnect = async () => {
   devInfo("ui", "Disconnected");
-  try { await invoke("disconnect_obd"); } catch {}
+  try {
+    await invoke("disconnect_obd");
+  } catch {}
   // On Android: unbind from WiFi network to restore normal routing
   try {
     const androidWifi = (window as unknown as { AndroidWifi?: { unbind(): void } }).AndroidWifi;
     androidWifi?.unbind();
-  } catch { /* not on Android */ }
+  } catch {
+    /* not on Android */
+  }
   globalState = { ...defaultState, availablePorts: globalState.availablePorts };
   notify();
 };
@@ -128,7 +130,7 @@ const updateVehicle = (vehicle: VehicleInfo) => {
   notify();
 };
 
-const connectWifi = async (host: string, port: number) => {
+const connectWifi = async (host: string, port: number, bridgeToken?: string) => {
   devInfo("ui", "WiFi connecting to " + host + ":" + port);
   globalState = { ...globalState, status: "connecting", error: null };
   notify();
@@ -142,7 +144,9 @@ const connectWifi = async (host: string, port: number) => {
       androidWifi.bindToWifi();
     }
 
-    const vehicle = await invoke<VehicleInfo>("connect_wifi", { host, port });
+    const args: { host: string; port: number; bridgeToken?: string } = { host, port };
+    if (bridgeToken) args.bridgeToken = bridgeToken;
+    const vehicle = await invoke<VehicleInfo>("connect_wifi", args);
     devInfo("ui", "WiFi connected: " + vehicle.make + " " + vehicle.model);
     globalState = { ...globalState, status: "connected", vehicle };
     notify();
@@ -175,7 +179,19 @@ const connectDemo = async () => {
     const vehicle = await invoke<VehicleInfo>("connect_demo");
     globalState = { ...globalState, status: "demo", vehicle, error: null };
   } catch {
-    globalState = { ...globalState, status: "demo", vehicle: { vin: "DEMO", make: "Demo", model: "Demo Vehicle", year: 2018, protocol: "Demo", elmVersion: "Demo v1.0" }, error: null };
+    globalState = {
+      ...globalState,
+      status: "demo",
+      vehicle: {
+        vin: "DEMO",
+        make: "Demo",
+        model: "Demo Vehicle",
+        year: 2018,
+        protocol: "Demo",
+        elmVersion: "Demo v1.0",
+      },
+      error: null,
+    };
   }
   notify();
 };

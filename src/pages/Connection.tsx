@@ -30,7 +30,7 @@ interface ConnectionProps {
   onConnect: () => void;
   onDisconnect: () => void;
   onDemoConnect: () => void;
-  onConnectWifi: (host: string, port: number) => Promise<void>;
+  onConnectWifi: (host: string, port: number, bridgeToken?: string) => Promise<void>;
   onConnectBle?: (deviceName: string) => Promise<void>;
   onPortChange: (port: string) => void;
   onBaudRateChange: (baud: number) => void;
@@ -64,7 +64,6 @@ function loadVinHistory(): VinHistoryEntry[] {
 function saveVinHistory(entries: VinHistoryEntry[]) {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(entries));
 }
-
 
 export default function Connection({
   status,
@@ -145,16 +144,19 @@ export default function Connection({
     });
   }, []);
 
-  const handleVinHistorySelect = useCallback(async (vin: string) => {
-    setManualVin(vin);
-    try {
-      const info = await invoke<VehicleInfo>("set_manual_vin", { vin });
-      onVehicleUpdate?.(info);
-      showToast(`${t("connection.vin")}: ${info.make || vin} ${info.year || ""}`);
-    } catch (e) {
-      showToast(String(e), "error");
-    }
-  }, [onVehicleUpdate, showToast, t]);
+  const handleVinHistorySelect = useCallback(
+    async (vin: string) => {
+      setManualVin(vin);
+      try {
+        const info = await invoke<VehicleInfo>("set_manual_vin", { vin });
+        onVehicleUpdate?.(info);
+        showToast(`${t("connection.vin")}: ${info.make || vin} ${info.year || ""}`);
+      } catch (e) {
+        showToast(String(e), "error");
+      }
+    },
+    [onVehicleUpdate, showToast, t],
+  );
 
   return (
     <div className="p-6 space-y-6 animate-slide-in">
@@ -202,17 +204,19 @@ export default function Connection({
 
           {/* WiFi Configuration */}
           {connectionType === "wifi" && (
-            <WiFiSettings isConnected={isConnected} status={status} onConnectWifi={onConnectWifi} showToast={showToast} />
+            <WiFiSettings
+              isConnected={isConnected}
+              status={status}
+              onConnectWifi={onConnectWifi}
+              showToast={showToast}
+            />
           )}
 
           {/* USB Android Configuration */}
           {connectionType === "usb_android" && !isConnected && (
             <div className="space-y-3">
               <div className="flex gap-2">
-                <button
-                  onClick={android.handleScanUsb}
-                  className="btn-accent flex items-center gap-1.5 text-xs"
-                >
+                <button onClick={android.handleScanUsb} className="btn-accent flex items-center gap-1.5 text-xs">
                   <RefreshCw size={14} />
                   {t("connection.usbScan")}
                 </button>
@@ -238,14 +242,10 @@ export default function Connection({
                     disabled={!android.selectedUsbDevice || status === "connecting"}
                     className={cn(
                       "btn-accent-solid w-full flex items-center justify-center gap-2",
-                      (!android.selectedUsbDevice || status === "connecting") && "opacity-50 cursor-not-allowed"
+                      (!android.selectedUsbDevice || status === "connecting") && "opacity-50 cursor-not-allowed",
                     )}
                   >
-                    {status === "connecting" ? (
-                      <Loader2 size={16} className="animate-spin" />
-                    ) : (
-                      <Plug size={16} />
-                    )}
+                    {status === "connecting" ? <Loader2 size={16} className="animate-spin" /> : <Plug size={16} />}
                     {status === "connecting" ? t("connection.connecting") : t("connection.connect")}
                   </button>
                 </>
@@ -257,10 +257,7 @@ export default function Connection({
           {connectionType === "ble" && !isConnected && (
             <div className="space-y-3">
               <div className="flex gap-2">
-                <button
-                  onClick={android.handleScanBle}
-                  className="btn-accent flex items-center gap-1.5 text-xs"
-                >
+                <button onClick={android.handleScanBle} className="btn-accent flex items-center gap-1.5 text-xs">
                   <RefreshCw size={14} />
                   {t("connection.bleScan")}
                 </button>
@@ -286,14 +283,10 @@ export default function Connection({
                     disabled={!android.selectedBleDevice || status === "connecting"}
                     className={cn(
                       "btn-accent-solid w-full flex items-center justify-center gap-2",
-                      (!android.selectedBleDevice || status === "connecting") && "opacity-50 cursor-not-allowed"
+                      (!android.selectedBleDevice || status === "connecting") && "opacity-50 cursor-not-allowed",
                     )}
                   >
-                    {status === "connecting" ? (
-                      <Loader2 size={16} className="animate-spin" />
-                    ) : (
-                      <Bluetooth size={16} />
-                    )}
+                    {status === "connecting" ? <Loader2 size={16} className="animate-spin" /> : <Bluetooth size={16} />}
                     {status === "connecting" ? t("connection.connecting") : t("connection.connect")}
                   </button>
                 </>
@@ -303,10 +296,7 @@ export default function Connection({
 
           {connectionType === "wifi" && isConnected && (
             <div className="flex gap-3 pt-2">
-              <button
-                onClick={onDisconnect}
-                className="btn-danger flex-1 flex items-center justify-center gap-2"
-              >
+              <button onClick={onDisconnect} className="btn-danger flex-1 flex items-center justify-center gap-2">
                 <Wifi size={16} />
                 {t("connection.disconnect")}
               </button>
@@ -348,7 +338,12 @@ export default function Connection({
           />
 
           {/* Manual VIN */}
-          <ManualVinInput value={manualVin} onChange={setManualVin} onVehicleUpdate={onVehicleUpdate} showToast={showToast} />
+          <ManualVinInput
+            value={manualVin}
+            onChange={setManualVin}
+            onVehicleUpdate={onVehicleUpdate}
+            showToast={showToast}
+          />
         </div>
 
         {/* Right column: Vehicle Info + VIN History */}
@@ -371,9 +366,7 @@ export default function Connection({
       </div>
 
       {/* Troubleshooting Guide */}
-      {showTroubleshoot && (
-        <Troubleshooting onClose={() => setShowTroubleshoot(false)} />
-      )}
+      {showTroubleshoot && <Troubleshooting onClose={() => setShowTroubleshoot(false)} />}
 
       {/* Toast */}
       {toast && <Toast message={toast.message} type={toast.type} onDismiss={dismissToast} />}

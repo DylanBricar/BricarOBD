@@ -42,7 +42,7 @@ function getAndroidBle(): AndroidBleBridge | null {
 
 export function useAndroidBridge(
   baudRate: number,
-  onConnectWifi: (host: string, port: number) => Promise<void>,
+  onConnectWifi: (host: string, port: number, bridgeToken?: string) => Promise<void>,
   onConnectBle: ((deviceName: string) => Promise<void>) | undefined,
   onDisconnect: () => void,
   showToast: (message: string, type?: "success" | "error") => void,
@@ -92,13 +92,21 @@ export function useAndroidBridge(
       showToast(t("connection.usbBridgeStarting"));
       const result = JSON.parse(android.startBridge(devId, baudRate));
       const port = result?.port;
-      if (!result?.ok || typeof port !== "number" || port < 1 || port > 65535) {
+      const token = result?.token;
+      if (
+        !result?.ok ||
+        typeof port !== "number" ||
+        port < 1 ||
+        port > 65535 ||
+        typeof token !== "string" ||
+        !/^[a-f0-9]{64}$/i.test(token)
+      ) {
         showToast(t("connection.usbBridgeError", { error: result?.error ?? "unknown" }), "error");
         return;
       }
 
       showToast(t("connection.usbBridgeReady"));
-      await onConnectWifi("127.0.0.1", port);
+      await onConnectWifi("127.0.0.1", port, token);
     } catch (e) {
       showToast(`${t("common.error")}: ${e}`, "error");
     }
@@ -107,7 +115,9 @@ export function useAndroidBridge(
   const handleDisconnectUsb = useCallback(() => {
     try {
       getAndroidUsb()?.stopBridge();
-    } catch { /* bridge may not be running */ }
+    } catch {
+      /* bridge may not be running */
+    }
     onDisconnect();
   }, [onDisconnect]);
 
@@ -121,7 +131,10 @@ export function useAndroidBridge(
           return;
         }
         const parsed = JSON.parse(androidBle.scanDevices(5000));
-        if (!Array.isArray(parsed)) { showToast(t("connection.bleNone"), "error"); return; }
+        if (!Array.isArray(parsed)) {
+          showToast(t("connection.bleNone"), "error");
+          return;
+        }
         setBleDevices(parsed);
         if (parsed.length > 0 && !selectedBleDevice) setSelectedBleDevice(parsed[0].address);
         if (parsed.length === 0) showToast(t("connection.bleNone"), "error");
@@ -167,14 +180,24 @@ export function useAndroidBridge(
   const handleDisconnectBle = useCallback(() => {
     try {
       getAndroidBle()?.stopBridge();
-    } catch { /* bridge may not be running */ }
+    } catch {
+      /* bridge may not be running */
+    }
     onDisconnect();
   }, [onDisconnect]);
 
   return {
-    usbDevices, selectedUsbDevice, setSelectedUsbDevice,
-    bleDevices, selectedBleDevice, setSelectedBleDevice,
-    handleScanUsb, handleConnectUsb, handleDisconnectUsb,
-    handleScanBle, handleConnectBle, handleDisconnectBle,
+    usbDevices,
+    selectedUsbDevice,
+    setSelectedUsbDevice,
+    bleDevices,
+    selectedBleDevice,
+    setSelectedBleDevice,
+    handleScanUsb,
+    handleConnectUsb,
+    handleDisconnectUsb,
+    handleScanBle,
+    handleConnectBle,
+    handleDisconnectBle,
   };
 }

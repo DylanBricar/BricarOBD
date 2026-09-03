@@ -165,18 +165,6 @@ jobs:
         with:
           ref: ${{ inputs.tag || github.ref }}
 
-      - name: Download database
-        run: |
-          mkdir -p src-tauri/data
-          curl --fail --show-error --location --retry 3 -o src-tauri/data/bricarobd.db "https://github.com/${{ github.repository }}/releases/download/db-v1/bricarobd.db"
-
-      - name: Verify database checksum
-        shell: bash
-        run: |
-          EXPECTED_SHA="fccab50a9e422588d20c0e36737a3056b3b0dcca9ec6f8909a4900cfd34f9699"
-          ACTUAL_SHA=$(node -e "const fs=require('fs'),c=require('crypto');const h=c.createHash('sha256');h.update(fs.readFileSync('src-tauri/data/bricarobd.db'));process.stdout.write(h.digest('hex'))")
-          test "$ACTUAL_SHA" = "$EXPECTED_SHA"
-
       - name: Setup Java 17
         uses: actions/setup-java@dd06d9cba3e5552c54d9f8ea23572deb30010f7c # v6.0.0
         with:
@@ -217,6 +205,9 @@ jobs:
         run: pnpm exec tauri android init --ci
         env:
           NDK_HOME: ${{ env.ANDROID_HOME }}/ndk/27.2.12479018
+
+      - name: Configure Android OBD bridge
+        run: node scripts/configure-android-obd-bridge.mjs
 
       - name: Configure Android signing
         shell: bash
@@ -279,7 +270,7 @@ jobs:
           GH_REPO: ${{ github.repository }}
           RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
           ANDROID_SIGNING_ENABLED: ${{ vars.ANDROID_SIGNING_ENABLED }}
-          APPLE_SIGNING_ENABLED: ${{ vars.APPLE_SIGNING_ENABLED }}
+          IOS_SIGNING_ENABLED: ${{ vars.IOS_SIGNING_ENABLED }}
         run: |
           RELEASE_VERSION="${RELEASE_TAG#v}"
           ASSETS=$(gh release view "$RELEASE_TAG" --json assets --jq '.assets[].name')
@@ -308,7 +299,7 @@ jobs:
           if [ "$ANDROID_SIGNING_ENABLED" = "true" ]; then
             require_asset "app-universal-release.apk"
           fi
-          if [ "$APPLE_SIGNING_ENABLED" = "true" ] && ! grep -Eq '\.ipa$' <<< "$ASSETS"; then
+          if [ "$IOS_SIGNING_ENABLED" = "true" ] && ! grep -Eq '\.ipa$' <<< "$ASSETS"; then
             echo "ERROR: missing signed iOS IPA"
             exit 1
           fi
@@ -326,32 +317,19 @@ jobs:
           gh release edit "$RELEASE_TAG" --draft=false --latest
 
   # ═══════════════════════════════════════════
-  # iOS build (.ipa) — for TestFlight / Ad-hoc
+  # iOS build (.ipa) — enabled once Apple-issued credentials are configured
   # ═══════════════════════════════════════════
   build-ios:
     needs: [build-desktop]
-    runs-on: macos-latest
-    name: iOS — IPA
-    # Only run if signing vars are configured
-    if: vars.APPLE_SIGNING_ENABLED == 'true'
+    runs-on: macos-15
+    name: iOS — signed IPA
+    if: vars.IOS_SIGNING_ENABLED == 'true'
 
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ inputs.tag || github.ref }}
-
-      - name: Download database
-        run: |
-          mkdir -p src-tauri/data
-          curl --fail --show-error --location --retry 3 -o src-tauri/data/bricarobd.db "https://github.com/${{ github.repository }}/releases/download/db-v1/bricarobd.db"
-
-      - name: Verify database checksum
-        shell: bash
-        run: |
-          EXPECTED_SHA="fccab50a9e422588d20c0e36737a3056b3b0dcca9ec6f8909a4900cfd34f9699"
-          ACTUAL_SHA=$(node -e "const fs=require('fs'),c=require('crypto');const h=c.createHash('sha256');h.update(fs.readFileSync('src-tauri/data/bricarobd.db'));process.stdout.write(h.digest('hex'))")
-          test "$ACTUAL_SHA" = "$EXPECTED_SHA"
 
       - name: Setup Node.js
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
@@ -377,39 +355,27 @@ jobs:
       - name: Install frontend dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Install Apple certificate
-        env:
-          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
-          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
-          KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
-          PROVISIONING_PROFILE: ${{ secrets.PROVISIONING_PROFILE }}
-        run: |
-          # Create temporary keychain
-          KEYCHAIN_PATH="$RUNNER_TEMP/app-signing.keychain-db"
-          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
-          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
-          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
-
-          # Import certificate
-          echo -n "$APPLE_CERTIFICATE" | base64 --decode -o "$RUNNER_TEMP/certificate.p12"
-          security import "$RUNNER_TEMP/certificate.p12" -P "$APPLE_CERTIFICATE_PASSWORD" -A -t cert -f pkcs12 -k "$KEYCHAIN_PATH"
-          security set-key-partition-list -S apple-tool:,apple: -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
-          security list-keychains -d user -s "$KEYCHAIN_PATH"
-
-          # Install provisioning profile
-          mkdir -p "$HOME/Library/MobileDevice/Provisioning Profiles"
-          echo -n "$PROVISIONING_PROFILE" | base64 --decode -o "$HOME/Library/MobileDevice/Provisioning Profiles/profile.mobileprovision"
-
-      - name: Install Tauri CLI
-        run: cargo install tauri-cli --locked
-
       - name: Init Tauri iOS
-        run: cargo tauri ios init
+        run: pnpm exec tauri ios init --ci
 
-      - name: Build iOS
-        run: cargo tauri ios build
+      - name: Build signed iOS IPA
+        run: pnpm exec tauri ios build --export-method app-store-connect
         env:
-          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          IOS_CERTIFICATE: ${{ secrets.IOS_CERTIFICATE }}
+          IOS_CERTIFICATE_PASSWORD: ${{ secrets.IOS_CERTIFICATE_PASSWORD }}
+          IOS_MOBILE_PROVISION: ${{ secrets.IOS_MOBILE_PROVISION }}
+
+      - name: Verify signed iOS IPA
+        shell: bash
+        run: |
+          IPA=$(find src-tauri/gen/apple/build/arm64 -maxdepth 1 -type f -name '*.ipa' -print -quit)
+          test -n "$IPA"
+          mkdir -p "$RUNNER_TEMP/ipa"
+          ditto -x -k "$IPA" "$RUNNER_TEMP/ipa"
+          APP=$(find "$RUNNER_TEMP/ipa/Payload" -maxdepth 1 -type d -name '*.app' -print -quit)
+          test -n "$APP"
+          test -f "$APP/embedded.mobileprovision"
+          codesign --verify --deep --strict --verbose=2 "$APP"
 
       - name: Upload IPA to release
         uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3
@@ -417,16 +383,6 @@ jobs:
           tag_name: ${{ inputs.tag || github.ref_name }}
           fail_on_unmatched_files: true
           files: |
-            src-tauri/gen/apple/build/**/*.ipa
+            src-tauri/gen/apple/build/arm64/*.ipa
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      # Optional: Upload to TestFlight automatically
-      - name: Upload to TestFlight
-        if: vars.TESTFLIGHT_ENABLED == 'true'
-        run: |
-          xcrun altool --upload-app \
-            --type ios \
-            --file src-tauri/gen/apple/build/**/*.ipa \
-            --apiKey "${{ secrets.APPLE_API_KEY }}" \
-            --apiIssuer "${{ secrets.APPLE_API_ISSUER }}"

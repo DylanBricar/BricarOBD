@@ -137,9 +137,28 @@ pub struct WiFiTransport {
 impl WiFiTransport {
     /// Connect to WiFi ELM327 – typically 192.168.0.10:35000
     pub fn new(host: &str, port: u16, timeout_ms: u64) -> Result<Self, String> {
+        Self::connect(host, port, timeout_ms, None)
+    }
+
+    /// Connect to an authenticated app-local bridge.
+    pub fn new_authenticated(
+        host: &str,
+        port: u16,
+        timeout_ms: u64,
+        bridge_token: &str,
+    ) -> Result<Self, String> {
+        Self::connect(host, port, timeout_ms, Some(bridge_token))
+    }
+
+    fn connect(
+        host: &str,
+        port: u16,
+        timeout_ms: u64,
+        bridge_token: Option<&str>,
+    ) -> Result<Self, String> {
         dev_log::log_info("transport", &format!("Connecting WiFi: {}:{}", host, port));
         let addr = format!("{}:{}", host, port);
-        let stream = TcpStream::connect_timeout(
+        let mut stream = TcpStream::connect_timeout(
             &addr.parse().map_err(|e| format!("Invalid address: {}", e))?,
             Duration::from_millis(timeout_ms),
         ).map_err(|e| {
@@ -155,6 +174,15 @@ impl WiFiTransport {
             .set_write_timeout(Some(Duration::from_millis(timeout_ms)))
             .map_err(|e| format!("Set write timeout: {}", e))?;
         stream.set_nodelay(true).ok();
+
+        if let Some(token) = bridge_token {
+            stream
+                .write_all(format!("BRICAROBD-AUTH {token}\n").as_bytes())
+                .map_err(|error| format!("Local bridge authentication failed: {error}"))?;
+            stream
+                .flush()
+                .map_err(|error| format!("Local bridge authentication flush failed: {error}"))?;
+        }
 
         dev_log::log_info("transport", "WiFi connected");
         Ok(Self { stream })

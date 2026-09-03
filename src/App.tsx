@@ -18,8 +18,9 @@ import { useConnectionEffects } from "@/hooks/useConnectionEffects";
 import { useAutoUpdate } from "@/hooks/useAutoUpdate";
 import { Toast } from "@/components/Toast";
 import UpdateBanner from "@/components/UpdateBanner";
+import CatalogGate from "@/components/CatalogGate";
 
-export default function App() {
+function MainApp() {
   const { t, i18n } = useTranslation();
   const [activePage, setActivePage] = useState("connection");
   const [isReading, setIsReading] = useState(false);
@@ -29,44 +30,35 @@ export default function App() {
   const { toast: toastMessage, showToast, dismissToast } = useToast();
   const connection = useConnectionStore();
   const vehicle = useVehicleData();
-  const {
-    scanPorts,
-    setBaudRate,
-    updateVehicle,
-    status: connectionStatus,
-    vehicle: connectionVehicle,
-  } = connection;
+  const { scanPorts, setBaudRate, updateVehicle, status: connectionStatus, vehicle: connectionVehicle } = connection;
   const { setDbStats, setEcus } = vehicle;
   const { mode: themeMode } = useThemeStore();
   const autoUpdate = useAutoUpdate();
-  const vehicleActions = useMemo(() => ({
-    startDemoPolling: vehicle.startDemoPolling,
-    startRealPolling: vehicle.startRealPolling,
-    stopPolling: vehicle.stopPolling,
-    setDtcs: vehicle.setDtcs,
-    setMonitors: vehicle.setMonitors,
-    setEcus: vehicle.setEcus,
-    setVehicleOps: vehicle.setVehicleOps,
-    setVehicleWriteOps: vehicle.setVehicleWriteOps,
-  }), [
-    vehicle.startDemoPolling,
-    vehicle.startRealPolling,
-    vehicle.stopPolling,
-    vehicle.setDtcs,
-    vehicle.setMonitors,
-    vehicle.setEcus,
-    vehicle.setVehicleOps,
-    vehicle.setVehicleWriteOps,
-  ]);
-
-  const { discoveryProgress, isDiscoveryComplete, hasVinCache, setHasVinCache, setIsDiscoveryComplete } = useConnectionEffects(
-    connection.status,
-    connection.vehicle,
-    vehicleActions,
-    i18n.language,
-    showToast,
-    t,
+  const vehicleActions = useMemo(
+    () => ({
+      startDemoPolling: vehicle.startDemoPolling,
+      startRealPolling: vehicle.startRealPolling,
+      stopPolling: vehicle.stopPolling,
+      setDtcs: vehicle.setDtcs,
+      setMonitors: vehicle.setMonitors,
+      setEcus: vehicle.setEcus,
+      setVehicleOps: vehicle.setVehicleOps,
+      setVehicleWriteOps: vehicle.setVehicleWriteOps,
+    }),
+    [
+      vehicle.startDemoPolling,
+      vehicle.startRealPolling,
+      vehicle.stopPolling,
+      vehicle.setDtcs,
+      vehicle.setMonitors,
+      vehicle.setEcus,
+      vehicle.setVehicleOps,
+      vehicle.setVehicleWriteOps,
+    ],
   );
+
+  const { discoveryProgress, isDiscoveryComplete, hasVinCache, setHasVinCache, setIsDiscoveryComplete } =
+    useConnectionEffects(connection.status, connection.vehicle, vehicleActions, i18n.language, showToast, t);
 
   // Refs for values read in effects but that shouldn't trigger re-runs
   const dtcsRef = useRef(vehicle.dtcs);
@@ -80,8 +72,7 @@ export default function App() {
   const hasVin = !!connection.vehicle?.vin;
   const isDemo = connection.status === "demo";
   const canNavigate = isDemo || (connection.status === "connected" && hasVin && isDiscoveryComplete);
-  const isConnected =
-    connection.status === "connected" || connection.status === "demo";
+  const isConnected = connection.status === "connected" || connection.status === "demo";
 
   // App mount
   useEffect(() => {
@@ -93,20 +84,22 @@ export default function App() {
   useEffect(() => {
     let cancelled = false;
     invoke<{ operations: number; profiles: number; ecus: number }>("get_database_stats")
-      .then(stats => {
+      .then((stats) => {
         if (cancelled) return;
         devInfo("ui", "DB loaded: " + JSON.stringify(stats));
         setDbStats(stats);
       })
       .catch(() => {});
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [setDbStats]);
 
   // Load settings on mount
   useEffect(() => {
     let cancelled = false;
     invoke<{ language: string; defaultBaudRate: number; theme: string }>("get_settings")
-      .then(settings => {
+      .then((settings) => {
         if (cancelled) return;
         if (settings.language && settings.language !== i18n.language) {
           i18n.changeLanguage(settings.language);
@@ -119,7 +112,9 @@ export default function App() {
         }
       })
       .catch(() => {});
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [i18n, setBaudRate]);
 
   // Sync language with Rust backend
@@ -129,18 +124,23 @@ export default function App() {
 
   // Persist settings when language, baud rate, or theme changes
   useEffect(() => {
-    invoke("save_settings", { settings: { language: i18n.language, defaultBaudRate: connection.baudRate, theme: themeMode } }).catch(() => {});
+    invoke("save_settings", {
+      settings: { language: i18n.language, defaultBaudRate: connection.baudRate, theme: themeMode },
+    }).catch(() => {});
   }, [i18n.language, connection.baudRate, themeMode]);
 
   // Navigate based on connection status
-  const handleNavigate = useCallback((page: string) => {
-    if (!canNavigate && page !== "connection" && page !== "advanced") {
-      devInfo("ui", "Navigation blocked: not ready");
-      return;
-    }
-    devInfo("ui", "Navigate: " + page);
-    setActivePage(page);
-  }, [canNavigate]);
+  const handleNavigate = useCallback(
+    (page: string) => {
+      if (!canNavigate && page !== "connection" && page !== "advanced") {
+        devInfo("ui", "Navigation blocked: not ready");
+        return;
+      }
+      devInfo("ui", "Navigate: " + page);
+      setActivePage(page);
+    },
+    [canNavigate],
+  );
 
   // Keyboard shortcuts for tab navigation
   useEffect(() => {
@@ -174,14 +174,13 @@ export default function App() {
           make: lastVehicle.make,
           model: lastVehicle.model,
           dtcCount: currentDtcs.length,
-          notes: currentDtcs.map(d => d.code).join(", ") || t("dtc.noCode"),
+          notes: currentDtcs.map((d) => d.code).join(", ") || t("dtc.noCode"),
           data: "",
         }).catch(() => {});
       }
       setActivePage("connection");
     }
   }, [isConnected, canNavigate, activePage, t]);
-
 
   const handleReadAll = async () => {
     setIsReading(true);
@@ -219,12 +218,15 @@ export default function App() {
     }
   }, [connection.vehicle?.vin, setHasVinCache]);
 
-  const onVehicleUpdate = useCallback((info: VehicleInfo) => {
-    updateVehicle(info);
-    if (connectionStatus === "connected") {
-      setIsDiscoveryComplete(false);
-    }
-  }, [connectionStatus, setIsDiscoveryComplete, updateVehicle]);
+  const onVehicleUpdate = useCallback(
+    (info: VehicleInfo) => {
+      updateVehicle(info);
+      if (connectionStatus === "connected") {
+        setIsDiscoveryComplete(false);
+      }
+    },
+    [connectionStatus, setIsDiscoveryComplete, updateVehicle],
+  );
 
   const handleToggleDevConsole = useCallback(async () => {
     try {
@@ -235,12 +237,12 @@ export default function App() {
         height: 600,
       });
       const unlisten = await webview.once("tauri://error", () => {
-        setShowDevConsole(prev => !prev);
+        setShowDevConsole((prev) => !prev);
       });
       // unlisten is auto-cleaned when webview closes; no manual cleanup needed
       void unlisten;
     } catch {
-      setShowDevConsole(prev => !prev);
+      setShowDevConsole((prev) => !prev);
     }
   }, []);
 
@@ -262,43 +264,55 @@ export default function App() {
   }, [connectionStatus, connectionVehicle?.make, setEcus, t]);
 
   return (
-    <ErrorBoundary>
-      <div className="flex h-screen w-screen overflow-hidden bg-obd-bg">
-        <Sidebar
-          activePage={activePage}
-          onNavigate={handleNavigate}
-          connectionStatus={connection.status}
-          canNavigate={canNavigate}
-          discoveryProgress={discoveryProgress}
-          hasVin={hasVin}
-          onToggleDevConsole={handleToggleDevConsole}
-          dtcCount={vehicle.dtcs.length}
+    <div className="flex h-screen w-screen overflow-hidden bg-obd-bg">
+      <Sidebar
+        activePage={activePage}
+        onNavigate={handleNavigate}
+        connectionStatus={connection.status}
+        canNavigate={canNavigate}
+        discoveryProgress={discoveryProgress}
+        hasVin={hasVin}
+        onToggleDevConsole={handleToggleDevConsole}
+        dtcCount={vehicle.dtcs.length}
+      />
+      <div className="flex-1 flex flex-col overflow-hidden">
+        <UpdateBanner
+          state={autoUpdate.state}
+          onDownload={autoUpdate.downloadAndInstall}
+          onDismiss={autoUpdate.dismiss}
         />
-        <div className="flex-1 flex flex-col overflow-hidden">
-          <UpdateBanner state={autoUpdate.state} onDownload={autoUpdate.downloadAndInstall} onDismiss={autoUpdate.dismiss} />
-          <main className="flex-1 overflow-y-auto">
-            <PageRouter
-              activePage={activePage}
-              connection={connection}
-              vehicle={vehicle}
-              discoveryProgress={discoveryProgress}
-              isDiscoveryComplete={isDiscoveryComplete}
-              hasVinCache={hasVinCache}
-              onClearCache={onClearCache}
-              onVehicleUpdate={onVehicleUpdate}
-              onReadAll={handleReadAll}
-              onClearAll={handleClearAll}
-              isReading={isReading}
-              isClearing={isClearing}
-              isEcuScanning={isEcuScanning}
-              onEcuScan={handleEcuScan}
-            />
-          </main>
-          <StatusBar status={connection.status} vehicle={connection.vehicle} isPolling={vehicle.isPolling} />
-        </div>
-        {toastMessage && <Toast message={toastMessage.message} type={toastMessage.type} onDismiss={dismissToast} />}
-        {showDevConsole && <DevConsole isStandalone={false} onClose={() => setShowDevConsole(false)} />}
+        <main className="flex-1 overflow-y-auto">
+          <PageRouter
+            activePage={activePage}
+            connection={connection}
+            vehicle={vehicle}
+            discoveryProgress={discoveryProgress}
+            isDiscoveryComplete={isDiscoveryComplete}
+            hasVinCache={hasVinCache}
+            onClearCache={onClearCache}
+            onVehicleUpdate={onVehicleUpdate}
+            onReadAll={handleReadAll}
+            onClearAll={handleClearAll}
+            isReading={isReading}
+            isClearing={isClearing}
+            isEcuScanning={isEcuScanning}
+            onEcuScan={handleEcuScan}
+          />
+        </main>
+        <StatusBar status={connection.status} vehicle={connection.vehicle} isPolling={vehicle.isPolling} />
       </div>
+      {toastMessage && <Toast message={toastMessage.message} type={toastMessage.type} onDismiss={dismissToast} />}
+      {showDevConsole && <DevConsole isStandalone={false} onClose={() => setShowDevConsole(false)} />}
+    </div>
+  );
+}
+
+export default function App() {
+  return (
+    <ErrorBoundary>
+      <CatalogGate>
+        <MainApp />
+      </CatalogGate>
     </ErrorBoundary>
   );
 }

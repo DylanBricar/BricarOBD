@@ -8,9 +8,12 @@ use tauri::Manager;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    tracing_subscriber::fmt()
-        .with_max_level(tracing::Level::DEBUG)
-        .init();
+    let log_level = if cfg!(debug_assertions) {
+        tracing::Level::DEBUG
+    } else {
+        tracing::Level::INFO
+    };
+    tracing_subscriber::fmt().with_max_level(log_level).init();
 
     obd::dev_log::init_log_file();
 
@@ -31,6 +34,7 @@ pub fn run() {
 
             // Try multiple paths to find the DB
             let possible_paths = vec![
+                app_data_dir.join(commands::catalog::CATALOG_FILE_NAME),
                 resource_dir.join("data").join("bricarobd.db"),
                 resource_dir.join("bricarobd.db"),
                 std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -65,6 +69,9 @@ pub fn run() {
                     "operations database resource was not found in any expected location"
                         .to_string()
                 });
+                #[cfg(mobile)]
+                tracing::info!("Catalog will be downloaded after mobile startup: {reason}");
+                #[cfg(not(mobile))]
                 return Err(std::io::Error::new(
                     std::io::ErrorKind::NotFound,
                     format!("BricarOBD cannot start: {reason}"),
@@ -120,6 +127,8 @@ pub fn run() {
             commands::diagnostic::get_mode06_results,
             commands::diagnostic::get_freeze_frame,
             // Database (3.27M operations pre-built)
+            catalog::get_catalog_status,
+            catalog::download_catalog,
             database::get_database_stats,
             database::search_operations,
             database::get_vehicle_operations,

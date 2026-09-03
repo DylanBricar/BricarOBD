@@ -1,3 +1,4 @@
+pub mod catalog;
 pub mod connection;
 pub mod connection_ble;
 pub mod connection_helpers;

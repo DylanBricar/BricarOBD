@@ -1,7 +1,15 @@
 import { Suspense, lazy, useCallback } from "react";
 import { useTranslation } from "react-i18next";
 import ErrorBoundary from "@/components/ErrorBoundary";
-import type { PidValue, DtcCode, DtcHistoryEntry, EcuInfo, MonitorStatus, Mode06Result, FreezeFrameData } from "@/stores/vehicle";
+import type {
+  PidValue,
+  DtcCode,
+  DtcHistoryEntry,
+  EcuInfo,
+  MonitorStatus,
+  Mode06Result,
+  FreezeFrameData,
+} from "@/stores/vehicle";
 import type { ConnectionStatus, VehicleInfo } from "@/stores/connection";
 
 const Connection = lazy(() => import("@/pages/Connection"));
@@ -36,7 +44,7 @@ interface PageRouterProps {
     connect: () => void;
     disconnect: () => void;
     connectDemo: () => void;
-    connectWifi: (host: string, port: number) => Promise<void>;
+    connectWifi: (host: string, port: number, bridgeToken?: string) => Promise<void>;
     connectBle?: (deviceName: string) => Promise<void>;
     setPort: (port: string) => void;
     setBaudRate: (baudRate: number) => void;
@@ -76,20 +84,32 @@ interface PageRouterProps {
 }
 
 export default function PageRouter({
-  activePage, connection, vehicle,
-  discoveryProgress, isDiscoveryComplete, hasVinCache,
-  onClearCache, onVehicleUpdate,
-  onReadAll, onClearAll, isReading, isClearing,
-  isEcuScanning, onEcuScan,
+  activePage,
+  connection,
+  vehicle,
+  discoveryProgress,
+  isDiscoveryComplete,
+  hasVinCache,
+  onClearCache,
+  onVehicleUpdate,
+  onReadAll,
+  onClearAll,
+  isReading,
+  isClearing,
+  isEcuScanning,
+  onEcuScan,
 }: PageRouterProps) {
   const { startRealPolling, startDemoPolling } = vehicle;
-  const handleStartPolling = useCallback((ms: number) => {
-    if (connection.status === "connected") {
-      startRealPolling(ms, connection.vehicle?.make || "");
-    } else {
-      startDemoPolling(ms);
-    }
-  }, [connection.status, connection.vehicle?.make, startRealPolling, startDemoPolling]);
+  const handleStartPolling = useCallback(
+    (ms: number) => {
+      if (connection.status === "connected") {
+        startRealPolling(ms, connection.vehicle?.make || "");
+      } else {
+        startDemoPolling(ms);
+      }
+    },
+    [connection.status, connection.vehicle?.make, startRealPolling, startDemoPolling],
+  );
 
   switch (activePage) {
     case "connection":

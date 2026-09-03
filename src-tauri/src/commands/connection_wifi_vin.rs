@@ -5,8 +5,22 @@ use crate::obd::transport::{self, OBDTransport};
 use tauri::command;
 
 /// Connect via WiFi (ELM327 WiFi adapter) — now fully integrated with ELM327 protocol
+fn validate_bridge_token(host: &str, bridge_token: Option<&str>) -> Result<(), String> {
+    let Some(token) = bridge_token else {
+        return Ok(());
+    };
+    if host != "127.0.0.1" || token.len() != 64 || !token.chars().all(|c| c.is_ascii_hexdigit()) {
+        return Err("Invalid local bridge authentication".to_string());
+    }
+    Ok(())
+}
+
 #[command]
-pub async fn connect_wifi(host: String, port: u16) -> Result<VehicleInfo, String> {
+pub async fn connect_wifi(
+    host: String,
+    port: u16,
+    bridge_token: Option<String>,
+) -> Result<VehicleInfo, String> {
     {
         let guard = super::connection::CONNECTION
             .lock()
@@ -31,13 +45,19 @@ pub async fn connect_wifi(host: String, port: u16) -> Result<VehicleInfo, String
             "WiFi host must be a local/private IP address",
         ));
     }
+    validate_bridge_token(&host, bridge_token.as_deref())?;
 
     crate::obd::dev_log::log_info("connection", &format!("WiFi connect: {}:{}", host, port));
 
     let result: Result<(crate::obd::Elm327Connection, VehicleInfo), String> =
         tokio::task::spawn_blocking(move || {
             // Create WiFi transport with generous timeout (WiFi has latency)
-            let wifi = transport::WiFiTransport::new(&host, port, 8000)?;
+            let wifi = match bridge_token.as_deref() {
+                Some(token) => {
+                    transport::WiFiTransport::new_authenticated(&host, port, 8000, token)?
+                }
+                None => transport::WiFiTransport::new(&host, port, 8000)?,
+            };
             crate::obd::dev_log::log_info(
                 "connection",
                 "WiFi transport established, starting ELM327 init...",
@@ -197,4 +217,19 @@ pub fn clear_vin_cache(vin: String) -> Result<(), String> {
     super::dashboard_discovery::reset_discovered_params_inner();
     crate::obd::dev_log::log_info("connection", &format!("VIN cache cleared for {}", vin));
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::validate_bridge_token;
+
+    #[test]
+    fn local_bridge_tokens_are_strictly_scoped_and_shaped() {
+        let token = "a5".repeat(32);
+        assert!(validate_bridge_token("127.0.0.1", Some(&token)).is_ok());
+        assert!(validate_bridge_token("192.168.0.10", Some(&token)).is_err());
+        assert!(validate_bridge_token("127.0.0.1", Some("short")).is_err());
+        assert!(validate_bridge_token("127.0.0.1", Some(&"z".repeat(64))).is_err());
+        assert!(validate_bridge_token("192.168.0.10", None).is_ok());
+    }
 }

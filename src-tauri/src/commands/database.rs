@@ -5,6 +5,19 @@ use crate::db::Database;
 
 static DB: Mutex<Option<Database>> = Mutex::new(None);
 
+pub fn is_database_initialized() -> bool {
+    DB.lock()
+        .unwrap_or_else(|error| error.into_inner())
+        .is_some()
+}
+
+pub fn database_stats() -> Option<(u64, u64, u64)> {
+    DB.lock()
+        .unwrap_or_else(|error| error.into_inner())
+        .as_ref()
+        .map(Database::get_stats)
+}
+
 pub fn with_db<F, R>(f: F) -> Result<R, String>
 where
     F: FnOnce(&Database) -> Result<R, String>,

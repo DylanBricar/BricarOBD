@@ -252,6 +252,68 @@ impl Elm327Connection {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::obd::transport::{OBDTransport, TransportType};
+    use serde::Deserialize;
+    use std::collections::VecDeque;
+
+    #[derive(Deserialize)]
+    struct ReplayExchange {
+        command: String,
+        response: String,
+    }
+
+    struct ReplayTransport {
+        exchanges: VecDeque<ReplayExchange>,
+        pending: VecDeque<u8>,
+    }
+
+    impl ReplayTransport {
+        fn from_json(json: &str) -> Self {
+            Self {
+                exchanges: serde_json::from_str(json).expect("valid ELM327 replay corpus"),
+                pending: VecDeque::new(),
+            }
+        }
+    }
+
+    impl OBDTransport for ReplayTransport {
+        fn write_bytes(&mut self, data: &[u8]) -> Result<(), String> {
+            let actual = std::str::from_utf8(data)
+                .map_err(|error| error.to_string())?
+                .trim_end_matches('\r');
+            let exchange = self
+                .exchanges
+                .pop_front()
+                .ok_or_else(|| format!("Unexpected command: {actual}"))?;
+            if exchange.command != actual {
+                return Err(format!(
+                    "Replay command mismatch: expected {}, got {actual}",
+                    exchange.command
+                ));
+            }
+            self.pending.extend(exchange.response.bytes());
+            self.pending.push_back(b'>');
+            Ok(())
+        }
+
+        fn read_bytes(&mut self, buffer: &mut [u8], _timeout_ms: u64) -> Result<usize, String> {
+            let count = buffer.len().min(self.pending.len()).min(17);
+            for slot in &mut buffer[..count] {
+                *slot = self.pending.pop_front().expect("pending byte");
+            }
+            Ok(count)
+        }
+
+        fn flush(&mut self) -> Result<(), String> {
+            Ok(())
+        }
+
+        fn transport_type(&self) -> TransportType {
+            TransportType::Serial
+        }
+
+        fn close(&mut self) {}
+    }
 
     #[test]
     fn parses_pid_data_after_positive_response_not_after_can_header() {
@@ -310,5 +372,21 @@ mod tests {
             "7E8 03 7F 22 31",
             0x22
         ));
+    }
+
+    #[test]
+    fn replays_live_rpm_and_injector_correction_over_transport() {
+        let corpus = include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/tests/fixtures/elm327/engine-live-data.json"
+        ));
+        let mut connection = Elm327Connection::new();
+        connection.transport = Some(Box::new(ReplayTransport::from_json(corpus)));
+
+        assert_eq!(connection.query_pid(0x01, 0x0C), Ok(vec![0x1A, 0xF8]));
+        assert_eq!(
+            connection.query_did(0x2060),
+            Ok(vec![0x00, 0x64, 0xFF, 0x9C])
+        );
     }
 }
