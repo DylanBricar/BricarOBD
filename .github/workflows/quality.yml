@@ -59,6 +59,7 @@ jobs:
         run: |
           pnpm lint
           pnpm test
+          pnpm test:release-scripts
           pnpm build
           pnpm audit
 

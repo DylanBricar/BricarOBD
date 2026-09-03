@@ -6,8 +6,8 @@ on:
     branches:
       - main
     paths-ignore:
-      - '*.md'
-      - '.github/workflows/*.yml'
+      - "*.md"
+      - ".github/workflows/*.yml"
 
 permissions:
   contents: write
@@ -80,6 +80,7 @@ jobs:
         run: |
           gh release create "$NEW_TAG" \
             --verify-tag \
+            --draft \
             --title "BricarOBD $NEW_TAG" \
             --notes "Automated multi-platform release for BricarOBD $NEW_TAG."
           RELEASE_ID=$(gh api "repos/${GITHUB_REPOSITORY}/releases/tags/${NEW_TAG}" --jq .id)
@@ -96,11 +97,11 @@ jobs:
         include:
           - platform: macos-latest
             target: aarch64-apple-darwin
-            bundles: dmg
+            bundles: app,dmg
             name: macOS (Apple Silicon)
           - platform: macos-latest
             target: x86_64-apple-darwin
-            bundles: dmg
+            bundles: app,dmg
             name: macOS (Intel)
           - platform: windows-latest
             target: x86_64-pc-windows-msvc
@@ -189,6 +190,7 @@ jobs:
         with:
           releaseId: ${{ needs.bump-and-tag.outputs.release_id }}
           tagName: ${{ needs.bump-and-tag.outputs.new_tag }}
+          releaseDraft: true
           retryAttempts: 5
           args: --target ${{ matrix.target }} --bundles ${{ matrix.bundles }}
 
@@ -197,6 +199,7 @@ jobs:
   # ═══════════════════════════════════════════
   build-android:
     needs: [bump-and-tag, build-desktop]
+    if: vars.ANDROID_SIGNING_ENABLED == 'true'
     runs-on: ubuntu-latest
     name: Android — APK
 
@@ -221,8 +224,8 @@ jobs:
       - name: Setup Java 17
         uses: actions/setup-java@dd06d9cba3e5552c54d9f8ea23572deb30010f7c # v6.0.0
         with:
-          distribution: 'temurin'
-          java-version: '17'
+          distribution: "temurin"
+          java-version: "17"
 
       - name: Setup Android SDK
         uses: android-actions/setup-android@40fd30fb8d7440372e1316f5d1809ec01dcd3699 # v4.0.1
@@ -251,31 +254,110 @@ jobs:
         with:
           workspaces: src-tauri
 
-      - name: Install Tauri CLI
-        run: cargo install tauri-cli --locked
-
       - name: Install frontend dependencies
         run: pnpm install --frozen-lockfile
 
       - name: Init Tauri Android
-        run: cargo tauri android init
+        run: pnpm exec tauri android init --ci
         env:
           NDK_HOME: ${{ env.ANDROID_HOME }}/ndk/27.2.12479018
 
+      - name: Configure Android signing
+        shell: bash
+        env:
+          ANDROID_KEY_BASE64: ${{ secrets.ANDROID_KEY_BASE64 }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          test -n "$ANDROID_KEY_BASE64"
+          test -n "$ANDROID_KEY_ALIAS"
+          test -n "$ANDROID_KEY_PASSWORD"
+          printf '%s' "$ANDROID_KEY_BASE64" | base64 --decode > "$RUNNER_TEMP/android-release.jks"
+          chmod 600 "$RUNNER_TEMP/android-release.jks"
+          export ANDROID_KEYSTORE_PATH="$RUNNER_TEMP/android-release.jks"
+          node scripts/configure-android-signing.mjs
+          keytool -list \
+            -keystore "$ANDROID_KEYSTORE_PATH" \
+            -storepass "$ANDROID_KEY_PASSWORD" \
+            -alias "$ANDROID_KEY_ALIAS" >/dev/null
+
       - name: Build Android APK
-        run: cargo tauri android build
+        run: pnpm exec tauri android build
         env:
           NDK_HOME: ${{ env.ANDROID_HOME }}/ndk/27.2.12479018
-          ANDROID_KEY_STORE: ${{ secrets.ANDROID_KEY_STORE }}
-          ANDROID_KEY_STORE_PASSWORD: ${{ secrets.ANDROID_KEY_STORE_PASSWORD }}
-          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
-          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+
+      - name: Verify signed Android APK
+        shell: bash
+        run: |
+          APK="src-tauri/gen/android/app/build/outputs/apk/universal/release/app-universal-release.apk"
+          test -f "$APK"
+          APKSIGNER=$(find "$ANDROID_HOME/build-tools" -type f -name apksigner | sort -V | tail -1)
+          test -n "$APKSIGNER"
+          "$APKSIGNER" verify --verbose --print-certs "$APK"
 
       - name: Upload APK to release
         uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3
         with:
           tag_name: ${{ needs.bump-and-tag.outputs.new_tag }}
+          fail_on_unmatched_files: true
           files: |
             src-tauri/gen/android/app/build/outputs/apk/universal/release/app-universal-release.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  verify-release:
+    needs: [bump-and-tag, build-desktop, build-android]
+    if: >-
+      always() &&
+      needs.bump-and-tag.result == 'success' &&
+      needs.build-desktop.result == 'success' &&
+      (needs.build-android.result == 'success' || needs.build-android.result == 'skipped')
+    runs-on: ubuntu-latest
+    name: Verify published desktop release
+    steps:
+      - name: Verify installers and updater manifest
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TAG: ${{ needs.bump-and-tag.outputs.new_tag }}
+          RELEASE_VERSION: ${{ needs.bump-and-tag.outputs.new_version }}
+          ANDROID_SIGNING_ENABLED: ${{ vars.ANDROID_SIGNING_ENABLED }}
+        run: |
+          ASSETS=$(gh release view "$RELEASE_TAG" --json assets --jq '.assets[].name')
+          require_asset() {
+            if ! grep -Fxq "$1" <<< "$ASSETS"; then
+              echo "ERROR: missing release asset: $1"
+              exit 1
+            fi
+          }
+
+          require_asset "BricarOBD_${RELEASE_VERSION}_aarch64.dmg"
+          require_asset "BricarOBD_${RELEASE_VERSION}_aarch64.app.tar.gz"
+          require_asset "BricarOBD_${RELEASE_VERSION}_aarch64.app.tar.gz.sig"
+          require_asset "BricarOBD_${RELEASE_VERSION}_x64.dmg"
+          require_asset "BricarOBD_${RELEASE_VERSION}_x64.app.tar.gz"
+          require_asset "BricarOBD_${RELEASE_VERSION}_x64.app.tar.gz.sig"
+          require_asset "BricarOBD_${RELEASE_VERSION}_amd64.AppImage"
+          require_asset "BricarOBD_${RELEASE_VERSION}_amd64.AppImage.sig"
+          require_asset "BricarOBD_${RELEASE_VERSION}_amd64.deb"
+          require_asset "BricarOBD_${RELEASE_VERSION}_amd64.deb.sig"
+          require_asset "BricarOBD_${RELEASE_VERSION}_x64-setup.exe"
+          require_asset "BricarOBD_${RELEASE_VERSION}_x64-setup.exe.sig"
+          require_asset "BricarOBD_${RELEASE_VERSION}_x64_en-US.msi"
+          require_asset "BricarOBD_${RELEASE_VERSION}_x64_en-US.msi.sig"
+          require_asset "latest.json"
+          if [ "$ANDROID_SIGNING_ENABLED" = "true" ]; then
+            require_asset "app-universal-release.apk"
+          fi
+
+          mkdir -p "$RUNNER_TEMP/release"
+          gh release download "$RELEASE_TAG" --pattern latest.json --dir "$RUNNER_TEMP/release"
+          jq -e --arg version "$RELEASE_VERSION" '
+            .version == $version and
+            (.platforms["darwin-aarch64"].signature | length > 0) and
+            (.platforms["darwin-x86_64"].signature | length > 0) and
+            (.platforms["linux-x86_64"].signature | length > 0) and
+            (.platforms["windows-x86_64"].signature | length > 0)
+          ' "$RUNNER_TEMP/release/latest.json"
+
+          gh release edit "$RELEASE_TAG" --draft=false --latest

@@ -10,7 +10,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-2.0.15-06B6D4?style=flat-square" alt="Version" />
+  <img src="https://img.shields.io/github/v/release/DylanBricar/BricarOBD?style=flat-square&color=06B6D4" alt="Version" />
   <img src="https://img.shields.io/badge/rust-1.98.0-orange?style=flat-square" alt="Rust" />
   <img src="https://img.shields.io/badge/tauri-2.x-blue?style=flat-square" alt="Tauri" />
   <img src="https://img.shields.io/badge/platforms-macOS%20%7C%20Windows%20%7C%20Linux%20%7C%20Android%20%7C%20iOS-green?style=flat-square" alt="Platforms" />
@@ -101,9 +101,9 @@ src-tauri/src/                # Rust backend
 
 ### Prerequisites
 
-- **Node.js** 20+
-- **Rust** 1.80+
-- **pnpm** 9+
+- **Node.js** 24.15+
+- **Rust** 1.98.0
+- **pnpm** 11.25+
 
 ### macOS additional
 
@@ -128,26 +128,26 @@ rustup target add aarch64-linux-android armv7-linux-androideabi x86_64-linux-and
 pnpm install
 
 # Run in dev mode (desktop)
-cargo tauri dev
+pnpm tauri dev
 
 # Run in dev mode (Android)
-cargo tauri android dev
+pnpm tauri android dev
 ```
 
 ### Build
 
 ```bash
 # macOS (.app + .dmg)
-cargo tauri build
+pnpm tauri build
 
 # Android (.apk)
-cargo tauri android build
+pnpm tauri android build
 
 # Windows (.msi + .exe)
-cargo tauri build
+pnpm tauri build
 
 # Linux (.deb + .AppImage)
-cargo tauri build
+pnpm tauri build
 ```
 
 ## Release Builds
@@ -157,7 +157,7 @@ cargo tauri build
 The macOS build produces a `.app` bundle and `.dmg` installer:
 
 ```bash
-cargo tauri build
+pnpm tauri build
 # Output: src-tauri/target/release/bundle/macos/BricarOBD.app
 # Output: src-tauri/target/release/bundle/dmg/BricarOBD_2.0.0_aarch64.dmg
 ```
@@ -166,17 +166,25 @@ cargo tauri build
 
 ```bash
 # Initialize Android project (first time only)
-cargo tauri android init
+pnpm tauri android init
 
 # Debug APK
-cargo tauri android build --debug
+pnpm tauri android build --debug
 
 # Release APK (requires signing)
-cargo tauri android build
+pnpm tauri android build
 # Output: src-tauri/gen/android/app/build/outputs/apk/
 ```
 
-> **Note**: The 503 MB SQLite database is bundled with the desktop app. For Android, the database will be downloaded on first launch or a compressed version will be included.
+> **Note**: The release workflow currently downloads the same 503 MB SQLite
+> database before desktop and Android builds. Moving the mobile catalog to a
+> compressed first-launch download remains a future size optimization.
+
+GitHub releases publish the signed desktop installers automatically. The Android
+release job is enabled only when a stable signing key is configured with the
+`ANDROID_SIGNING_ENABLED` repository variable and the `ANDROID_KEY_BASE64`,
+`ANDROID_KEY_ALIAS`, and `ANDROID_KEY_PASSWORD` secrets. Unsigned APKs are never
+published.
 
 ## Screenshots
 
