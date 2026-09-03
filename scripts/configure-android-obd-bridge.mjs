@@ -15,11 +15,13 @@ async function findFile(directory, fileName) {
 }
 
 async function resolveAndroidProjectRoot(baseDirectory) {
-  const settings = await findFile(baseDirectory, "settings.gradle.kts");
-  if (!settings) throw new Error(`Generated settings.gradle.kts was not found below ${baseDirectory}`);
+  const settings =
+    (await findFile(baseDirectory, "settings.gradle")) ?? (await findFile(baseDirectory, "settings.gradle.kts"));
+  if (!settings) throw new Error(`Generated Gradle settings were not found below ${baseDirectory}`);
 
   const projectRoot = dirname(settings);
   await access(join(projectRoot, "app", "build.gradle.kts"));
+  await access(join(projectRoot, "build.gradle.kts"));
   return projectRoot;
 }
 
@@ -28,7 +30,7 @@ const androidRoot = await resolveAndroidProjectRoot(androidBase);
 const javaRoot = join(androidRoot, "app", "src", "main", "java");
 const manifestPath = join(androidRoot, "app", "src", "main", "AndroidManifest.xml");
 const appGradlePath = join(androidRoot, "app", "build.gradle.kts");
-const settingsPath = join(androidRoot, "settings.gradle.kts");
+const rootGradlePath = join(androidRoot, "build.gradle.kts");
 
 function requireMarker(contents, marker, file) {
   if (!contents.includes(marker)) {
@@ -58,7 +60,7 @@ if (!mainActivity.includes('addJavascriptInterface(AndroidUsbBridge(this), "Andr
   await writeFile(mainActivityPath, mainActivity, "utf8");
 }
 
-const bridgePath = join(mainActivityPath, "..", "AndroidUsbBridge.kt");
+const bridgePath = join(dirname(mainActivityPath), "AndroidUsbBridge.kt");
 const bridgeSource = `package ${packageName}
 
 import android.app.Activity
@@ -256,13 +258,13 @@ private class UsbSerialTcpBridge(
 `;
 await writeFile(bridgePath, bridgeSource, "utf8");
 
-let settings = await readFile(settingsPath, "utf8");
-if (!settings.includes('maven(url = "https://jitpack.io")')) {
-  const dependencyRepositories = /dependencyResolutionManagement\s*\{[\s\S]*?repositories\s*\{/;
-  const match = settings.match(dependencyRepositories);
-  if (!match) throw new Error("Unsupported Android template: dependency repositories not found");
-  settings = settings.replace(match[0], `${match[0]}\n        maven(url = "https://jitpack.io")`);
-  await writeFile(settingsPath, settings, "utf8");
+let rootGradle = await readFile(rootGradlePath, "utf8");
+if (!rootGradle.includes('maven(url = "https://jitpack.io")')) {
+  const projectRepositories = /allprojects\s*\{[\s\S]*?repositories\s*\{/;
+  const match = rootGradle.match(projectRepositories);
+  if (!match) throw new Error("Unsupported Android template: project repositories not found");
+  rootGradle = rootGradle.replace(match[0], `${match[0]}\n        maven(url = "https://jitpack.io")`);
+  await writeFile(rootGradlePath, rootGradle, "utf8");
 }
 
 let appGradle = await readFile(appGradlePath, "utf8");

@@ -20,9 +20,10 @@ for (const nested of [false, true]) {
         join(packageDir, "MainActivity.kt"),
         "package com.bricarobd.app\n\nclass MainActivity : TauriActivity()\n",
       );
+      await writeFile(join(projectRoot, "settings.gradle"), "include ':app'\n\napply from: 'tauri.settings.gradle'\n");
       await writeFile(
-        join(projectRoot, "settings.gradle.kts"),
-        "dependencyResolutionManagement {\n  repositories {\n    google()\n  }\n}\n",
+        join(projectRoot, "build.gradle.kts"),
+        "allprojects {\n    repositories {\n        google()\n        mavenCentral()\n    }\n}\n",
       );
       await writeFile(join(projectRoot, "app", "build.gradle.kts"), "dependencies {\n}\n");
       await writeFile(
@@ -37,7 +38,7 @@ for (const nested of [false, true]) {
 
       const activity = await readFile(join(packageDir, "MainActivity.kt"), "utf8");
       const bridge = await readFile(join(packageDir, "AndroidUsbBridge.kt"), "utf8");
-      const settings = await readFile(join(projectRoot, "settings.gradle.kts"), "utf8");
+      const rootGradle = await readFile(join(projectRoot, "build.gradle.kts"), "utf8");
       const gradle = await readFile(join(projectRoot, "app", "build.gradle.kts"), "utf8");
       const manifest = await readFile(join(sourceDir, "AndroidManifest.xml"), "utf8");
 
@@ -46,7 +47,7 @@ for (const nested of [false, true]) {
       assert.match(bridge, /UsbSerialProber\.getDefaultProber/);
       assert.match(bridge, /SecureRandom/);
       assert.match(bridge, /BRICAROBD-AUTH/);
-      assert.equal(settings.match(/https:\/\/jitpack\.io/g)?.length, 1);
+      assert.equal(rootGradle.match(/https:\/\/jitpack\.io/g)?.length, 1);
       assert.equal(gradle.match(/usb-serial-for-android:3\.11\.0/g)?.length, 1);
       assert.equal(manifest.match(/android\.hardware\.usb\.host/g)?.length, 1);
     } finally {
