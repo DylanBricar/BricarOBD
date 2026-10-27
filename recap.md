@@ -43,12 +43,17 @@ Une liste de fichiers ne constitue pas une revue comportementale de chaque ligne
 
 Commandes de référence : pnpm lint ; pnpm build ; pnpm test ; pnpm test:release-scripts ; cargo fmt --manifest-path src-tauri/Cargo.toml -- --check ; vérification Cargo avec le lockfile. Ne jamais utiliser un vrai véhicule pour valider un nettoyage.
 
-Vérifié le 27 octobre : cargo fmt --manifest-path src-tauri/Cargo.toml -- --check et git diff --cached --check réussis. Les schémas générés retirés étaient déjà exclus par .gitignore ; ils sont régénérés par le build Tauri. La compilation native et les validations matérielles sont des preuves distinctes.
+Vérifié le 27 octobre : lint, build TypeScript/Vite, 541 tests frontend, 4 tests des scripts de livraison, cargo fmt et cargo check --manifest-path src-tauri/Cargo.toml --lib --locked réussis. Audit npm/pnpm : zéro avis. La comparaison des audits Rust trouve 12 avis sur le main de départ, puis 3 après les correctifs compatibles ; cet audit reste donc en échec. Aucun profil matériel réel ni installateur publié n'est validé par ces contrôles.
+
+## Consolidation de ce passage
+
+Sept branches Dependabot sont intégrées dans l'historique local. Les versions production et développement sont conservées ; Vite 8.3.4 demandé par le lot développement remplace le minimum 8.2.4 de l'ancienne branche, et les types Node sont alignés sur Node 24. Les dépendances de tests restent en Vitest 4.1.12. Les verrous transitifs brace-expansion et Zod sont corrigés. Les mises à jour compatibles quinn-proto/rustls/webpki corrigent neuf des douze avis Rust préexistants.
 
 ## Restant à traiter ou à confirmer
 
 - La validation matérielle réelle doit suivre docs/HARDWARE_VALIDATION.md ; un test de démonstration ne valide pas les ECU physiques.
-- Examiner les branches Dependabot et la cohérence package.json/pnpm-lock.yaml/Cargo.lock avant de les publier.
+- Audit Rust encore bloquant : zip 4.6.1, dépendance de tauri-plugin-updater 2.14.0, conserve RUSTSEC-2026-0367, RUSTSEC-2026-0368 et RUSTSEC-2026-0369. Les correctifs publiés exigent zip >=9, hors de la contrainte actuelle du plugin. Aucun ignore ni contournement de sécurité n'a été ajouté. Attendre une correction amont compatible ou un travail séparé et validé du plugin avant de présenter l'audit comme propre.
+- Les branches distantes ne sont supprimées qu'après preuve de publication de ces historiques sur main.
 - auto-release.yml publie après un push main hors fichiers Markdown/workflows : les commits source restent locaux tant que cette activation n'est pas explicitement autorisée.
 
 ## Reprendre sans perdre le contexte
