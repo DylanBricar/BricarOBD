@@ -389,6 +389,14 @@ jobs:
     runs-on: ubuntu-latest
     name: Verify published desktop release
     steps:
+      - name: Checkout release verification code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+      - name: Setup Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24.16.0
       - name: Verify installers and updater manifest
         shell: bash
         env:
@@ -441,5 +449,8 @@ jobs:
             (.platforms["linux-x86_64"].signature | length > 0) and
             (.platforms["windows-x86_64"].signature | length > 0)
           ' "$RUNNER_TEMP/release/latest.json"
+
+          gh api "repos/$GH_REPO/releases/tags/$RELEASE_TAG" > "$RUNNER_TEMP/release/release.json"
+          node scripts/verify-updater-artifacts.mjs "$RUNNER_TEMP/release/latest.json" "$RUNNER_TEMP/release/release.json"
 
           gh release edit "$RELEASE_TAG" --draft=false --latest
